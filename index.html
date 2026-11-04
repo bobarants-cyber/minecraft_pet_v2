@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob: ws://localhost:5173 http://localhost:5173" />
+    <title>Minecraft Mob</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      #app canvas {
+        display: block;
+      }
+      body.grab {
+        cursor: grab;
+      }
+      body.grab:active {
+        cursor: grabbing;
+      }
+      .mob-menu {
+        position: fixed;
+        z-index: 10;
+        min-width: 230px;
+        padding: 6px;
+        box-sizing: border-box;
+        border-radius: 14px;
+        background: rgba(44, 44, 46, 0.78);
+        -webkit-backdrop-filter: blur(24px) saturate(1.4);
+        backdrop-filter: blur(24px) saturate(1.4);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 32px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        font: 600 15px/1.2 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+        cursor: default;
+        opacity: 0;
+        transform: scale(0.96);
+        visibility: hidden;
+        transition: opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
+      }
+      .mob-menu.open {
+        opacity: 1;
+        transform: none;
+        visibility: visible;
+        transition-delay: 0s;
+      }
+      .mob-menu__row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 28px;
+        width: 100%;
+        padding: 9px 12px;
+        box-sizing: border-box;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .mob-menu__row:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .mob-menu__value {
+        opacity: 0.85;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

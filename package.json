@@ -1,0 +1,29 @@
+{
+  "name": "minecraft_pet_v2",
+  "version": "0.2.0",
+  "description": "A Minecraft bee desktop companion that flies around your screen.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "node scripts/launch.mjs --dev",
+    "build": "vite build",
+    "start": "npm run build && node scripts/launch.mjs",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "keywords": [
+    "threejs",
+    "electron",
+    "desktop-pet",
+    "minecraft",
+    "bee"
+  ],
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "electron": "^39.8.10",
+    "vite": "^6.4.4"
+  }
+}
