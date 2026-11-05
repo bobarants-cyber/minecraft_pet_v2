@@ -11,4 +11,8 @@ contextBridge.exposeInMainWorld('mobHost', {
   setChatFocus: (on) => ipcRenderer.send('chat:focus', on),
   ask: (payload) => ipcRenderer.invoke('assistant:ask', payload),
   onReminder: (fn) => ipcRenderer.on('reminder', (_e, r) => fn(r)),
+  rewrite: (mode) => ipcRenderer.send('rewrite:run', mode),
+  onRewrite: (fn) => ipcRenderer.on('rewrite', (_e, r) => fn(r)),
+  copyText: (text) => ipcRenderer.send('rewrite:copy', text),
+  replaceText: (text) => ipcRenderer.invoke('rewrite:replace', text),
 });

@@ -33,6 +33,19 @@ export class Bbokari {
     this.pose = null;
   }
 
+  /** Put something (a ping pong paddle) in Bbokari's right hand. */
+  holdItem(item) {
+    const attach = () => {
+      const arm = this.parts.arms[0];
+      // The hand is at the end of the arm bone: model units, relative to the shoulder joint.
+      item.position.set(0.1, -0.13, 0.05);
+      item.rotation.set(0, 0, -0.35);
+      arm.add(item);
+    };
+    if (this.parts.loaded) attach();
+    else this.parts.ready.then(attach);
+  }
+
   applyPose(p, breath = 0) {
     const j = this.joints;
     const sit = clamp(p.sit, 0, 1);
@@ -54,10 +67,17 @@ export class Bbokari {
 
     if (!this.parts.loaded) return;
     const [armR, armL] = this.parts.arms;
-    const flap = Math.sin(this.flapPhase) * 0.55 * this.airborne;
-    // Arm raise lifts the arm out sideways (wave, cheer); swing brings it forward; elbow/wrist add a wiggle.
-    armR.rotation.set(-p.armSwingR * 0.9 - p.elbowR * 0.25, p.armTwistR * 0.3, 0.08 + p.armRaiseR * 0.85 + p.wristR * 0.35 + flap + 0.5 * this.airborne);
-    armL.rotation.set(-p.armSwingL * 0.9 - p.elbowL * 0.25, -p.armTwistL * 0.3, -(0.08 + p.armRaiseL * 0.85 + p.wristL * 0.35 + flap + 0.5 * this.airborne));
+    const flap = Math.sin(this.flapPhase) * 0.4 * this.airborne;
+    // Stubby arms: raising lifts them out sideways, but never above the shoulders (they'd vanish behind the big
+    // head), and brings them a little forward so a wave stays in view. Swing brings them forward; wrist wiggles.
+    const arm = (raise, swing, elbow, wrist, twist) => {
+      const up = Math.min(1.1, raise * 0.5) + wrist * 0.22 + flap + 0.45 * this.airborne;
+      return [-swing * 0.8 - elbow * 0.2 - Math.min(1, raise * 0.5) * 0.45, twist * 0.3, 0.06 + up];
+    };
+    const [rx, ry, rz] = arm(p.armRaiseR, p.armSwingR, p.elbowR, p.wristR, p.armTwistR);
+    armR.rotation.set(rx, ry, rz);
+    const [lx, ly, lz] = arm(p.armRaiseL, p.armSwingL, p.elbowL, p.wristL, p.armTwistL);
+    armL.rotation.set(lx, -ly, -lz);
 
     const [legR, legL] = this.parts.legs;
     const stride = Math.sin(this.walkPhase) * 0.45 * this.walkAmount * (1 - this.airborne);
@@ -75,7 +95,7 @@ export class Bbokari {
 
     // The head is a real joint, so ease it rather than following every eye saccade.
     const k = 1 - Math.exp(-9 * dt);
-    const h = this.joints.head.rotation;
+    const h = (this.parts.head ?? this.joints.head).rotation;
     h.x += (p.headPitch * 0.6 - h.x) * k;
     h.y += (p.headYaw * 0.7 - h.y) * k;
     h.z += (p.headRoll * 0.6 - h.z) * k;

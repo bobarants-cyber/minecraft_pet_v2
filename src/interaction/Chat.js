@@ -33,14 +33,20 @@ export class Chat {
     this.el.innerHTML = `
       <button type="button" class="chat__close" aria-label="Close chat" title="Close (Esc)">×</button>
       <div class="chat__log" role="log" aria-live="polite"></div>
+      <div class="chat__note" aria-live="polite"></div>
       <form class="chat__form" autocomplete="off">
         <input class="chat__input" type="text" maxlength="1000" spellcheck="true" />
         <button type="submit" class="chat__send" aria-label="Send">➤</button>
       </form>
+      <div class="chat__actions">
+        <button type="button" class="chat__act chat__replace">Replace</button>
+        <button type="button" class="chat__act chat__copy">Copy</button>
+      </div>
       <div class="chat__hint">Tip: press <b>Fn</b> twice (or 🎤) to talk instead of typing.</div>
       <div class="chat__tail"></div>
     `;
     this.log = this.el.querySelector('.chat__log');
+    this.note = this.el.querySelector('.chat__note');
     this.input = this.el.querySelector('.chat__input');
     this.tail = this.el.querySelector('.chat__tail');
     this.el.querySelector('.chat__close').addEventListener('click', () => this.close());
@@ -49,9 +55,13 @@ export class Chat {
       this.send();
     });
     // Clicking a reminder toast opens the full chat.
-    this.el.addEventListener('pointerdown', () => {
-      if (this.mode === 'toast') this.open();
+    this.el.addEventListener('pointerdown', (e) => {
+      if (this.mode === 'toast' && this.toastOpensChat && !e.target.closest('button')) this.open();
     });
+    this.replaceBtn = this.el.querySelector('.chat__replace');
+    this.copyBtn = this.el.querySelector('.chat__copy');
+    this.replaceBtn.addEventListener('click', () => this.#replace());
+    this.copyBtn.addEventListener('click', () => this.#copy());
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.mode !== 'closed') this.close();
     });
@@ -85,7 +95,7 @@ export class Chat {
     const wasClosed = this.mode === 'closed';
     this.mode = 'open';
     this.el.classList.add('open');
-    this.el.classList.remove('toast');
+    this.el.classList.remove('toast', 'result', 'working');
     this.input.placeholder = `Message ${this.name}…`;
     this.host?.setChatFocus(true);
     const c = this.character;
@@ -106,7 +116,8 @@ export class Chat {
     clearTimeout(this.toastTimer);
     const wasOpen = this.isOpen;
     this.mode = 'closed';
-    this.el.classList.remove('open', 'toast');
+    this.el.classList.remove('open', 'toast', 'result', 'working');
+    this.result = null;
     this.input.blur();
     this.character.socialMode = false;
     if (wasOpen) this.host?.setChatFocus(false);
@@ -115,6 +126,80 @@ export class Chat {
   toggle() {
     if (this.isOpen) this.close();
     else this.open();
+  }
+
+  /** Show one message in a bubble without the text box (and without taking keyboard focus). */
+  #toast(row, { opensChat = false, hideAfter = TOAST_MS, result = false } = {}) {
+    this.note.replaceChildren(row);
+    this.mode = 'toast';
+    this.toastOpensChat = opensChat;
+    this.el.classList.add('toast');
+    this.el.classList.toggle('result', result);
+    this.el.classList.remove('open');
+    clearTimeout(this.toastTimer);
+    if (hideAfter) this.toastTimer = setTimeout(() => this.mode === 'toast' && this.close(), hideAfter);
+  }
+
+  /** Progress and results of the highlighted-text commands (summarize / humanize / make it better). */
+  showRewrite({ stage, text, title }) {
+    const c = this.character;
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet';
+    if (this.isOpen) this.close();
+    if (stage === 'working') {
+      row.textContent = text;
+      const dots = document.createElement('div');
+      dots.className = 'chat__msg--typing';
+      dots.innerHTML = '<span></span><span></span><span></span>';
+      row.appendChild(dots);
+      c.face.setExpression('curious');
+      if (!this.el.classList.contains('working')) c.emote('question', 0.5);
+      this.el.classList.add('working');
+      this.#toast(row, { hideAfter: 0 });
+      return;
+    }
+    this.el.classList.remove('working');
+    if (stage === 'error') {
+      row.classList.add('chat__msg--error');
+      row.textContent = text;
+      c.face.setExpression('nervous');
+      this.#toast(row, { hideAfter: 16_000 });
+      return;
+    }
+    // Done: title, the new text, and Replace / Copy.
+    const head = document.createElement('b');
+    head.textContent = title;
+    const body = document.createElement('div');
+    body.className = 'chat__result';
+    body.textContent = text;
+    row.append(head, body);
+    this.result = text;
+    this.replaceBtn.textContent = 'Replace';
+    this.copyBtn.textContent = 'Copy';
+    this.replaceBtn.disabled = this.copyBtn.disabled = false;
+    c.face.setExpression('happy');
+    c.emote('sparkle', -0.5);
+    this.#toast(row, { hideAfter: 0, result: true });
+  }
+
+  async #replace() {
+    if (!this.result || !this.host?.replaceText) return;
+    this.replaceBtn.disabled = true;
+    this.replaceBtn.textContent = 'Replacing…';
+    const res = await this.host.replaceText(this.result);
+    if (res?.ok) {
+      this.character.emote('note', 0.5);
+      this.close();
+    } else {
+      this.showRewrite({ stage: 'error', text: res?.text ?? 'That didn’t work.' });
+    }
+  }
+
+  #copy() {
+    if (!this.result) return;
+    this.host?.copyText(this.result);
+    this.copyBtn.textContent = 'Copied ✓';
+    setTimeout(() => this.mode === 'toast' && this.el.classList.contains('result') && this.close(), 900);
   }
 
   /** Show a message from the pet without opening the text box, e.g. when a reminder goes off. */
@@ -126,11 +211,7 @@ export class Chat {
     else c.trigger('excited', { then: 'idle' }, true);
     c.emote('exclaim', 0.4);
     if (this.isOpen) return;
-    this.mode = 'toast';
-    this.el.classList.add('toast');
-    this.el.classList.remove('open');
-    clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.mode === 'toast' && this.close(), TOAST_MS);
+    this.#toast(this.log.lastElementChild.cloneNode(true), { opensChat: true });
   }
 
   async send() {

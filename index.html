@@ -75,6 +75,105 @@
       .mob-menu__value {
         opacity: 0.85;
       }
+      .mob-menu__text {
+        padding: 8px 12px 9px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        margin-top: 4px;
+      }
+      .mob-menu__text-label {
+        font-size: 12.5px;
+        opacity: 0.75;
+      }
+      .mob-menu__chips {
+        display: flex;
+        gap: 6px;
+        margin-top: 7px;
+      }
+      .mob-menu__chip {
+        flex: 1;
+        padding: 6px 4px;
+        border: 0;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.12);
+        color: inherit;
+        font: 600 12.5px/1.1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .mob-menu__chip:hover {
+        background: rgba(255, 255, 255, 0.24);
+      }
+
+      /* Ping pong */
+      .pong {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 3;
+        pointer-events: none;
+        display: none;
+      }
+      .pong.on {
+        display: block;
+      }
+      .pong-hud {
+        position: fixed;
+        z-index: 6;
+        display: none;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        max-width: 230px;
+        padding: 7px 8px 7px 12px;
+        border-radius: 14px;
+        background: rgba(44, 44, 46, 0.82);
+        -webkit-backdrop-filter: blur(20px);
+        backdrop-filter: blur(20px);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+        color: #fff;
+        font: 600 14px/1.3 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+        cursor: default;
+      }
+      .pong-hud.on {
+        display: flex;
+      }
+      .pong-hud__score {
+        flex: 1;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .pong-hud__btn {
+        border: 0;
+        border-radius: 9px;
+        padding: 4px 9px;
+        background: rgba(255, 255, 255, 0.14);
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      .pong-hud__btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+      }
+      .pong-hud__again {
+        display: none;
+        background: #ffd23f;
+        color: #2b2412;
+      }
+      .pong-hud__again:hover {
+        background: #ffc400;
+      }
+      .pong-hud.over .pong-hud__again {
+        display: inline-block;
+      }
+      .pong-hud__msg {
+        flex-basis: 100%;
+        font-weight: 500;
+        font-size: 12.5px;
+        opacity: 0.85;
+      }
+      .pong-hud__msg:empty {
+        display: none;
+      }
 
       /* Speech bubble chat */
       .chat {
@@ -228,10 +327,56 @@
         font-size: 11.5px;
         color: #8a7a52;
       }
+      .chat__note,
+      .chat__actions {
+        display: none;
+      }
+      .chat.toast .chat__note {
+        display: block;
+        padding-right: 22px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
       .chat.toast .chat__form,
       .chat.toast .chat__hint,
-      .chat.toast .chat__msg:not(:last-child) {
+      .chat.toast .chat__log {
         display: none;
+      }
+      .chat__note .chat__msg--typing {
+        padding: 6px 0 0;
+      }
+      .chat__result {
+        margin-top: 6px;
+        max-height: 230px;
+        overflow-y: auto;
+        font-weight: 500;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+      .chat.result .chat__actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .chat__act {
+        flex: 1;
+        padding: 7px 10px;
+        border: 2px solid #3b2f14;
+        border-radius: 12px;
+        background: #fff;
+        color: #3b2f14;
+        font: 700 14px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .chat__replace {
+        background: #ffd23f;
+      }
+      .chat__act:hover {
+        filter: brightness(0.95);
+      }
+      .chat__act:disabled {
+        opacity: 0.6;
+        cursor: progress;
       }
       .chat.toast {
         cursor: pointer;

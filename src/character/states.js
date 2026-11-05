@@ -528,4 +528,30 @@ export const STATES = {
   },
 };
 
+// Playing ping pong (src/games/PingPong.js drives the position; this holds the paddle and swings it).
+STATES.pingpong = {
+  priority: 8,
+  attentive: true,
+  enter(c) {
+    c.face.setExpression('happy');
+    c.swingT = null;
+  },
+  update(c, dt, t) {
+    if (!c.game?.active) return 'idle';
+    c.poseRate = 12;
+    c.target.armRaiseR = 0.7;
+    c.target.elbowR = 0.35;
+    c.target.armRaiseL = 0.25;
+    c.target.crouch = 0.02 + 0.01 * Math.sin(t * 6);
+    const k = c.swingT ?? -1;
+    if (k >= 0 && k < 0.4) {
+      const e = Math.sin((k / 0.4) * Math.PI);
+      c.overlay.armSwingR = 1.5 * e;
+      c.overlay.armRaiseR = 0.4 * e;
+      c.overlay.torsoYaw = -0.3 * e;
+      c.overlay.crouch = 0.03 * e;
+    }
+  },
+};
+
 export const ACTIONS = ['idle', 'happy', 'sad', 'sleepy', 'sleep', 'wake', 'curious', 'surprised', 'excited', 'wave', 'dance', 'pet'];

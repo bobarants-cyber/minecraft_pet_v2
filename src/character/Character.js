@@ -86,11 +86,11 @@ export class Character {
     this.brain.update(dt, this.fsm.name);
 
     const { scale, floorY } = this.placement;
-    this.loco.maxSpeed = 0.9 * this.settings.walkSpeed;
+    this.loco.maxSpeed = 0.9 * this.settings.walkSpeed * (this.speedBoost ?? 1);
     this.loco.update(dt, scale);
     if (state.freeLift !== true) {
       this.restLift = clamp(this.restLift, 0, this.placement.maxLift ?? Infinity);
-      const maxV = 1.4 * this.settings.walkSpeed * scale;
+      const maxV = 1.4 * this.settings.walkSpeed * (this.speedBoost ?? 1) * scale;
       const step = clamp((this.restLift - this.lift) * 3, -maxV, maxV) * dt;
       this.lift += step;
       this.climb += (step / Math.max(dt, 1e-3) / scale - this.climb) * (1 - Math.exp(-6 * dt));

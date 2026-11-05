@@ -1,9 +1,14 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, powerMonitor, screen } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
-import { AI_MODELS, askAI, personaFor } from './ai.js';
+import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText } from './ai.js';
+import * as selection from './selection.js';
+
+/** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
+const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
+const MAX_REWRITE_CHARS = 6000;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
@@ -19,6 +24,8 @@ let idleSleeping = false;
 let expanded = false;
 let chatOpen = false;
 let reminders = null;
+let rewriting = false;
+const targetApp = new selection.TargetApp();
 
 if (!app.requestSingleInstanceLock()) {
   console.log('Minecraft Mob is already running (check the menu bar). Quitting this copy.');
@@ -105,6 +112,14 @@ function buildTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
+    { label: 'Play ping pong 🏓', click: () => command('pingpong'), enabled: !asleep },
+    {
+      label: '✏️ Highlighted text',
+      submenu: [
+        { label: 'Highlight text in any app, then:', enabled: false },
+        ...Object.entries(REWRITE_MODES).map(([mode, m]) => ({ label: m.label, accelerator: REWRITE_KEYS[mode], click: () => rewriteSelection(mode) })),
+      ],
+    },
     { type: 'separator' },
     { label: asleep ? 'Wake up' : 'Go to sleep', click: () => command('trigger', { name: asleep ? 'wake' : 'sleepy' }) },
     { label: 'Dance', click: () => command('trigger', { name: 'dance' }), enabled: !asleep },
@@ -147,7 +162,11 @@ function pollIdle() {
 
 ipcMain.handle('settings:get', () => settings);
 ipcMain.on('settings:set', (_e, patch) => applySettings(patch));
-ipcMain.on('pointer:over', (_e, over) => win?.setIgnoreMouseEvents(!over, { forward: true }));
+ipcMain.on('pointer:over', (_e, over) => {
+  win?.setIgnoreMouseEvents(!over, { forward: true });
+  // Note which app you were using before reaching for the pet, so text commands go back to it.
+  if (over && !rewriting) targetApp.refresh();
+});
 ipcMain.on('window:expand', (_e, on) => {
   if (on === expanded) return;
   expanded = on;
@@ -172,6 +191,49 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
   const res = await askAI({ history, mob, model: settings.aiModel, remindersSummary: reminders.describeAll() });
   return { ...res, kind: 'ai' };
+});
+
+/** Grab the highlighted text from the app you're in, rewrite it with the local AI, and show it in the bubble. */
+async function rewriteSelection(mode) {
+  const m = REWRITE_MODES[mode];
+  if (!m || rewriting) return;
+  if (!selection.supported) return send('rewrite', { stage: 'error', mode, text: 'This only works on a Mac for now.' });
+  if (!selection.hasPermission(true)) {
+    return send('rewrite', { stage: 'error', mode, text: selection.explain('not allowed') });
+  }
+  rewriting = true;
+  try {
+    send('rewrite', { stage: 'working', mode, text: `${m.title.split(' ')[0]} Reading your highlighted text…` });
+    let text;
+    try {
+      text = (await selection.copySelection(targetApp)).trim();
+    } catch (err) {
+      return send('rewrite', { stage: 'error', mode, text: selection.explain(err) });
+    }
+    if (!text) {
+      return send('rewrite', { stage: 'error', mode, text: 'I couldn’t find any highlighted text. Highlight some words first, then pick the command again!' });
+    }
+    if (text.length > MAX_REWRITE_CHARS) {
+      return send('rewrite', { stage: 'error', mode, text: `That’s a lot of text! Try highlighting less than ${MAX_REWRITE_CHARS} characters at a time.` });
+    }
+    send('rewrite', { stage: 'working', mode, text: `${m.title.split(' ')[0]} Working on it…` });
+    const res = await rewriteText({ mode, text, model: settings.aiModel });
+    send('rewrite', res.ok ? { stage: 'done', mode, title: m.title, original: text, text: res.text } : { stage: 'error', mode, text: res.text });
+  } finally {
+    rewriting = false;
+  }
+}
+
+ipcMain.on('rewrite:run', (_e, mode) => rewriteSelection(mode));
+ipcMain.on('rewrite:copy', (_e, text) => clipboard.writeText(String(text)));
+ipcMain.handle('rewrite:replace', async (_e, text) => {
+  try {
+    await selection.pasteText(targetApp, String(text));
+    return { ok: true };
+  } catch (err) {
+    clipboard.writeText(String(text));
+    return { ok: false, text: `${selection.explain(err)} (I copied it for you instead, so you can paste it with ⌘V.)` };
+  }
 });
 
 function fireReminder(r, text) {
@@ -201,10 +263,14 @@ app.whenReady().then(() => {
   // Start once the page can hear us, so reminders that came due while the app was closed still pop up.
   win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
   setInterval(pollIdle, IDLE_POLL_MS);
+  for (const [mode, key] of Object.entries(REWRITE_KEYS)) {
+    if (!globalShortcut.register(key, () => rewriteSelection(mode))) console.log(`Shortcut ${key} is taken by another app.`);
+  }
   screen.on('display-metrics-changed', () => win?.setBounds(stripBounds()));
   screen.on('display-added', () => win?.setBounds(stripBounds()));
   screen.on('display-removed', () => win?.setBounds(stripBounds()));
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('second-instance', () => win?.showInactive());

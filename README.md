@@ -39,6 +39,30 @@ A speech bubble opens above the pet. Type and press Enter.
 
 For a faster but simpler brain, run `ollama pull llama3.2:1b` and pick **AI brain → Llama 3.2 Mini** in the pet's menu-bar menu.
 
+## Ping pong 🏓
+
+Right-click the pet → **🏓 Ping pong**, or the menu bar → **Play ping pong**. A small table appears at the bottom of
+the screen with the pet at the far end holding a paddle. Move your mouse to move your paddle, and click the table to serve.
+The first to 7 points wins. Press **Esc** or ✕ to stop.
+
+## Fix highlighted text ✏️
+
+Highlight text in any app, then pick a command from the pet's right-click menu, from the menu bar under **✏️ Highlighted text**,
+or with a shortcut:
+
+| Command | Shortcut | What it does |
+|---|---|---|
+| Summarize | ⌃⌥S | Shortens it to the main points |
+| Humanize | ⌃⌥H | Makes it sound natural and friendly |
+| Make it better | ⌃⌥B | Fixes grammar and spelling and makes it clearer |
+
+The pet shows the result in its bubble: **Replace** puts it where your highlighted text was, and **Copy** copies it.
+It uses the same free local AI as the chat (Ollama).
+
+The first time, macOS asks for permission, because the pet presses ⌘C and ⌘V for you. Allow it in **System Settings →
+Privacy & Security → Accessibility** (turn on **Electron**, and **Terminal** if it's listed), and allow it to control
+**System Events** if asked.
+
 ## Characters
 
 Switch with **right-click → Switch mob**, or from the menu bar under **Mob**:

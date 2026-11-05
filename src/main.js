@@ -8,6 +8,7 @@ import { ACTIONS } from './character/states.js';
 import { PointerDirector } from './interaction/PointerDirector.js';
 import { MobMenu } from './interaction/MobMenu.js';
 import { Chat } from './interaction/Chat.js';
+import { PingPong } from './games/PingPong.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -19,8 +20,21 @@ let mobName = MOBS[settings.mob] ? settings.mob : 'bee';
 const character = new Character({ mob: createMob(mobName), scene: stage.scene, settings });
 stage.scene.add(character.mob.root);
 const chat = new Chat({ character, stage, settings, host });
-const menu = new MobMenu({ settings, save, onChat: () => chat.open() });
-const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat });
+const game = new PingPong({ character, stage, settings, host });
+const togglePingPong = () => {
+  if (game.active) return game.stop();
+  chat.close();
+  game.start();
+};
+const menu = new MobMenu({
+  settings,
+  save,
+  onChat: () => (game.stop(), chat.open()),
+  onPingPong: togglePingPong,
+  onRewrite: (mode) => host?.rewrite(mode),
+});
+menu.playing = () => game.active;
+const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
 function applyMob(name) {
@@ -50,6 +64,7 @@ const loop = new Loop((dt, t) => {
   if (settings.mob !== mobName) applyMob(settings.mob);
   updatePlacement();
   director.update(dt);
+  game.update(dt);
   character.update(dt, t);
   stage.render();
   chat.update();
@@ -59,10 +74,14 @@ loop.start();
 character.fsm.listeners.add((name) => host?.reportState(name));
 
 host?.onReminder(({ text }) => chat.announce(text));
+host?.onRewrite((r) => chat.showRewrite(r));
 
 host?.onCommand(({ type, name, surprised }) => {
   if (type === 'chat') {
+    game.stop();
     chat.open();
+  } else if (type === 'pingpong') {
+    togglePingPong();
   } else if (type === 'trigger' && name === 'wake' && surprised) {
     character.trigger('surprised', { then: 'wake' }, true);
   } else if (type === 'trigger' && name === 'wake') {
@@ -81,4 +100,4 @@ if (!host) {
   });
 }
 
-window.mob = { stage, character, director, menu, chat, settings, screen, loop, get pet() { return character.mob; } };
+window.mob = { stage, character, director, menu, chat, game, settings, screen, loop, get pet() { return character.mob; } };

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRMeshQuantization, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { MeshoptEncoder } from 'meshoptimizer';
-import { colorAt, partOf, PIVOTS } from './regions.mjs';
+import { colorAt, weightsAt, PIVOTS } from './regions.mjs';
 
 const { P } = JSON.parse(fs.readFileSync(process.env.WORK + '/norm.json'));
 const { idx } = JSON.parse(fs.readFileSync(process.env.WORK + '/simp.json'));
@@ -31,11 +31,16 @@ const bump = (i) => [0, 1, 2].reduce((s, k) => s + (P[3 * i + k] - sum[3 * i + k
 const C = new Float32Array(n * 4);
 for (let i = 0; i < n; i++) { const c = colorAt(v(i), [N[3 * i], N[3 * i + 1], N[3 * i + 2]], bump(i)); C.set([...c, 1], 4 * i); }
 
-const parts = {};
-for (let t = 0; t < idx.length; t += 3) {
-  const tri = [idx[t], idx[t + 1], idx[t + 2]];
-  const cen = [0, 1, 2].map((k) => tri.reduce((s, i) => s + P[3 * i + k], 0) / 3);
-  (parts[partOf(cen)] ??= []).push(...tri);
+// One skinned mesh with a small skeleton: body → head, arms, legs. Each vertex follows its nearest bones and blends
+// smoothly across the joints, so moving a limb bends the surface instead of opening a seam.
+const BONES = ['body', 'head', 'arm_R', 'arm_L', 'leg_R', 'leg_L'];
+const J = new Uint16Array(n * 4);
+const W = new Float32Array(n * 4);
+for (let i = 0; i < n; i++) {
+  const w = weightsAt(v(i));
+  const list = BONES.map((name, b) => [b, w[name] ?? 0]).filter(([, x]) => x > 0.001).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const total = list.reduce((s2, [, x]) => s2 + x, 0) || 1;
+  list.forEach(([b, x], k) => { J[4 * i + k] = b; W[4 * i + k] = x / total; });
 }
 
 const doc = new Document();
@@ -44,20 +49,32 @@ const mat = doc.createMaterial('bbokari').setRoughnessFactor(0.85).setMetallicFa
 const scene = doc.createScene('bbokari');
 const root = doc.createNode('bbokari');
 scene.addChild(root);
-for (const [name, tris] of Object.entries(parts)) {
-  const map = new Map(); const pos = [], nor = [], col = [], ind = [];
-  const piv = PIVOTS[name] ?? [0, 0, 0];
-  for (const i of tris) {
-    if (!map.has(i)) { map.set(i, map.size); pos.push(P[3 * i] - piv[0], P[3 * i + 1] - piv[1], P[3 * i + 2] - piv[2]); nor.push(N[3 * i], N[3 * i + 1], N[3 * i + 2]); col.push(...C.slice(4 * i, 4 * i + 4)); }
-    ind.push(map.get(i));
-  }
-  const acc = (type, arr, T) => doc.createAccessor().setType(type).setArray(new T(arr)).setBuffer(buffer);
-  const prim = doc.createPrimitive().setMaterial(mat)
-    .setAttribute('POSITION', acc('VEC3', pos, Float32Array)).setAttribute('NORMAL', acc('VEC3', nor, Float32Array))
-    .setAttribute('COLOR_0', acc('VEC4', col, Float32Array)).setIndices(acc('SCALAR', ind, Uint32Array));
-  root.addChild(doc.createNode(name).setTranslation(piv).setMesh(doc.createMesh(name).addPrimitive(prim)));
-  console.log(name, ind.length / 3, 'tris');
+const acc = (type, arr) => doc.createAccessor().setType(type).setArray(arr).setBuffer(buffer);
+
+const bones = {};
+bones.body = doc.createNode('body');
+root.addChild(bones.body);
+for (const name of BONES.slice(1)) {
+  bones[name] = doc.createNode(name).setTranslation(PIVOTS[name]);
+  bones.body.addChild(bones[name]);
 }
+const ibm = new Float32Array(16 * BONES.length);
+BONES.forEach((name, b) => {
+  const [x, y, z] = name === 'body' ? [0, 0, 0] : PIVOTS[name];
+  ibm.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -x, -y, -z, 1], 16 * b);
+});
+const skin = doc.createSkin('skeleton').setSkeleton(bones.body).setInverseBindMatrices(acc('MAT4', ibm));
+for (const name of BONES) skin.addJoint(bones[name]);
+
+const prim = doc.createPrimitive().setMaterial(mat)
+  .setAttribute('POSITION', acc('VEC3', new Float32Array(P)))
+  .setAttribute('NORMAL', acc('VEC3', N))
+  .setAttribute('COLOR_0', acc('VEC4', C))
+  .setAttribute('JOINTS_0', acc('VEC4', J))
+  .setAttribute('WEIGHTS_0', acc('VEC4', W))
+  .setIndices(acc('SCALAR', new Uint32Array(idx)));
+root.addChild(doc.createNode('mesh').setMesh(doc.createMesh('bbokari').addPrimitive(prim)).setSkin(skin));
+console.log('vertices', n, 'triangles', idx.length / 3);
 const out = process.argv[2];
 if (process.argv.includes('--compress')) {
   const { quantize, reorder } = await import('@gltf-transform/functions');

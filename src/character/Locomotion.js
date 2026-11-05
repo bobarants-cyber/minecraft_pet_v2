@@ -15,6 +15,8 @@ export class Locomotion {
     this.minX = -3;
     this.maxX = 3;
     this.scale = 1;
+    /** Keep facing the camera even while moving (e.g. shuffling sideways at a ping pong table). */
+    this.faceFront = false;
   }
 
   setBounds(minX, maxX) {
@@ -46,7 +48,7 @@ export class Locomotion {
     this.walkAmount = Math.min(1, Math.abs(this.speed) / (0.35 * vmax));
     this.phase += (Math.abs(this.speed) / (CYCLE_LENGTH * scale)) * Math.PI * 2 * dt;
 
-    const facingTarget = Math.abs(this.speed) > 0.12 * vmax ? Math.sign(this.speed) * WALK_FACING : this.idleFacing;
+    const facingTarget = !this.faceFront && Math.abs(this.speed) > 0.12 * vmax ? Math.sign(this.speed) * WALK_FACING : this.idleFacing;
     this.facing += (facingTarget - this.facing) * (1 - Math.exp(-6 * dt));
   }
 }
