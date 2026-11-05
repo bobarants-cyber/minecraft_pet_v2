@@ -1,10 +1,12 @@
 import { Bee } from '../bee/Bee.js';
 import { Axolotl } from '../axolotl/Axolotl.js';
+import { Bbokari } from '../bbokari/Bbokari.js';
 
 /** Every mob exposes the same surface: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate(). */
 export const MOBS = {
   bee: { label: 'Bee', create: () => new Bee() },
   axolotl: { label: 'Axolotl', create: () => new Axolotl() },
+  bbokari: { label: 'Bbokari', create: () => new Bbokari() },
 };
 
 export const MOB_NAMES = Object.keys(MOBS);

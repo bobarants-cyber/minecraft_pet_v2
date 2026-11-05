@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app } from 'electron';
 
 export const SIZES = { small: 150, medium: 210, large: 290 };
-export const MOBS = { bee: 'Bee', axolotl: 'Axolotl' };
+export const MOBS = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' };
 
 export const DEFAULTS = {
   mob: 'bee',

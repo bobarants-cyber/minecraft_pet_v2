@@ -97,6 +97,7 @@ export class Character {
     } else this.climb *= Math.exp(-6 * dt);
     const mob = this.mob;
     mob.climb = this.climb;
+    mob.lift = this.lift / scale;
     mob.lean = this.loco.walkAmount * 0.28;
     mob.walkAmount = this.loco.walkAmount;
     mob.walkPhase = this.loco.phase;

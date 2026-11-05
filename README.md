@@ -39,6 +39,14 @@ A speech bubble opens above the pet. Type and press Enter.
 
 For a faster but simpler brain, run `ollama pull llama3.2:1b` and pick **AI brain → Llama 3.2 Mini** in the pet's menu-bar menu.
 
+## Characters
+
+Switch with **right-click → Switch mob**, or from the menu bar under **Mob**:
+
+- **Bee** and **Axolotl**, the originals.
+- **Bbokari** (a fan model of the SKZOO character, for personal use only). It walks, waves, dances, flaps its arms when it flies,
+  and has eyes that blink, squint happily, close for sleep and follow your mouse. See `scripts/bbokari/` for how the model was prepared.
+
 ## Your own 3D models
 
 The bee and axolotl come from `assets/models/bee.glb` and `assets/models/axolotl.glb`, and the code
