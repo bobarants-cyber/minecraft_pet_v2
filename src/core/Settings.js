@@ -6,6 +6,7 @@ export const DEFAULTS = {
   walkSpeed: 1,
   idleSleepMin: 5,
   openAtLogin: false,
+  aiModel: 'llama3.2',
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

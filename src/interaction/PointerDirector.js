@@ -12,11 +12,13 @@ const THROW_SPEED = 3.5;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
 export class PointerDirector {
-  constructor({ character, screen, host, canvas, menu = null }) {
+  constructor({ character, screen, host, canvas, menu = null, chat = null }) {
     this.character = character;
     this.screen = screen;
     this.host = host;
     this.menu = menu;
+    this.chat = chat;
+    this.expanded = false;
     this.pointer = null;
     this.over = false;
     this.airborne = false;
@@ -82,6 +84,8 @@ export class PointerDirector {
   }
 
   #down(e) {
+    // Clicks inside the speech bubble belong to the bubble (typing, buttons), not to petting the mob.
+    if (this.chat?.contains(e.target)) return;
     const menu = this.menu;
     if (menu?.isOpen) {
       if (!menu.contains(e.target)) menu.close();
@@ -135,17 +139,25 @@ export class PointerDirector {
     const c = this.character;
     const w = this.pointer ? this.#world(this.pointer.x, this.pointer.y) : null;
 
-    const over = !!this.drag || !!this.menu?.isOpen || (!!w && this.#hits(w));
+    const overChat = !!this.pointer && !!this.chat?.containsPoint(this.pointer.x, this.pointer.y);
+    const over = !!this.drag || !!this.menu?.isOpen || overChat || (!!w && this.#hits(w));
     if (over !== this.over) {
       this.over = over;
       this.host?.setPointerOver(over);
-      document.body.classList.toggle('grab', over);
+    }
+    const grab = over && !overChat;
+    if (grab !== this.grab) {
+      this.grab = grab;
+      document.body.classList.toggle('grab', grab);
     }
 
     const airborne = !!this.drag || AIRBORNE.has(c.stateName) || c.lift > 0.03 || c.restLift > 0.03;
-    if (airborne !== this.airborne) {
-      this.airborne = airborne;
-      this.host?.setExpanded(airborne);
+    // The window also grows to full height while the bubble shows, so it has room above the pet.
+    const expanded = airborne || !!this.chat?.visible;
+    this.airborne = airborne;
+    if (expanded !== this.expanded) {
+      this.expanded = expanded;
+      this.host?.setExpanded(expanded);
     }
 
     if (this.drag) {

@@ -3,9 +3,9 @@ import { MOBS, nextMob } from '../mobs/index.js';
 const MARGIN_PX = 8;
 const OFFSET_PX = 14;
 
-/** Right-click popup next to the pet: a "Switch mob" row showing the mob you'd switch to. */
+/** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, parent = document.body }) {
+  constructor({ settings, save, onChat = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -13,12 +13,20 @@ export class MobMenu {
     this.el = document.createElement('div');
     this.el.className = 'mob-menu';
     this.el.innerHTML = `
+      <button type="button" class="mob-menu__row mob-menu__chat">
+        <span>💬 Chat</span>
+        <span class="mob-menu__value">Ask me anything</span>
+      </button>
       <button type="button" class="mob-menu__row mob-menu__switch">
         <span>Switch mob</span>
         <span class="mob-menu__value"></span>
       </button>
     `;
-    this.value = this.el.querySelector('.mob-menu__value');
+    this.value = this.el.querySelector('.mob-menu__switch .mob-menu__value');
+    this.el.querySelector('.mob-menu__chat').addEventListener('click', () => {
+      this.close();
+      onChat?.();
+    });
     this.el.querySelector('.mob-menu__switch').addEventListener('click', () => {
       this.save({ mob: nextMob(this.settings.mob) });
       this.close();

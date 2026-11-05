@@ -7,6 +7,7 @@ import { Character } from './character/Character.js';
 import { ACTIONS } from './character/states.js';
 import { PointerDirector } from './interaction/PointerDirector.js';
 import { MobMenu } from './interaction/MobMenu.js';
+import { Chat } from './interaction/Chat.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -17,8 +18,9 @@ const screen = new ScreenSpace(stage);
 let mobName = MOBS[settings.mob] ? settings.mob : 'bee';
 const character = new Character({ mob: createMob(mobName), scene: stage.scene, settings });
 stage.scene.add(character.mob.root);
-const menu = new MobMenu({ settings, save });
-const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu });
+const chat = new Chat({ character, stage, settings, host });
+const menu = new MobMenu({ settings, save, onChat: () => chat.open() });
+const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
 function applyMob(name) {
@@ -50,13 +52,18 @@ const loop = new Loop((dt, t) => {
   director.update(dt);
   character.update(dt, t);
   stage.render();
+  chat.update();
 });
 loop.start();
 
 character.fsm.listeners.add((name) => host?.reportState(name));
 
+host?.onReminder(({ text }) => chat.announce(text));
+
 host?.onCommand(({ type, name, surprised }) => {
-  if (type === 'trigger' && name === 'wake' && surprised) {
+  if (type === 'chat') {
+    chat.open();
+  } else if (type === 'trigger' && name === 'wake' && surprised) {
     character.trigger('surprised', { then: 'wake' }, true);
   } else if (type === 'trigger' && name === 'wake') {
     character.trigger('wake', {}, true);
@@ -74,4 +81,4 @@ if (!host) {
   });
 }
 
-window.mob = { stage, character, director, menu, settings, screen, loop, get pet() { return character.mob; } };
+window.mob = { stage, character, director, menu, chat, settings, screen, loop, get pet() { return character.mob; } };

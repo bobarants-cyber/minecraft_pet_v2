@@ -12,6 +12,7 @@ export const DEFAULTS = {
   walkSpeed: 1,
   idleSleepMin: 5,
   openAtLogin: false,
+  aiModel: 'llama3.2',
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

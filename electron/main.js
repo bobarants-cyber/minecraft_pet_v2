@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, powerMonitor, screen } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, powerMonitor, screen } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
+import { ReminderStore, parseCommand, formatClock } from './reminders.js';
+import { AI_MODELS, askAI, personaFor } from './ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
@@ -15,6 +17,8 @@ let tray = null;
 let beeState = 'boot';
 let idleSleeping = false;
 let expanded = false;
+let chatOpen = false;
+let reminders = null;
 
 if (!app.requestSingleInstanceLock()) {
   console.log('Minecraft Mob is already running (check the menu bar). Quitting this copy.');
@@ -24,7 +28,7 @@ if (!app.requestSingleInstanceLock()) {
 // A short strip along the bottom normally; the full work area while the bee is being carried or falling.
 function stripBounds() {
   const { workArea } = screen.getPrimaryDisplay();
-  const height = expanded ? workArea.height : Math.min(workArea.height, Math.round(settings.petSize * STRIP_HEIGHT_RATIO));
+  const height = expanded || chatOpen ? workArea.height : Math.min(workArea.height, Math.round(settings.petSize * STRIP_HEIGHT_RATIO));
   return { x: workArea.x, y: workArea.y + workArea.height - height, width: workArea.width, height };
 }
 
@@ -85,7 +89,23 @@ function buildTray() {
   const asleep = ASLEEP.has(beeState);
   const radio = (label, key, value) => ({ label, type: 'radio', checked: settings[key] === value, click: () => applySettings({ [key]: value }) });
 
+  const pending = reminders?.items ?? [];
+  const reminderItems = pending.length
+    ? [
+        ...pending.slice(0, 10).map((r) => ({
+          label: `${formatClock(r.at)}  ${r.kind === 'timer' ? 'Timer' : r.label ?? 'Reminder'}  ✕`,
+          toolTip: 'Click to cancel',
+          click: () => reminders.cancelId(r.id),
+        })),
+        { type: 'separator' },
+        { label: 'Cancel all', click: () => reminders.cancel() },
+      ]
+    : [{ label: 'None yet. Try “remind me in 10 minutes to stretch” in the chat.', enabled: false }];
+
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
+    { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
+    { type: 'separator' },
     { label: asleep ? 'Wake up' : 'Go to sleep', click: () => command('trigger', { name: asleep ? 'wake' : 'sleepy' }) },
     { label: 'Dance', click: () => command('trigger', { name: 'dance' }), enabled: !asleep },
     { label: 'Wave', click: () => command('trigger', { name: 'wave' }), enabled: !asleep },
@@ -102,6 +122,10 @@ function buildTray() {
     {
       label: 'Sleep when idle',
       submenu: [radio('Never', 'idleSleepMin', 0), radio('After 2 min', 'idleSleepMin', 2), radio('After 5 min', 'idleSleepMin', 5), radio('After 15 min', 'idleSleepMin', 15)],
+    },
+    {
+      label: 'AI brain',
+      submenu: Object.entries(AI_MODELS).map(([key, label]) => radio(label, 'aiModel', key)),
     },
     { label: 'Open at login', type: 'checkbox', checked: settings.openAtLogin, click: (i) => applySettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
@@ -129,6 +153,35 @@ ipcMain.on('window:expand', (_e, on) => {
   expanded = on;
   win?.setBounds(stripBounds());
 });
+// The pet window normally never takes keyboard focus; it does while the chat bubble is open so you can type.
+ipcMain.on('chat:focus', (_e, on) => {
+  if (!win || on === chatOpen) return;
+  chatOpen = on;
+  win.setBounds(stripBounds());
+  win.setFocusable(on);
+  if (on) {
+    app.focus({ steal: true });
+    win.focus();
+  } else {
+    win.blur();
+  }
+});
+
+ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
+  const cmd = parseCommand(String(text));
+  if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
+  const res = await askAI({ history, mob, model: settings.aiModel, remindersSummary: reminders.describeAll() });
+  return { ...res, kind: 'ai' };
+});
+
+function fireReminder(r, text) {
+  const name = personaFor(settings.mob).name;
+  if (Notification.isSupported()) {
+    new Notification({ title: `${name} says…`, body: text.replace(/^⏰\s*/, ''), silent: false }).show();
+  }
+  send('reminder', { text, kind: r.kind });
+}
+
 ipcMain.on('state', (_e, name) => {
   if (ASLEEP.has(name) !== ASLEEP.has(beeState)) {
     beeState = name;
@@ -139,7 +192,14 @@ ipcMain.on('state', (_e, name) => {
 app.whenReady().then(() => {
   app.dock?.hide();
   createWindow();
+  reminders = new ReminderStore({
+    file: path.join(app.getPath('userData'), 'reminders.json'),
+    onFire: fireReminder,
+    onChange: () => buildTray(),
+  });
   buildTray();
+  // Start once the page can hear us, so reminders that came due while the app was closed still pop up.
+  win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
   setInterval(pollIdle, IDLE_POLL_MS);
   screen.on('display-metrics-changed', () => win?.setBounds(stripBounds()));
   screen.on('display-added', () => win?.setBounds(stripBounds()));
