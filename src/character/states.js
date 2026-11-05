@@ -554,4 +554,19 @@ STATES.pingpong = {
   },
 };
 
+// Playing one of the small games (src/games): stand still beside the board and look lively.
+STATES.minigame = {
+  priority: 3,
+  enter(c) {
+    c.loco.stop();
+    if (!['happy', 'joy', 'uwu', 'smug', 'curious'].includes(c.face.expression)) c.face.setExpression('happy');
+  },
+  update(c, dt, t) {
+    if (!c.game?.active) return 'idle';
+    c.target.crouch = 0.012 + 0.008 * Math.sin(t * 2.2);
+    c.target.torsoRoll = Math.sin(t * 0.9) * 0.03;
+    c.target.headRoll = Math.sin(t * 0.7 + 1) * 0.06;
+  },
+};
+
 export const ACTIONS = ['idle', 'happy', 'sad', 'sleepy', 'sleep', 'wake', 'curious', 'surprised', 'excited', 'wave', 'dance', 'pet'];

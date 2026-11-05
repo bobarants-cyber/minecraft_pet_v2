@@ -8,7 +8,7 @@ import { ACTIONS } from './character/states.js';
 import { PointerDirector } from './interaction/PointerDirector.js';
 import { MobMenu } from './interaction/MobMenu.js';
 import { Chat } from './interaction/Chat.js';
-import { PingPong } from './games/PingPong.js';
+import { Games } from './games/Games.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -20,20 +20,20 @@ let mobName = MOBS[settings.mob] ? settings.mob : 'bee';
 const character = new Character({ mob: createMob(mobName), scene: stage.scene, settings });
 stage.scene.add(character.mob.root);
 const chat = new Chat({ character, stage, settings, host });
-const game = new PingPong({ character, stage, settings, host });
-const togglePingPong = () => {
-  if (game.active) return game.stop();
+const game = new Games({ character, stage, settings, host });
+const playGame = (id) => {
   chat.close();
-  game.start();
+  game.toggle(id);
 };
 const menu = new MobMenu({
   settings,
   save,
   onChat: () => (game.stop(), chat.open()),
-  onPingPong: togglePingPong,
+  onGame: playGame,
+  onStopGame: () => game.stop(),
   onRewrite: (mode) => host?.rewrite(mode),
 });
-menu.playing = () => game.active;
+menu.playing = () => game.currentId;
 const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
@@ -80,8 +80,9 @@ host?.onCommand(({ type, name, surprised }) => {
   if (type === 'chat') {
     game.stop();
     chat.open();
-  } else if (type === 'pingpong') {
-    togglePingPong();
+  } else if (type === 'game') {
+    if (name === 'stop') game.stop();
+    else playGame(name);
   } else if (type === 'trigger' && name === 'wake' && surprised) {
     character.trigger('surprised', { then: 'wake' }, true);
   } else if (type === 'trigger' && name === 'wake') {

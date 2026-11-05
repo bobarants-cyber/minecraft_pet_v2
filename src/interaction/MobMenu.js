@@ -1,11 +1,12 @@
 import { MOBS, nextMob } from '../mobs/index.js';
+import { GAME_LIST } from '../games/Games.js';
 
 const MARGIN_PX = 8;
 const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onPingPong = null, onRewrite = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -17,10 +18,13 @@ export class MobMenu {
         <span>💬 Chat</span>
         <span class="mob-menu__value">Ask me anything</span>
       </button>
-      <button type="button" class="mob-menu__row mob-menu__pong">
-        <span>🏓 Ping pong</span>
-        <span class="mob-menu__value">Play with me</span>
-      </button>
+      <div class="mob-menu__text mob-menu__games">
+        <div class="mob-menu__text-label">🎮 Play a game</div>
+        <div class="mob-menu__chips mob-menu__chips--wrap">
+          ${GAME_LIST.map((g) => `<button type="button" class="mob-menu__chip mob-menu__game" data-game="${g.id}">${g.label}</button>`).join('')}
+        </div>
+        <button type="button" class="mob-menu__row mob-menu__stop">⏹ Stop the game</button>
+      </div>
       <button type="button" class="mob-menu__row mob-menu__switch">
         <span>Switch mob</span>
         <span class="mob-menu__value"></span>
@@ -34,17 +38,23 @@ export class MobMenu {
         </div>
       </div>
     `;
-    for (const chip of this.el.querySelectorAll('.mob-menu__chip')) {
+    for (const chip of this.el.querySelectorAll('.mob-menu__chip[data-mode]')) {
       chip.addEventListener('click', () => {
         this.close();
         onRewrite?.(chip.dataset.mode);
       });
     }
     this.value = this.el.querySelector('.mob-menu__switch .mob-menu__value');
-    this.pong = this.el.querySelector('.mob-menu__pong');
-    this.pong.addEventListener('click', () => {
+    for (const chip of this.el.querySelectorAll('.mob-menu__game')) {
+      chip.addEventListener('click', () => {
+        this.close();
+        onGame?.(chip.dataset.game);
+      });
+    }
+    this.stopRow = this.el.querySelector('.mob-menu__stop');
+    this.stopRow.addEventListener('click', () => {
       this.close();
-      onPingPong?.();
+      onStopGame?.();
     });
     this.el.querySelector('.mob-menu__chat').addEventListener('click', () => {
       this.close();
@@ -65,7 +75,9 @@ export class MobMenu {
   }
 
   open(px, py) {
-    this.pong.querySelector('span').textContent = this.playing?.() ? '🏓 Stop ping pong' : '🏓 Ping pong';
+    const playing = this.playing?.();
+    this.stopRow.style.display = playing ? '' : 'none';
+    for (const chip of this.el.querySelectorAll('.mob-menu__game')) chip.classList.toggle('is-on', chip.dataset.game === playing);
     this.value.textContent = MOBS[nextMob(this.settings.mob)].label;
     this.isOpen = true;
     this.el.classList.add('open');

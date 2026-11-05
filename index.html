@@ -102,6 +102,267 @@
       .mob-menu__chip:hover {
         background: rgba(255, 255, 255, 0.24);
       }
+      .mob-menu__chips--wrap {
+        flex-wrap: wrap;
+      }
+      .mob-menu__chips--wrap .mob-menu__chip {
+        flex: 1 1 auto;
+        padding: 6px 9px;
+      }
+      .mob-menu__chip.is-on {
+        background: #ffd23f;
+        color: #2b2412;
+      }
+      .mob-menu__games {
+        border-top: 0;
+        margin-top: 0;
+        max-width: 280px;
+      }
+      .mob-menu__stop {
+        margin-top: 6px;
+        padding: 7px 10px;
+      }
+
+      /* Small games next to the pet */
+      .game-panel {
+        position: fixed;
+        z-index: 6;
+        display: none;
+        width: max-content;
+        max-width: calc(100vw - 24px);
+        padding: 10px 12px 11px;
+        box-sizing: border-box;
+        border-radius: 18px;
+        background: #fffdf5;
+        color: #2b2412;
+        box-shadow: 0 0 0 3px #3b2f14, 0 10px 28px rgba(0, 0, 0, 0.3);
+        font: 600 14px/1.3 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+        cursor: default;
+      }
+      .game-panel.on {
+        display: block;
+      }
+      .game-panel__head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .game-panel__title {
+        font-weight: 800;
+      }
+      .game-panel__score {
+        margin-left: auto;
+        color: #7a6a42;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .game-panel__close {
+        width: 24px;
+        height: 24px;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        color: #7a6a42;
+        font: 600 18px/24px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .game-panel__close:hover {
+        background: rgba(0, 0, 0, 0.07);
+      }
+      .game-panel__body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .game-panel__msg {
+        margin-top: 8px;
+        max-width: 300px;
+        min-height: 18px;
+        text-align: center;
+        font-weight: 500;
+        font-size: 13px;
+        color: #4a3d1c;
+      }
+      .game-btn {
+        padding: 6px 14px;
+        border: 2px solid #3b2f14;
+        border-radius: 12px;
+        background: #ffd23f;
+        color: #2b2412;
+        font: 700 13.5px/1.1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .game-btn:hover {
+        background: #ffc400;
+      }
+      .game-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      /* Tic-tac-toe */
+      .ttt {
+        display: grid;
+        grid-template-columns: repeat(3, 58px);
+        gap: 5px;
+        padding: 5px;
+        border-radius: 12px;
+        background: #3b2f14;
+      }
+      .ttt__cell {
+        width: 58px;
+        height: 58px;
+        border: 0;
+        border-radius: 8px;
+        background: #fff7dc;
+        font-size: 30px;
+        line-height: 58px;
+        cursor: pointer;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+      .ttt__cell:not(:disabled):hover {
+        background: #ffe9a3;
+      }
+      .ttt__cell:disabled {
+        cursor: default;
+        color: inherit;
+        opacity: 1;
+      }
+      .ttt__cell--on {
+        animation: game-pop 220ms ease-out;
+      }
+      .ttt__cell--win {
+        background: #ffd23f;
+      }
+      @keyframes game-pop {
+        0% { transform: scale(0.5); }
+        70% { transform: scale(1.12); }
+        100% { transform: scale(1); }
+      }
+
+      /* Rock paper scissors */
+      .rps__arena {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .rps__side {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+      .rps__hand {
+        width: 64px;
+        height: 64px;
+        border-radius: 14px;
+        background: #fff1c2;
+        font-size: 38px;
+        line-height: 64px;
+        text-align: center;
+      }
+      .rps--shake .rps__hand {
+        animation: rps-shake 330ms ease-in-out infinite;
+      }
+      @keyframes rps-shake {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+      }
+      .rps__label {
+        font-size: 12px;
+        color: #7a6a42;
+      }
+      .rps__vs {
+        font-weight: 800;
+        color: #b39448;
+      }
+      .rps__buttons {
+        display: flex;
+        gap: 6px;
+      }
+      .rps__btn {
+        padding: 6px 9px;
+      }
+
+      /* Cups */
+      .cups {
+        position: relative;
+        width: 300px;
+        height: 104px;
+        border-radius: 12px;
+        background: linear-gradient(#fff7dc 0 70%, #e9d7a6 70% 100%);
+        overflow: hidden;
+      }
+      .cups__seed {
+        position: absolute;
+        bottom: 16px;
+        width: 30px;
+        margin-left: -15px;
+        font-size: 24px;
+        text-align: center;
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+      .cups__cup {
+        position: absolute;
+        bottom: 12px;
+        width: 76px;
+        height: 74px;
+        padding: 0;
+        border: 0;
+        background: #d8323c;
+        clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%);
+        border-radius: 6px 6px 0 0;
+        cursor: pointer;
+        transition-property: left, transform;
+        transition-timing-function: ease-in-out;
+        transform: translateY(0);
+      }
+      .cups__cup:disabled {
+        cursor: default;
+      }
+      .cups__cup:not(:disabled):hover {
+        filter: brightness(1.1);
+      }
+      .cups__band {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 22px;
+        height: 12px;
+        background: #fff;
+        opacity: 0.85;
+      }
+      .cups__cup--up {
+        transform: translateY(-46px);
+        transition-duration: 260ms !important;
+      }
+      .cups__cup--moving {
+        z-index: 2;
+        filter: brightness(1.08);
+      }
+
+      /* Bubbles */
+      .bubbles__time {
+        font-size: 22px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+      .bubbles {
+        position: fixed;
+        z-index: 4;
+        display: none;
+        pointer-events: none;
+      }
+      .bubbles.on {
+        display: block;
+      }
+      .bubbles.live {
+        pointer-events: auto;
+        cursor: crosshair;
+      }
 
       /* Ping pong */
       .pong {

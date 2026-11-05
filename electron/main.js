@@ -112,7 +112,21 @@ function buildTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
-    { label: 'Play ping pong 🏓', click: () => command('pingpong'), enabled: !asleep },
+    {
+      label: '🎮 Games',
+      enabled: !asleep,
+      submenu: [
+        ...[
+          ['pingpong', '🏓 Ping pong'],
+          ['tictactoe', '⭕ Tic-tac-toe'],
+          ['rps', '✊ Rock paper scissors'],
+          ['cups', '🥤 Cups'],
+          ['bubbles', '🫧 Bubbles'],
+        ].map(([name, label]) => ({ label, click: () => command('game', { name }) })),
+        { type: 'separator' },
+        { label: 'Stop the game', click: () => command('game', { name: 'stop' }) },
+      ],
+    },
     {
       label: '✏️ Highlighted text',
       submenu: [

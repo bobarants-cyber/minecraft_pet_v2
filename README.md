@@ -39,7 +39,21 @@ A speech bubble opens above the pet. Type and press Enter.
 
 For a faster but simpler brain, run `ollama pull llama3.2:1b` and pick **AI brain → Llama 3.2 Mini** in the pet's menu-bar menu.
 
-## Ping pong 🏓
+## Games 🎮
+
+Right-click the pet → **🎮 Play a game**, or the menu bar → **🎮 Games**. Each game is a small panel beside the pet at
+the bottom of the screen, so the rest of your screen (a Zoom call, say) stays visible and clickable. They're mouse-only,
+so your keyboard stays in the app you're using. Press ✕ or **Esc**, or choose **Stop the game**, to stop.
+
+| Game | How to play |
+|---|---|
+| 🏓 Ping pong | Move your mouse to move your paddle; click the table to serve. First to 7. |
+| ⭕ Tic-tac-toe | You're ⭐. Get three in a row before the pet does. It's good, but beatable. |
+| ✊ Rock paper scissors | Pick one. The pet notices if you keep choosing the same thing… |
+| 🥤 Cups | Watch which cup hides the 🌻 seed, follow the shuffle, click the right cup. Faster every round. |
+| 🫧 Bubbles | Pop the bubbles the pet blows, in 30 seconds. Golden ones are worth 3. |
+
+### Ping pong 🏓
 
 Right-click the pet → **🏓 Ping pong**, or the menu bar → **Play ping pong**. A small table appears at the bottom of
 the screen with the pet at the far end holding a paddle. Move your mouse to move your paddle, and click the table to serve.
