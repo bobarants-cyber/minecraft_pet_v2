@@ -9,6 +9,7 @@ import { PointerDirector } from './interaction/PointerDirector.js';
 import { MobMenu } from './interaction/MobMenu.js';
 import { Chat } from './interaction/Chat.js';
 import { Games } from './games/Games.js';
+import { Captions } from './captions/Captions.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -21,6 +22,7 @@ const character = new Character({ mob: createMob(mobName), scene: stage.scene, s
 stage.scene.add(character.mob.root);
 const chat = new Chat({ character, stage, settings, host });
 const game = new Games({ character, stage, settings, host });
+const captions = new Captions({ character, settings, save, host });
 const playGame = (id) => {
   chat.close();
   game.toggle(id);
@@ -32,9 +34,11 @@ const menu = new MobMenu({
   onGame: playGame,
   onStopGame: () => game.stop(),
   onRewrite: (mode) => host?.rewrite(mode),
+  onCaptions: () => save({ captionsOn: !settings.captionsOn }),
 });
+menu.captionsOn = () => settings.captionsOn;
 menu.playing = () => game.currentId;
-const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game });
+const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions] });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
 function applyMob(name) {
@@ -68,6 +72,7 @@ const loop = new Loop((dt, t) => {
   character.update(dt, t);
   stage.render();
   chat.update();
+  captions.update();
 });
 loop.start();
 
@@ -101,4 +106,4 @@ if (!host) {
   });
 }
 
-window.mob = { stage, character, director, menu, chat, game, settings, screen, loop, get pet() { return character.mob; } };
+window.mob = { stage, character, director, menu, chat, game, captions, settings, screen, loop, get pet() { return character.mob; } };

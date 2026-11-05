@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, systemPreferences } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
-import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText } from './ai.js';
+import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText } from './ai.js';
+import { Whisper } from './captions.js';
+import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
@@ -25,6 +27,7 @@ let expanded = false;
 let chatOpen = false;
 let reminders = null;
 let rewriting = false;
+const whisper = new Whisper(path.join(__dirname, '..'));
 const targetApp = new selection.TargetApp();
 
 if (!app.requestSingleInstanceLock()) {
@@ -125,6 +128,20 @@ function buildTray() {
         ].map(([name, label]) => ({ label, click: () => command('game', { name }) })),
         { type: 'separator' },
         { label: 'Stop the game', click: () => command('game', { name: 'stop' }) },
+      ],
+    },
+    {
+      label: '🎙 Live captions',
+      submenu: [
+        { label: 'Show captions', type: 'checkbox', checked: settings.captionsOn, click: (i) => applySettings({ captionsOn: i.checked }) },
+        { type: 'separator' },
+        { label: '🎤 My microphone', type: 'checkbox', checked: settings.captionsMic, click: (i) => applySettings({ captionsMic: i.checked }) },
+        { label: '💻 Computer sound (needs BlackHole)', type: 'checkbox', checked: settings.captionsComputer, click: (i) => applySettings({ captionsComputer: i.checked }) },
+        { type: 'separator' },
+        {
+          label: 'Translate into',
+          submenu: Object.entries(CAPTION_LANGUAGES).map(([key, label]) => radio(label, 'captionsLang', key)),
+        },
       ],
     },
     {
@@ -239,6 +256,29 @@ async function rewriteSelection(mode) {
 }
 
 ipcMain.on('rewrite:run', (_e, mode) => rewriteSelection(mode));
+
+// Live captions: the page records and cuts speech into clips; here they're turned into text (and translated).
+ipcMain.handle('captions:status', async () => {
+  const s = whisper.status();
+  const mic = process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted';
+  return { ...s, mic };
+});
+ipcMain.handle('captions:askMic', async () => (process.platform === 'darwin' ? systemPreferences.askForMediaAccess('microphone') : true));
+ipcMain.handle('captions:transcribe', async (_e, { wav, target = 'english' }) => {
+  try {
+    const heard = await whisper.transcribe(Buffer.from(wav));
+    let translation = null;
+    const lang = heard.language;
+    if (heard.text && lang && lang !== target) {
+      if (target === 'english') translation = (await whisper.transcribe(Buffer.from(wav), { translate: true })).text || null;
+      else translation = await translateText({ text: heard.text, from: cap(lang), to: cap(target), model: settings.aiModel });
+    }
+    return { ok: true, text: heard.text, language: lang, translation };
+  } catch (err) {
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+});
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 ipcMain.on('rewrite:copy', (_e, text) => clipboard.writeText(String(text)));
 ipcMain.handle('rewrite:replace', async (_e, text) => {
   try {
@@ -286,5 +326,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  whisper.stop();
+});
 app.on('second-instance', () => win?.showInactive());

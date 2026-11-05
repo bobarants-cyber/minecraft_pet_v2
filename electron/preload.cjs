@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld('mobHost', {
   onRewrite: (fn) => ipcRenderer.on('rewrite', (_e, r) => fn(r)),
   copyText: (text) => ipcRenderer.send('rewrite:copy', text),
   replaceText: (text) => ipcRenderer.invoke('rewrite:replace', text),
+  captionsStatus: () => ipcRenderer.invoke('captions:status'),
+  askMic: () => ipcRenderer.invoke('captions:askMic'),
+  transcribe: (payload) => ipcRenderer.invoke('captions:transcribe', payload),
 });

@@ -12,13 +12,15 @@ const THROW_SPEED = 3.5;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
 export class PointerDirector {
-  constructor({ character, screen, host, canvas, menu = null, chat = null, game = null }) {
+  constructor({ character, screen, host, canvas, menu = null, chat = null, game = null, panels = [] }) {
     this.character = character;
     this.screen = screen;
     this.host = host;
     this.menu = menu;
     this.chat = chat;
     this.game = game;
+    /** Other on-screen panels (live captions) that take clicks when the pointer is over them. */
+    this.panels = panels;
     this.expanded = false;
     this.pointer = null;
     this.over = false;
@@ -86,7 +88,7 @@ export class PointerDirector {
 
   #down(e) {
     // Clicks inside the speech bubble belong to the bubble (typing, buttons), not to petting the mob.
-    if (this.chat?.contains(e.target) || this.game?.contains(e.target)) return;
+    if (this.chat?.contains(e.target) || this.game?.contains(e.target) || this.panels.some((p) => p.contains(e.target))) return;
     // While playing, clicks on the table are for the game, not for petting.
     if (this.game?.active && e.button === 0 && !this.#hits(this.#world(e.clientX, e.clientY))) return;
     const menu = this.menu;
@@ -142,7 +144,8 @@ export class PointerDirector {
     const c = this.character;
     const w = this.pointer ? this.#world(this.pointer.x, this.pointer.y) : null;
 
-    const overChat = !!this.pointer && !!this.chat?.containsPoint(this.pointer.x, this.pointer.y);
+    const overChat =
+      !!this.pointer && (!!this.chat?.containsPoint(this.pointer.x, this.pointer.y) || this.panels.some((p) => p.containsPoint(this.pointer.x, this.pointer.y)));
     const overGame = !!this.pointer && !!this.game?.containsPoint(this.pointer.x, this.pointer.y);
     const over = !!this.drag || !!this.menu?.isOpen || overChat || overGame || (!!w && this.#hits(w));
     if (over !== this.over) {

@@ -39,6 +39,50 @@ A speech bubble opens above the pet. Type and press Enter.
 
 For a faster but simpler brain, run `ollama pull llama3.2:1b` and pick **AI brain → Llama 3.2 Mini** in the pet's menu-bar menu.
 
+## Live captions 🎙
+
+Right-click the pet → **🎙 Live captions**, or the menu bar → **🎙 Live captions → Show captions**. A small subtitle
+panel appears beside the pet and shows what it hears. When something is in another language, a 🌐 translation appears
+under it. Pick the language under **Translate into** (English, Español, 한국어 and more). Use 🎤 / 💻 on the panel to choose
+what it listens to: your microphone, the computer's sound (Zoom, YouTube…), or both.
+
+It all runs on your Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp): free, offline, nothing is saved.
+Translations into English come from Whisper; other languages use Ollama.
+
+### Set up captions (one time)
+
+1. Install the speech recognizer:
+   ```bash
+   brew install whisper-cpp
+   ```
+2. Download a speech model (about 470 MB) into the project's `models` folder:
+   ```bash
+   mkdir -p ~/Documents/minecraft_pet_v2/models
+   ```
+   ```bash
+   curl -L -o ~/Documents/minecraft_pet_v2/models/ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+   ```
+   (For a faster, less accurate model use `ggml-base.bin`, about 140 MB. Don't use the `.en` models: they only understand English.)
+3. Start the pet, turn on captions and allow the microphone when macOS asks.
+
+### Captions for the computer's sound (optional)
+
+Macs don't let apps listen to other apps' sound directly, so this uses **BlackHole**, a free virtual audio cable:
+
+1. Install it (it asks for your Mac password):
+   ```bash
+   brew install blackhole-2ch
+   ```
+   If it doesn't show up in the next step, restart your Mac.
+2. Open **Audio MIDI Setup** (⌘ Space, type it). Click **+** at the bottom left → **Create Multi-Output Device**, then tick
+   your speakers or headphones **and** **BlackHole 2ch**.
+3. In **System Settings → Sound → Output**, choose **Multi-Output Device**. You'll still hear everything, and the pet
+   hears it too. (In Zoom, set **Speaker** to *Same as System* or *Multi-Output Device*.)
+4. Click 💻 on the captions panel.
+
+Volume keys don't work with a Multi-Output Device; set the volume in your speakers' own settings or switch the output
+back when you're done.
+
 ## Games 🎮
 
 Right-click the pet → **🎮 Play a game**, or the menu bar → **🎮 Games**. Each game is a small panel beside the pet at

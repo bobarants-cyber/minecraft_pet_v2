@@ -4,6 +4,19 @@ import { app } from 'electron';
 
 export const SIZES = { small: 150, medium: 210, large: 290 };
 export const MOBS = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' };
+/** Caption translation targets, keyed by Whisper's language names. */
+export const CAPTION_LANGUAGES = {
+  english: 'English',
+  spanish: 'Español',
+  korean: '한국어',
+  french: 'Français',
+  portuguese: 'Português',
+  german: 'Deutsch',
+  italian: 'Italiano',
+  japanese: '日本語',
+  chinese: '中文',
+  arabic: 'العربية',
+};
 
 export const DEFAULTS = {
   mob: 'bee',
@@ -13,6 +26,10 @@ export const DEFAULTS = {
   idleSleepMin: 5,
   openAtLogin: false,
   aiModel: 'llama3.2',
+  captionsOn: false,
+  captionsMic: true,
+  captionsComputer: false,
+  captionsLang: 'english',
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

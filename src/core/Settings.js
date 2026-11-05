@@ -7,6 +7,10 @@ export const DEFAULTS = {
   idleSleepMin: 5,
   openAtLogin: false,
   aiModel: 'llama3.2',
+  captionsOn: false,
+  captionsMic: true,
+  captionsComputer: false,
+  captionsLang: 'english',
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

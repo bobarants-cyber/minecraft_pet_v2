@@ -6,7 +6,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -25,6 +25,10 @@ export class MobMenu {
         </div>
         <button type="button" class="mob-menu__row mob-menu__stop">⏹ Stop the game</button>
       </div>
+      <button type="button" class="mob-menu__row mob-menu__captions">
+        <span>🎙 Live captions</span>
+        <span class="mob-menu__value">Off</span>
+      </button>
       <button type="button" class="mob-menu__row mob-menu__switch">
         <span>Switch mob</span>
         <span class="mob-menu__value"></span>
@@ -51,6 +55,11 @@ export class MobMenu {
         onGame?.(chip.dataset.game);
       });
     }
+    this.captionsRow = this.el.querySelector('.mob-menu__captions');
+    this.captionsRow.addEventListener('click', () => {
+      this.close();
+      onCaptions?.();
+    });
     this.stopRow = this.el.querySelector('.mob-menu__stop');
     this.stopRow.addEventListener('click', () => {
       this.close();
@@ -75,6 +84,7 @@ export class MobMenu {
   }
 
   open(px, py) {
+    this.captionsRow.querySelector('.mob-menu__value').textContent = this.captionsOn?.() ? 'On' : 'Off';
     const playing = this.playing?.();
     this.stopRow.style.display = playing ? '' : 'none';
     for (const chip of this.el.querySelectorAll('.mob-menu__game')) chip.classList.toggle('is-on', chip.dataset.game === playing);
