@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject var focus: FocusController
     @Environment(\.scenePhase) private var scenePhase
     @State private var askFocus = false
+    @State private var askIsland = false
     @State private var web = WebBridge()
 
     var body: some View {
@@ -14,6 +15,7 @@ struct ContentView: View {
                 switch command {
                 case "float": floater.toggle()
                 case "focus": askFocus = true
+                case "island": askIsland = true
                 default: break
                 }
             }
@@ -41,8 +43,23 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .confirmationDialog("🏝 Bbokari in the Dynamic Island", isPresented: $askIsland, titleVisibility: .visible) {
+            ForEach(BuddyMode.all, id: \.id) { mode in
+                Button("\(mode.emoji) \(mode.title)") {
+                    Task { await BuddyIsland.show(mode.id) }
+                    web.say("Look up! I'm in the Dynamic Island: \(mode.title.lowercased()) \(mode.emoji)")
+                }
+            }
+            Button("Hide from the Dynamic Island", role: .destructive) {
+                Task { await BuddyIsland.hide() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Pick what Bbokari is doing up there. To switch automatically (🍿 when YouTube opens…), set it up in the Shortcuts app.")
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                Task { await BuddyIsland.ensureShowing() }
                 focus.refresh()
                 if floater.floating { floater.stop() }
             }

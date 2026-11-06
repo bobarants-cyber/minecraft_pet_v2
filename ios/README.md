@@ -5,6 +5,9 @@ A real iPhone app with Bbokari in it:
 - 🐥 **Pocket Bbokari**: pet him, feed him, play ball, dress him up, play mini-games. It's the same as the claude.ai page, minus chat.
 - 🪟 **Floating Bbokari**: tap **🪟 Float**, or just swipe home. Bbokari pops into a little window that stays on top of **every app**. Drag it anywhere, pinch it bigger or smaller, or swipe it to the side of the screen to tuck it away. Open the app again and he goes back home.
 - 🏠 **Widgets**: Bbokari on your Home Screen and Lock Screen, saying something new every half hour ("Drink some water! 💧", "You got this! 💪"…).
+- 🏝 **Bbokari in the Dynamic Island**: a tiny Bbokari up there in the same scenes as on the Mac: 🍿 popcorn in the
+  cinema seat, 🎧 headphones, 🎮 gaming, ✏️ writing, 📖 reading, 🎨 drawing, 💻 working, 💤 sleeping. Tap 🏝 in the app
+  to choose, or let the Shortcuts app switch him automatically (see below). Long-press the island to see him bigger.
 - 🍅 **Focus timer**: tap 🍅 in the app. Bbokari and the countdown show up in the **Dynamic Island** and on the Lock Screen, and you get a notification when time's up.
 
 > Apple doesn't let any app walk around on top of your other apps like Bbokari does on the Mac. The floating
@@ -47,12 +50,29 @@ Bbokari is now on your Home Screen 🎉
   long-press the Lock Screen → **Customize** → tap the widget area → pick Bbokari.
 - **Floating:** make sure **Settings → General → Picture in Picture → Start PiP Automatically** is on.
 
+## Make the Dynamic Island Bbokari switch by himself 🍿
+
+iPhones don't let apps see what you're doing in other apps, but the **Shortcuts** app can tell Bbokari:
+
+1. Open **Shortcuts** → **Automation** (bottom) → **+** (or **New Automation**).
+2. Choose **App** → **Choose** → pick **YouTube** → **Done**. Leave **Is Opened** ticked → choose **Run Immediately** → **Next**.
+3. Tap **New Blank Automation** → **Add Action** → search **Bbokari** → **Set Bbokari's activity**.
+4. Tap the blue word **Hanging out** and choose **Movie time 🍿** → **Done**.
+5. Make another one the same way: **YouTube** → only **Is Closed** → **Run Immediately** → **Set Bbokari's activity** →
+   **Hanging out 🐥**.
+
+Do the same for other apps: Spotify → 🎵 Listening, Zoom or FaceTime → 🎧 On a call, games → 🎮 Gaming, Books → 📖 Reading,
+Notes or Docs → ✏️ Writing. You can also use **Focus** as the trigger: Sleep focus → 💤 Sleeping.
+
+iOS takes him out of the island after about 8 hours. Opening the Bbokari app (or any of these automations) brings him back.
+
 ## Good to know
 
 - With a free Apple ID, apps you install yourself **stop opening after 7 days**. To fix it, plug in the iPhone,
   open the project in Xcode and press ▶︎ again. Bbokari's stars and outfits stay saved.
 - The 3D part needs internet the first time it opens, to download the 3D engine.
-- To update after a `git pull`: run `xcodegen` again in the `ios` folder, then press ▶︎ in Xcode.
+- To update after a `git pull`: run `xcodegen` again in the `ios` folder, choose your **Team** again for both targets
+  (xcodegen resets it), then press ▶︎ in Xcode.
 
 ## How it's made
 
