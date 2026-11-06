@@ -12,12 +12,13 @@ function osascript(script) {
   });
 }
 
-/** The text in the focused text box of the app in front, or '' if that app doesn't share it. */
-export async function focusedText() {
+/** The text in the focused text box of an app (by bundle id, or the app in front), or '' if it doesn't share it. */
+export async function focusedText(appId = null) {
+  const id = appId ? String(appId).replace(/[^\w.-]/g, '') : null;
   try {
     const out = await osascript(
       'tell application "System Events"\n' +
-        'set p to first application process whose frontmost is true\n' +
+        (id ? `set p to first application process whose bundle identifier is "${id}"\n` : 'set p to first application process whose frontmost is true\n') +
         'set f to value of attribute "AXFocusedUIElement" of p\n' +
         'set v to value of attribute "AXValue" of f\n' +
         'if class of v is text then return v\n' +

@@ -13,6 +13,7 @@ import { ActivityWatcher } from './activity.js';
 import { Skills } from './skills.js';
 import { AudioSwitcher } from './audioSwitch.js';
 import * as proofread from './proofread.js';
+import { classify } from './activity.js';
 import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
@@ -160,6 +161,7 @@ function buildTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
+    { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
       label: '🎮 Games',
@@ -362,6 +364,10 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   }
   const cmd = parseCommand(String(text));
   if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
+  if (/^(?:please\s+)?(?:can you\s+)?(?:check|proofread|look at|fix)\s+my\s+(?:writing|text|spelling|grammar|code|essay)\b/i.test(String(text).trim())) {
+    setTimeout(checkWritingNow, 300);
+    return { ok: true, kind: 'proofread', text: 'Let me have a look… 🔍' };
+  }
   if (/^(?:please\s+)?(?:start\s+)?(?:take|taking|start)\s+(?:some\s+)?notes\b/i.test(String(text).trim())) {
     if (notes) return { ok: true, kind: 'notes', text: `I’m already taking notes (${notes.title}). Say “stop notes” when you’re done.` };
     startNotes({ title: 'Notes' });
@@ -567,7 +573,7 @@ async function checkWriting() {
   proof.busy = true;
   try {
     const text = proofread.excerpt(await proofread.focusedText());
-    if (text.replace(/\s/g, '').length < 40) return;
+    if (text.replace(/\s/g, '').length < 12) return;
     const h = proofread.hash(text);
     if (h === proof.lastHash) return;
     proof.lastHash = h;
@@ -581,6 +587,36 @@ async function checkWriting() {
     proof.busy = false;
   }
 }
+
+/** "Check my writing" on demand: always answers (mistakes, "looks good", or why it couldn't read the text). */
+async function checkWritingNow() {
+  if (proof.busy) return send('say', { text: 'I’m already checking, one moment! 🔍' });
+  if (!selection.supported) return send('say', { text: 'This only works on a Mac for now.' });
+  if (!selection.hasPermission(true)) return send('say', { text: selection.explain('not allowed'), error: true });
+  proof.busy = true;
+  try {
+    const app = (await targetApp.refresh()) ?? targetApp.last;
+    const name = app?.name ?? 'that app';
+    const text = proofread.excerpt(await proofread.focusedText(app?.id));
+    if (text.replace(/\s/g, '').length < 3) {
+      return send('say', {
+        text: `I couldn’t read any text in ${name}. Click into the text you’re writing first, then ask me again. (Some apps, like Google Docs in Chrome, don’t share their text: highlight it and use ✏️ Improve instead.)`,
+      });
+    }
+    const kind = classify({ id: app?.id }) === 'coding' ? 'coding' : 'writing';
+    send('typing', { on: true });
+    const issues = await proofread.findMistakes(text, kind, settings.aiModel);
+    send('typing', { on: false });
+    proof.lastHash = proofread.hash(text);
+    proof.last = Date.now();
+    if (issues === null) send('say', { text: 'I couldn’t check right now. Is the Ollama app open? 🦙', error: true });
+    else if (!issues.length) send('say', { text: `Looks good to me! ✨ No mistakes spotted in your ${kind === 'coding' ? 'code' : 'writing'}.` });
+    else send('suggestions', { kind, issues });
+  } finally {
+    proof.busy = false;
+  }
+}
+ipcMain.on('proofread:now', () => checkWritingNow());
 
 function checkClasses() {
   if (!classes) return;

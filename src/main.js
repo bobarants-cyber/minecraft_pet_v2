@@ -75,6 +75,7 @@ const menu = new MobMenu({
   onFeed: () => toys.feed(),
   onBall: () => toys.playBall(),
   onOutfit: (name) => save({ outfit: name }),
+  onCheck: () => host?.checkWriting?.(),
   onHide: () => {
     chat.say('Hiding! 🙈 I’m still here and still working. Press ⌃⌥P or use the menu bar to bring me back.');
     setTimeout(() => save({ hidden: true }), 1200);

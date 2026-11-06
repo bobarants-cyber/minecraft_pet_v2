@@ -41,4 +41,5 @@ contextBridge.exposeInMainWorld('mobHost', {
   computerAudio: (on) => ipcRenderer.send('audio:computer', on),
   onSuggestions: (fn) => ipcRenderer.on('suggestions', (_e, s) => fn(s)),
   onProofreading: (fn) => ipcRenderer.on('proofreading', (_e, s) => fn(s)),
+  checkWriting: () => ipcRenderer.send('proofread:now'),
 });
