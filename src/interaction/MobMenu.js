@@ -6,7 +6,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -35,6 +35,10 @@ export class MobMenu {
           <button type="button" class="mob-menu__chip" data-open="">Other…</button>
         </div>
       </div>
+      <button type="button" class="mob-menu__row mob-menu__classes">
+        <span>📅 My classes</span>
+        <span class="mob-menu__value">Calendar</span>
+      </button>
       <button type="button" class="mob-menu__row mob-menu__captions">
         <span>🎙 Live captions</span>
         <span class="mob-menu__value">Off</span>
@@ -71,6 +75,10 @@ export class MobMenu {
         onOpen?.(chip.dataset.open);
       });
     }
+    this.el.querySelector('.mob-menu__classes').addEventListener('click', () => {
+      this.close();
+      onClasses?.();
+    });
     this.captionsRow = this.el.querySelector('.mob-menu__captions');
     this.captionsRow.addEventListener('click', () => {
       this.close();

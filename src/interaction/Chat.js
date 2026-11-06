@@ -259,6 +259,7 @@ export class Chat {
     this.busy = false;
     this.el.classList.remove('busy');
     c.stopTyping();
+    this.onReply?.(reply);
     c.face.setExpression(reply.ok ? 'happy' : 'nervous');
     c.emote(reply.kind === 'reminder' ? 'sparkle' : reply.ok ? 'note' : 'question', -0.5);
     if (this.isOpen) this.input.focus();

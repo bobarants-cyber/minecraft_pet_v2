@@ -124,6 +124,198 @@
         padding: 7px 10px;
       }
 
+      /* My classes */
+      .classes {
+        position: fixed;
+        z-index: 8;
+        display: none;
+        width: 470px;
+        max-width: calc(100vw - 24px);
+        padding: 12px 14px 12px;
+        box-sizing: border-box;
+        border-radius: 18px;
+        background: #fffdf5;
+        color: #2b2412;
+        box-shadow: 0 0 0 3px #3b2f14, 0 10px 28px rgba(0, 0, 0, 0.3);
+        font: 500 14px/1.3 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+        cursor: default;
+      }
+      .classes.on {
+        display: block;
+      }
+      .classes__head {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .classes__title {
+        flex: 1;
+        font-weight: 800;
+        font-size: 15px;
+      }
+      .classes__close {
+        width: 24px;
+        height: 24px;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        color: #7a6a42;
+        font: 600 18px/24px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .classes__close:hover {
+        background: rgba(0, 0, 0, 0.07);
+      }
+      .classes__week {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        min-height: 150px;
+      }
+      .classes__col {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 10px;
+        background: #fff4d1;
+        min-width: 0;
+      }
+      .classes__col.is-today {
+        background: #ffe48a;
+        box-shadow: inset 0 0 0 2px #e0a800;
+      }
+      .classes__colhead {
+        text-align: center;
+        font-size: 12px;
+        font-weight: 800;
+        color: #6b5a2e;
+      }
+      .classes__chip {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 4px 5px;
+        border: 0;
+        border-left: 4px solid var(--c);
+        border-radius: 6px;
+        background: #fff;
+        color: #2b2412;
+        font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        text-align: left;
+        cursor: pointer;
+        overflow: hidden;
+      }
+      .classes__chip b {
+        font-size: 10.5px;
+        color: #7a6a42;
+      }
+      .classes__chip span {
+        width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .classes__chip:hover {
+        filter: brightness(0.96);
+      }
+      .classes__foot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .classes__hint {
+        font-size: 12px;
+        color: #7a6a42;
+      }
+      .classes__form {
+        display: none;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .classes.editing .classes__form {
+        display: flex;
+      }
+      .classes.editing .classes__view {
+        display: none;
+      }
+      .classes__field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1;
+        font-size: 12px;
+        font-weight: 700;
+        color: #6b5a2e;
+      }
+      .classes__field input {
+        padding: 7px 10px;
+        border: 2px solid #3b2f14;
+        border-radius: 10px;
+        background: #fff;
+        color: #2b2412;
+        font: 500 14px/1.2 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        outline: none;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+      .classes__field input:focus {
+        border-color: #e0a800;
+        box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.45);
+      }
+      .classes__row {
+        display: flex;
+        gap: 10px;
+      }
+      .classes__days {
+        display: flex;
+        gap: 4px;
+      }
+      .classes__day {
+        flex: 1;
+        padding: 6px 0;
+        border: 2px solid #3b2f14;
+        border-radius: 9px;
+        background: #fff;
+        color: #2b2412;
+        font: 700 12px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .classes__day.is-on {
+        background: #ffd23f;
+      }
+      .classes__error {
+        min-height: 16px;
+        color: #b4361c;
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .classes__error:empty {
+        display: none;
+      }
+      .classes__actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .classes__spacer {
+        flex: 1;
+      }
+      .classes__btn {
+        padding: 6px 11px;
+        border: 2px solid #3b2f14;
+        border-radius: 12px;
+        background: #fff;
+        color: #2b2412;
+        font: 700 13px/1.1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .classes__delete {
+        color: #b4361c;
+        border-color: #b4361c;
+      }
+
       /* Live captions */
       .captions {
         position: fixed;

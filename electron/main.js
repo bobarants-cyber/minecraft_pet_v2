@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, systemPreferences } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
 import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText } from './ai.js';
 import { Whisper } from './captions.js';
 import * as opener from './opener.js';
+import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
 
 /** Shortcuts in the Open menus: label → what to type. */
 const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet', 'google meet'], ['Zoom', 'zoom'], ['Notes', 'notes']];
@@ -30,6 +31,8 @@ let idleSleeping = false;
 let expanded = false;
 let chatOpen = false;
 let reminders = null;
+let classes = null;
+const clock = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 let rewriting = false;
 const whisper = new Whisper(path.join(__dirname, '..'));
 const targetApp = new selection.TargetApp();
@@ -135,6 +138,16 @@ function buildTray() {
       ],
     },
     {
+      label: '📅 Classes',
+      submenu: [
+        ...(classes?.today().length
+          ? classes.today().map((c) => ({ label: `${clock(c.startAt)}  ${c.name}${c.link ? '' : '  (no link)'}`, enabled: !!c.link, click: () => openClass(c, { now: true }) }))
+          : [{ label: 'No classes today', enabled: false }]),
+        { type: 'separator' },
+        { label: 'My classes…', click: () => command('classes') },
+      ],
+    },
+    {
       label: '🚀 Open',
       submenu: [
         ...QUICK_OPEN.map(([label, what]) => ({ label, click: () => openThing(what) })),
@@ -232,6 +245,9 @@ ipcMain.on('chat:focus', (_e, on) => {
 ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
   const cmd = parseCommand(String(text));
   if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
+  if (/^(?:show\s+)?(?:my\s+)?(?:classes|class schedule|schedule|timetable|calendar)\??$/i.test(String(text).trim())) {
+    return { ok: true, kind: 'classes', text: 'Here’s your class calendar! 📅' };
+  }
   const target = opener.parseOpen(text);
   if (target) {
     if (!selection.hasPermission(true)) return { ok: false, kind: 'open', text: selection.explain('not allowed') };
@@ -275,6 +291,39 @@ async function rewriteSelection(mode) {
 
 ipcMain.on('rewrite:run', (_e, mode) => rewriteSelection(mode));
 ipcMain.on('open:run', (_e, what) => openThing(what));
+
+// Class timetable: the page edits it; here it's stored and watched, and class links open just before class.
+ipcMain.handle('classes:list', () => ({ classes: classes.list(), lead: LEAD_MINUTES }));
+ipcMain.handle('classes:save', (_e, cls) => {
+  const res = classes.upsert(cls);
+  buildTray();
+  return res;
+});
+ipcMain.handle('classes:remove', (_e, id) => {
+  classes.remove(id);
+  buildTray();
+  return { ok: true };
+});
+ipcMain.on('classes:join', (_e, id) => {
+  const c = classes.today().find((x) => x.id === id) ?? classes.list().find((x) => x.id === id);
+  if (c) openClass(c, { now: true });
+});
+
+/** Opens a class's link (with a heads-up from the pet first). `now` = you asked for it, so no countdown message. */
+function openClass(c, { late = false, now = false } = {}) {
+  if (!c.link) return;
+  classes.markOpened(c);
+  const text = now ? `📚 Opening ${c.name}…` : late ? `📚 ${c.name} already started. Opening it now!` : `📚 ${c.name} starts in ${LEAD_MINUTES} minutes! Opening your class…`;
+  if (!now && Notification.isSupported()) new Notification({ title: `${personaFor(settings.mob).name}: class time!`, body: text.replace(/^📚\s*/, ''), silent: false }).show();
+  send('classTime', { text });
+  // Give the pet a moment to sit down at its desk, then open the link in your browser or Zoom.
+  setTimeout(() => shell.openExternal(c.link).catch((err) => send('say', { text: `I couldn’t open the link for ${c.name}: ${err.message}`, error: true })), 2500);
+}
+
+function checkClasses() {
+  if (!classes) return;
+  for (const c of classes.due()) openClass(c, { late: c.late });
+}
 
 /** Open a website or app by having the pet type it (see opener.js), with the typing animation while it does. */
 let opening = false;
@@ -355,6 +404,14 @@ app.whenReady().then(() => {
   buildTray();
   // Start once the page can hear us, so reminders that came due while the app was closed still pop up.
   win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
+  classes = new ClassSchedule({ file: path.join(app.getPath('userData'), 'classes.json') });
+  buildTray();
+  setInterval(checkClasses, 15_000);
+  // After the Mac wakes up, check straight away (you might be in the middle of a class).
+  powerMonitor.on('resume', () => setTimeout(checkClasses, 4000));
+  powerMonitor.on('unlock-screen', () => setTimeout(checkClasses, 2000));
+  // The tray's "today" list changes at midnight.
+  setInterval(buildTray, 10 * 60_000);
   setInterval(pollIdle, IDLE_POLL_MS);
   for (const [mode, key] of Object.entries(REWRITE_KEYS)) {
     if (!globalShortcut.register(key, () => rewriteSelection(mode))) console.log(`Shortcut ${key} is taken by another app.`);

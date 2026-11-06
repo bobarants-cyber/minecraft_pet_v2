@@ -39,6 +39,19 @@ A speech bubble opens above the pet. Type and press Enter.
 
 For a faster but simpler brain, run `ollama pull llama3.2:1b` and pick **AI brain → Llama 3.2 Mini** in the pet's menu-bar menu.
 
+## My classes 📅
+
+Right-click the pet → **📅 My classes**, the menu bar → **📅 Classes → My classes…**, or type “my classes” in the chat.
+Add each class with its name, days, start and end time, and its link (Zoom, Google Meet, …). The week view shows your
+timetable with today highlighted; click a class to edit it, delete it or join it now.
+
+**Two minutes before each class**, the pet (waking up first if it's napping) sits at its desk, tells you which class is
+starting, shows a Mac notification and opens the class link. If your Mac was asleep and you open it while a class is
+still on, it opens it right away. Each class opens once per day, and only links starting with `https://` (or Zoom/Teams
+app links) are allowed. The menu bar's **📅 Classes** lists today's classes; click one to join early.
+
+The pet has to be running for this, so tick **Open at login** in its menu-bar menu.
+
 ## Open things for you 🚀
 
 Right-click the pet → **🚀 Open for me** (YouTube, Google, Meet, Zoom, or **Other…**), use the menu bar → **🚀 Open**,

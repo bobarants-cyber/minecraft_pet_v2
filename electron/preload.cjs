@@ -21,4 +21,9 @@ contextBridge.exposeInMainWorld('mobHost', {
   openThing: (what) => ipcRenderer.send('open:run', what),
   onTyping: (fn) => ipcRenderer.on('typing', (_e, t) => fn(t)),
   onSay: (fn) => ipcRenderer.on('say', (_e, m) => fn(m)),
+  classesList: () => ipcRenderer.invoke('classes:list'),
+  saveClass: (cls) => ipcRenderer.invoke('classes:save', cls),
+  removeClass: (id) => ipcRenderer.invoke('classes:remove', id),
+  joinClass: (id) => ipcRenderer.send('classes:join', id),
+  onClassTime: (fn) => ipcRenderer.on('classTime', (_e, m) => fn(m)),
 });
