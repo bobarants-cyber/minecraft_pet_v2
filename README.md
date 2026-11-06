@@ -10,6 +10,18 @@ npm start
 > Use **Node 22** (`brew install node@22`). With very new Node versions, npm may skip Electron's
 > download step, and you'll get "Electron failed to install correctly".
 
+## Bbokari as a Mac app 🐥
+
+Make an app with Bbokari's icon that you can open from Launchpad, Spotlight or the Dock, without Terminal:
+
+```bash
+npm run make-app
+```
+
+It appears in **Applications** as **Bbokari**. Drag it to your Dock if you like. The icon is
+`assets/icon/bbokari.png` (1024×1024). If you move the project folder, run `npm run make-app` again. If something
+goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
+
 ## Your assistant
 
 **Right-click the pet → 💬 Chat**, or click the menu-bar icon → **Chat with Bee…**.

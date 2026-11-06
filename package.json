@@ -10,7 +10,8 @@
     "dev": "node scripts/launch.mjs --dev",
     "build": "vite build",
     "start": "npm run build && node scripts/launch.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "make-app": "bash scripts/make-mac-app.sh"
   },
   "keywords": [
     "threejs",
