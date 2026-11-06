@@ -2,7 +2,7 @@
 // ("Bokari", "Pokari", "Bo Kari", "Bocari"…), so each pet's name is a forgiving pattern.
 
 const NAMES = {
-  bbokari: String.raw`(?:b{1,2}|p|v)[ou]{1,2}\s?-?\s?(?:k{1,2}|c{1,2}|q)a+r+[iíy]+|bo\s?carry|poker\s?e`,
+  bbokari: String.raw`(?:b{1,2}|p)[ou]{1,2}\s?-?\s?(?:k{1,2}|c{1,2}|q)a+r+[iíy]+`,
   bee: String.raw`bee`,
   axolotl: String.raw`axolotl|axolote|axo`,
 };
