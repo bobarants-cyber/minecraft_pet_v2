@@ -66,7 +66,7 @@ export class NotesBadge {
     this.el.classList.toggle('writing', !!s.writing);
     this.el.classList.toggle('problem', !!this.problem);
     let text;
-    if (s.writing) text = `✍️ Writing your ${s.title ? `${s.title} ` : ''}notes…`;
+    if (s.writing) text = `✍️ Writing your ${s.title && s.title !== 'Notes' ? `${s.title} ` : ''}notes…`;
     else if (this.problem) text = `📝 ${this.problem}`;
     else {
       const secs = Math.floor((Date.now() - s.startedAt) / 1000);
