@@ -109,6 +109,20 @@ The first time, macOS asks whether Electron may control your browser (to read th
 **OK**. Nothing is saved or sent anywhere. Turn it off in the menu bar: **👀 React to what I'm doing** /
 **⏰ Stretch break reminders**.
 
+## Spotting mistakes 🔍
+
+While you're writing (Notes, Pages, Word, TextEdit…) or coding (VS Code, Xcode, Terminal…), the pet waits until you
+pause typing, reads the text box you're typing in, and asks Ollama for spelling, grammar or code mistakes. If it finds
+any, a bubble shows them (~~teh~~ → **the**); otherwise it stays quiet. It checks at most every 90 seconds and only
+when the text changed. Some apps, notably **Google Docs**, don't share their text: highlight it and use **✏️ Improve**
+(⌃⌥B) instead. Turn it off in the menu bar: **🔍 Spot mistakes while I write or code**.
+
+## Invisible mode 🙈
+
+Right-click the pet → **🙈 Hide me**, the menu bar → **Hide Bbokari**, or press **⌃⌥P**. The pet disappears but
+keeps working: notes, captions, reminders, classes and “Hey Bbokari” all still run, and important alerts still
+pop up. While hidden, the menu bar shows 🙈 (or 📝 while it's taking notes). Press **⌃⌥P** again to bring it back.
+
 ## Hey Bbokari 🗣
 
 A voice assistant: right-click the pet → **🗣 Hey Bbokari** (or the menu bar → **🗣 Hey Bbokari**) to turn it on. Then

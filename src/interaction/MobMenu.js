@@ -7,7 +7,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, onHide = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -63,6 +63,10 @@ export class MobMenu {
         <span>🎙 Live captions</span>
         <span class="mob-menu__value">Off</span>
       </button>
+      <button type="button" class="mob-menu__row mob-menu__hide">
+        <span>🙈 Hide me</span>
+        <span class="mob-menu__value">I keep working</span>
+      </button>
       <button type="button" class="mob-menu__row mob-menu__switch">
         <span>Switch mob</span>
         <span class="mob-menu__value"></span>
@@ -111,6 +115,10 @@ export class MobMenu {
         for (const o of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) o.classList.toggle('is-on', o === chip);
       });
     }
+    this.el.querySelector('.mob-menu__hide').addEventListener('click', () => {
+      this.close();
+      onHide?.();
+    });
     this.voiceRow = this.el.querySelector('.mob-menu__voice');
     this.voiceRow.addEventListener('click', () => {
       this.close();

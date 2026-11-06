@@ -43,6 +43,12 @@ function playEffect(effect) {
   else if (effect.startsWith('weather:')) toys.weather(effect.slice(8));
 }
 host?.onEffect?.(({ effect }) => playEffect(effect));
+// Mistakes it spotted while you write or code.
+host?.onSuggestions?.((s) => {
+  chat.showSuggestions(s);
+  character.emote('exclaim', 0.4);
+  if (character.stateName !== 'activity') character.face.setExpression('curious');
+});
 // While the pet talks out loud, the mic would hear it, so pause listening (and a moment after).
 host?.onSpeaking?.(({ on }) => (captions.mutedUntil = on ? Infinity : performance.now() + 900));
 captions.onNotice = (text, isProblem) => notesBadge.notice(text, isProblem);
@@ -69,6 +75,10 @@ const menu = new MobMenu({
   onFeed: () => toys.feed(),
   onBall: () => toys.playBall(),
   onOutfit: (name) => save({ outfit: name }),
+  onHide: () => {
+    chat.say('Hiding! 🙈 I’m still here and still working. Press ⌃⌥P or use the menu bar to bring me back.');
+    setTimeout(() => save({ hidden: true }), 1200);
+  },
 });
 menu.captionsOn = () => settings.captionsOn;
 menu.notesOn = () => notesBadge.state.active;
@@ -100,18 +110,36 @@ function updatePlacement() {
   stage.setShadowStrength(1 - character.lift / (1.2 * scale));
 }
 
+/** Invisible mode: the pet keeps working (notes, captions, reminders, voice) but isn't drawn or clickable. */
+let wasHidden = null;
+function applyHidden() {
+  const hidden = !!settings.hidden;
+  if (hidden === wasHidden) return;
+  wasHidden = hidden;
+  character.hidden = hidden;
+  stage.renderer.domElement.style.visibility = hidden ? 'hidden' : '';
+  if (hidden) {
+    game.stop();
+    menu.close();
+  } else if (wasHidden !== null) {
+    character.trigger('surprised', { then: 'idle' }, true);
+    character.emote('sparkle', 0.4);
+  }
+}
+
 const loop = new Loop((dt, t) => {
   if (settings.mob !== mobName) applyMob(settings.mob);
   updatePlacement();
   director.update(dt);
   game.update(dt);
+  applyHidden();
   character.update(dt, t);
-  stage.render();
+  if (!character.hidden) stage.render();
   chat.update();
   captions.update();
   classes.update();
-  notesBadge.update(chat.isOpen);
-  focusBadge.update(chat.isOpen, notesBadge.visible);
+  notesBadge.update(chat.isOpen || character.hidden);
+  focusBadge.update(chat.isOpen || character.hidden, notesBadge.visible);
   toys.update(dt);
   wardrobe.wear(character.mob, settings.outfit);
   if (!['typing', 'activity'].includes(character.stateName)) wardrobe.refresh();

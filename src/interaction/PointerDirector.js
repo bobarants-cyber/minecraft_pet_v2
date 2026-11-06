@@ -50,6 +50,7 @@ export class PointerDirector {
 
   #hits(w) {
     const c = this.character;
+    if (c.hidden) return false;
     const { scale } = c.placement;
     const { halfWidth, height } = c.mob;
     return Math.abs(w.x - c.loco.x) < halfWidth * scale && w.h > c.lift && w.h < c.lift + height * scale;

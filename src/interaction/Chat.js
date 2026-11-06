@@ -242,6 +242,32 @@ export class Chat {
     this.#toast(row, { hideAfter: 0, result: true });
   }
 
+  /** Mistakes it spotted while you were writing or coding. */
+  showSuggestions({ kind, issues }) {
+    if (this.isOpen) {
+      this.#add('pet', `🔍 ${issues.map((i) => `“${i.quote}” → “${i.fix}”${i.why ? ` (${i.why})` : ''}`).join('\n')}`);
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet';
+    const head = document.createElement('b');
+    head.textContent = `🔍 I spotted ${issues.length === 1 ? 'something' : `${issues.length} things`} in your ${kind === 'coding' ? 'code' : 'writing'}:`;
+    const list = document.createElement('div');
+    list.className = 'chat__suggestions';
+    for (const i of issues) {
+      const item = document.createElement('div');
+      const from = document.createElement('s');
+      from.textContent = i.quote;
+      const to = document.createElement('b');
+      to.textContent = i.fix;
+      item.append('• ', from, ' → ', to);
+      if (i.why) item.append(` (${i.why})`);
+      list.appendChild(item);
+    }
+    row.append(head, list);
+    this.#toast(row, { opensChat: false, hideAfter: 15_000 });
+  }
+
   /** A short note from the pet in a bubble (e.g. "I opened YouTube"), added to the chat if it's open. */
   say(text, { error = false } = {}) {
     if (this.isOpen) {
@@ -393,6 +419,8 @@ export class Chat {
     }
     this.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     this.el.classList.toggle('side', side);
+    // No pointer to an invisible pet.
+    this.el.classList.toggle('ghost', !!c.hidden);
     this.tail.style.left = `${Math.round(Math.max(18, Math.min(w - 18, px - x)))}px`;
   }
 }

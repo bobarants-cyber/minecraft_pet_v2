@@ -201,6 +201,18 @@
       .chat__result--notes {
         max-height: 280px;
       }
+      .chat__suggestions {
+        margin-top: 5px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .chat__suggestions s {
+        color: #b4361c;
+      }
+      .chat__suggestions b {
+        color: #2b8a3e;
+      }
       .chat__asked {
         margin-bottom: 5px;
         font-size: 12.5px;
@@ -857,7 +869,8 @@
         box-shadow: 3px 3px 0 0 #3b2f14;
         transform: rotate(45deg);
       }
-      .chat.side .chat__tail {
+      .chat.side .chat__tail,
+      .chat.ghost .chat__tail {
         display: none;
       }
       .chat__close {

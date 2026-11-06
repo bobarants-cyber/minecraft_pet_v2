@@ -20,6 +20,8 @@ export const DEFAULTS = {
   outfit: 'none',
   autoSwitchAudio: true,
   normalOutput: '',
+  checkWriting: true,
+  hidden: false,
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

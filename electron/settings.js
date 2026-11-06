@@ -39,6 +39,8 @@ export const DEFAULTS = {
   outfit: 'none',
   autoSwitchAudio: true,
   normalOutput: '',
+  checkWriting: true,
+  hidden: false,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

@@ -39,4 +39,6 @@ contextBridge.exposeInMainWorld('mobHost', {
   onFocus: (fn) => ipcRenderer.on('focus', (_e, f) => fn(f)),
   onEffect: (fn) => ipcRenderer.on('effect', (_e, f) => fn(f)),
   computerAudio: (on) => ipcRenderer.send('audio:computer', on),
+  onSuggestions: (fn) => ipcRenderer.on('suggestions', (_e, s) => fn(s)),
+  onProofreading: (fn) => ipcRenderer.on('proofreading', (_e, s) => fn(s)),
 });

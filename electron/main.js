@@ -12,6 +12,7 @@ import { NOTES_DIR, NotesSession } from './notes.js';
 import { ActivityWatcher } from './activity.js';
 import { Skills } from './skills.js';
 import { AudioSwitcher } from './audioSwitch.js';
+import * as proofread from './proofread.js';
 import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
@@ -40,6 +41,8 @@ let reminders = null;
 let classes = null;
 let notes = null;
 let skills = null;
+const proof = { last: 0, lastHash: '', busy: false };
+const PROOF_EVERY_MS = 90_000;
 const audioSwitch = new AudioSwitcher({
   onProblem: (text) => send('say', { text }),
   getNormal: () => settings.normalOutput || null,
@@ -152,7 +155,10 @@ function buildTray() {
       ]
     : [{ label: 'None yet. Try “remind me in 10 minutes to stretch” in the chat.', enabled: false }];
 
+  // While hidden, a little 📝 in the menu bar shows that it's still taking notes.
+  if (process.platform === 'darwin') tray.setTitle(settings.hidden ? (notes ? ' 📝' : ' 🙈') : '');
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
@@ -273,6 +279,7 @@ function buildTray() {
       ].map(([key, label]) => radio(label, 'outfit', key)),
     },
     { label: '👀 React to what I’m doing', type: 'checkbox', checked: settings.reactToActivity, click: (i) => applySettings({ reactToActivity: i.checked }) },
+    { label: '🔍 Spot mistakes while I write or code', type: 'checkbox', checked: settings.checkWriting, click: (i) => applySettings({ checkWriting: i.checked }) },
     { label: '⏰ Stretch break reminders', type: 'checkbox', checked: settings.breakReminders, click: (i) => applySettings({ breakReminders: i.checked }) },
     { label: 'Open at login', type: 'checkbox', checked: settings.openAtLogin, click: (i) => applySettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
@@ -540,6 +547,33 @@ ipcMain.on('notes:open', (_e, file) => {
   execFile('open', ['-a', 'TextEdit', f], (err) => err && shell.openPath(f));
 });
 
+/**
+ * While you're writing or coding: once you pause typing for a few seconds, read the focused text box and look for
+ * mistakes (at most every 90 s, and only if the text changed). Quiet when everything looks fine.
+ */
+async function checkWriting() {
+  if (!settings.checkWriting || proof.busy || !['writing', 'coding'].includes(activity)) return;
+  const idle = powerMonitor.getSystemIdleTime();
+  if (idle < 4 || idle > 90 || Date.now() - proof.last < PROOF_EVERY_MS) return;
+  if (!selection.hasPermission(false)) return;
+  proof.busy = true;
+  try {
+    const text = proofread.excerpt(await proofread.focusedText());
+    if (text.replace(/\s/g, '').length < 40) return;
+    const h = proofread.hash(text);
+    if (h === proof.lastHash) return;
+    proof.lastHash = h;
+    proof.last = Date.now();
+    const kind = activity;
+    send('proofreading', { on: true });
+    const issues = await proofread.findMistakes(text, kind, settings.aiModel);
+    send('proofreading', { on: false });
+    if (issues?.length) send('suggestions', { kind, issues });
+  } finally {
+    proof.busy = false;
+  }
+}
+
 function checkClasses() {
   if (!classes) return;
   for (const c of classes.due()) openClass(c, { late: c.late });
@@ -636,6 +670,7 @@ app.whenReady().then(() => {
   });
   buildTray();
   setInterval(checkClasses, 15_000);
+  setInterval(checkWriting, 6000);
   // After the Mac wakes up, check straight away (you might be in the middle of a class).
   powerMonitor.on('resume', () => setTimeout(checkClasses, 4000));
   powerMonitor.on('unlock-screen', () => setTimeout(checkClasses, 2000));
@@ -645,6 +680,7 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => setTimeout(syncActivity, 4000));
   // If the sound was left on the Multi-Output Device (volume keys off), put it back on your normal output.
   if (process.platform === 'darwin' && settings.autoSwitchAudio) setTimeout(() => audioSwitch.normalize(), 2500);
+  globalShortcut.register('Control+Alt+P', () => applySettings({ hidden: !settings.hidden }));
   for (const [mode, key] of Object.entries(REWRITE_KEYS)) {
     if (!globalShortcut.register(key, () => rewriteSelection(mode))) console.log(`Shortcut ${key} is taken by another app.`);
   }
