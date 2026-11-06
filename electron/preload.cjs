@@ -38,4 +38,5 @@ contextBridge.exposeInMainWorld('mobHost', {
   onWellbeing: (fn) => ipcRenderer.on('wellbeing', (_e, w) => fn(w)),
   onFocus: (fn) => ipcRenderer.on('focus', (_e, f) => fn(f)),
   onEffect: (fn) => ipcRenderer.on('effect', (_e, f) => fn(f)),
+  computerAudio: (on) => ipcRenderer.send('audio:computer', on),
 });

@@ -179,6 +179,7 @@ export class Captions {
       mute.connect(ctx.destination);
       this.sources[kind] = src;
       this.problem = null;
+      if (kind === 'computer') this.host?.computerAudio?.(true);
       if (!this.lines.length) this.#notice(`Listening… (${kind === 'mic' ? '🎤 your microphone' : '💻 the computer'})`);
     } catch (err) {
       this.#notice(`I couldn’t open the ${kind === 'mic' ? 'microphone' : 'computer sound'}: ${err.message ?? err}`, true);
@@ -193,6 +194,7 @@ export class Captions {
     s.stream.getTracks().forEach((t) => t.stop());
     s.ctx.close();
     delete this.sources[kind];
+    if (kind === 'computer') this.host?.computerAudio?.(false);
   }
 
   /** Start (or update) a background listener; see `listeners`. */

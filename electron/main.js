@@ -11,6 +11,7 @@ import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
 import { NOTES_DIR, NotesSession } from './notes.js';
 import { ActivityWatcher } from './activity.js';
 import { Skills } from './skills.js';
+import { AudioSwitcher } from './audioSwitch.js';
 import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
@@ -39,6 +40,7 @@ let reminders = null;
 let classes = null;
 let notes = null;
 let skills = null;
+const audioSwitch = new AudioSwitcher({ onProblem: (text) => send('say', { text }) });
 let focus = null; // { endAt, minutes, timer }
 let activity = null; // what you're doing right now (video, writing, …) or null
 let activeMs = 0; // computer time since your last real break, for stretch reminders
@@ -218,6 +220,7 @@ function buildTray() {
         { type: 'separator' },
         { label: '🎤 My microphone', type: 'checkbox', checked: settings.captionsMic, click: (i) => applySettings({ captionsMic: i.checked }) },
         { label: '💻 Computer sound (needs BlackHole)', type: 'checkbox', checked: settings.captionsComputer, click: (i) => applySettings({ captionsComputer: i.checked }) },
+        { label: '🔊 Switch to Multi-Output Device automatically', type: 'checkbox', checked: settings.autoSwitchAudio, click: (i) => applySettings({ autoSwitchAudio: i.checked }) },
         { type: 'separator' },
         {
           label: 'Translate into',
@@ -395,6 +398,12 @@ async function rewriteSelection(mode) {
 }
 
 ipcMain.on('rewrite:run', (_e, mode) => rewriteSelection(mode));
+// While the pet listens to the computer's sound, send the sound through BlackHole (and back afterwards).
+ipcMain.on('audio:computer', (_e, on) => {
+  if (process.platform !== 'darwin') return;
+  if (on && settings.autoSwitchAudio) audioSwitch.useMultiOutput();
+  else if (!on) audioSwitch.restore();
+});
 ipcMain.on('open:run', (_e, what) => openThing(what));
 
 // Class timetable: the page edits it; here it's stored and watched, and class links open just before class.
@@ -635,6 +644,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
+  audioSwitch.restoreNow();
   globalShortcut.unregisterAll();
   whisper.stop();
 });

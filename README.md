@@ -190,8 +190,16 @@ Macs don't let apps listen to other apps' sound directly, so this uses **BlackHo
    hears it too. (In Zoom, set **Speaker** to *Same as System* or *Multi-Output Device*.)
 4. Click 💻 on the captions panel.
 
-Volume keys don't work with a Multi-Output Device; set the volume in your speakers' own settings or switch the output
-back when you're done.
+Volume keys don't work with a Multi-Output Device. To have the pet switch for you, install one small free tool:
+
+```bash
+brew install switchaudio-osx
+```
+
+Then, whenever the pet listens to the computer's sound (💻 captions or notes), it switches your output to the
+Multi-Output Device, and back to what you had (speakers, AirPods…) when it stops, so your volume keys work the rest
+of the time. If you change the output yourself in between, it leaves your choice alone. Turn it off in the menu bar:
+**🎙 Live captions → 🔊 Switch to Multi-Output Device automatically**.
 
 ## Games 🎮
 

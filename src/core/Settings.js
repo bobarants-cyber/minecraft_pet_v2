@@ -18,6 +18,7 @@ export const DEFAULTS = {
   breakReminders: true,
   homeCity: '',
   outfit: 'none',
+  autoSwitchAudio: true,
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

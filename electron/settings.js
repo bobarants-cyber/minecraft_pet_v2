@@ -37,6 +37,7 @@ export const DEFAULTS = {
   breakReminders: true,
   homeCity: '',
   outfit: 'none',
+  autoSwitchAudio: true,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');
