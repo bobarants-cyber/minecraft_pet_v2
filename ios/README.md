@@ -8,6 +8,8 @@ A real iPhone app with Bbokari in it:
 - 🏝 **Bbokari in the Dynamic Island**: a tiny Bbokari up there in the same scenes as on the Mac: 🍿 popcorn in the
   cinema seat, 🎧 headphones, 🎮 gaming, ✏️ writing, 📖 reading, 🎨 drawing, 💻 working, 💤 sleeping. Tap 🏝 in the app
   to choose, or let the Shortcuts app switch him automatically (see below). Long-press the island to see him bigger.
+- 💬 **Chat** with Bbokari using Apple's on-device AI (needs Apple Intelligence turned on in Settings). 📳 Vibrations when
+  you pet him, and 📸 photos you can save or share.
 - 🍅 **Focus timer**: tap 🍅 in the app. Bbokari and the countdown show up in the **Dynamic Island** and on the Lock Screen, and you get a notification when time's up.
 
 > Apple doesn't let any app walk around on top of your other apps like Bbokari does on the Mac. The floating

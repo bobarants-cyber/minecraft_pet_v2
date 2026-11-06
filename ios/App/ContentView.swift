@@ -11,11 +11,27 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            PocketWebView(bridge: web) { command in
-                switch command {
+            PocketWebView(bridge: web) { message in
+                switch message["cmd"] as? String ?? "" {
                 case "float": floater.toggle()
                 case "focus": askFocus = true
                 case "island": askIsland = true
+                case "haptic": Haptics.play(message["style"] as? String ?? "light")
+                case "share":
+                    if let image = message["image"] as? String { Share.image(dataURL: image) }
+                case "mood":
+                    // The Dynamic Island follows the app: 💤 when he sleeps, 🎮 during games.
+                    if let mode = message["mode"] as? String, !BuddyIsland.hiddenByUser {
+                        Task { await BuddyIsland.show(mode) }
+                    }
+                case "chat":
+                    let id = message["id"] as? Int ?? 0
+                    let rules = message["rules"] as? String ?? ""
+                    let history = message["history"] as? [[String: String]] ?? []
+                    Task {
+                        let text = await ChatBrain.reply(rules: rules, history: history)
+                        web.call("nativeChatReply", [id, text ?? ""])
+                    }
                 default: break
                 }
             }
