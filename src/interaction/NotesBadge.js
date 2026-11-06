@@ -57,19 +57,31 @@ export class NotesBadge {
 
   update(hidden = false) {
     const show = this.visible && !hidden;
-    this.el.classList.toggle('on', show);
+    if (show !== this.el.classList.contains('on')) {
+      this.el.classList.toggle('on', show);
+      this.shown = null;
+    }
     if (!show) return;
     const s = this.state;
     this.el.classList.toggle('writing', !!s.writing);
     this.el.classList.toggle('problem', !!this.problem);
-    if (s.writing) this.text.textContent = `✍️ Writing your ${s.title ? `${s.title} ` : ''}notes…`;
-    else if (this.problem) this.text.textContent = `📝 ${this.problem}`;
+    let text;
+    if (s.writing) text = `✍️ Writing your ${s.title ? `${s.title} ` : ''}notes…`;
+    else if (this.problem) text = `📝 ${this.problem}`;
     else {
       const secs = Math.floor((Date.now() - s.startedAt) / 1000);
       const time = `${Math.floor(secs / 60)}:${pad(secs % 60)}`;
-      this.text.textContent = `📝 Taking notes${s.title && s.title !== 'Notes' ? ` · ${s.title}` : ''} · ${time} · ${this.lines} line${this.lines === 1 ? '' : 's'}`;
+      text = `📝 Taking notes${s.title && s.title !== 'Notes' ? ` · ${s.title}` : ''} · ${time} · ${this.lines} line${this.lines === 1 ? '' : 's'}`;
     }
-    this.stopBtn.style.display = s.writing ? 'none' : '';
+    // Only touch the page when something changed (the timer ticks once a second), so it isn't redrawn every frame.
+    if (text !== this.shown) {
+      this.text.textContent = text;
+      this.shown = text;
+      this.width = this.el.offsetWidth;
+      this.height = this.el.offsetHeight;
+    }
+    const stopDisplay = s.writing ? 'none' : '';
+    if (this.stopBtn.style.display !== stopDisplay) this.stopBtn.style.display = stopDisplay;
     // Just above the pet's head.
     const c = this.character;
     const W = window.innerWidth;
@@ -77,9 +89,13 @@ export class NotesBadge {
     const x = W / 2 + c.loco.x * PIXELS_PER_UNIT;
     const floor = H / 2 - c.placement.floorY * PIXELS_PER_UNIT;
     const top = floor - (c.mob.height * c.placement.scale + c.lift) * PIXELS_PER_UNIT;
-    const w = this.el.offsetWidth;
-    const left = Math.max(10, Math.min(W - w - 10, x - w / 2));
-    this.el.style.left = `${Math.round(left)}px`;
-    this.el.style.top = `${Math.round(Math.max(10, top - this.el.offsetHeight - 10))}px`;
+    const w = this.width ?? this.el.offsetWidth;
+    const left = Math.round(Math.max(10, Math.min(W - w - 10, x - w / 2)));
+    const y = Math.round(Math.max(10, top - (this.height ?? this.el.offsetHeight) - 10));
+    const transform = `translate(${left}px, ${y}px)`;
+    if (transform !== this.transform) {
+      this.el.style.transform = transform;
+      this.transform = transform;
+    }
   }
 }
