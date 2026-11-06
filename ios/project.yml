@@ -28,6 +28,7 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSSupportsLiveActivities: true
+        NSPhotoLibraryAddUsageDescription: Save photos of Bbokari to your library.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIStatusBarStyle: UIStatusBarStyleDarkContent
     settings:

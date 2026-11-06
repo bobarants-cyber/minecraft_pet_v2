@@ -100,14 +100,68 @@ body.render header,body.render .stats,body.render #dock,body.render #loading{dis
 body.render #bubble{font-size:22px;padding:12px 18px;transition:none}
 #floatVideo{position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none}
 .floatBtn{all:unset;cursor:pointer;background:var(--card);border-radius:999px;padding:6px 12px;font-weight:800;box-shadow:var(--shadow);white-space:nowrap}
+
+/* levels, chips, fabs */
+.nameBox{min-width:0;flex:0 1 auto}
+.lvl{font-size:13px;font-weight:800;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:2px 8px;vertical-align:middle}
+.xp{height:5px;border-radius:9px;background:var(--line);margin-top:4px;overflow:hidden;width:120px;max-width:100%}
+.xp i{display:block;height:100%;background:var(--accent);border-radius:9px;transition:width .5s}
+.chips{display:flex;gap:8px;max-width:520px;width:100%;margin:8px auto 0;position:relative;z-index:2}
+.pill{all:unset;cursor:pointer;background:var(--card);border-radius:999px;padding:5px 11px;font-weight:700;font-size:13px;box-shadow:var(--shadow);white-space:nowrap}
+.fabs{display:flex;max-width:520px;width:100%;margin:0 auto 8px;position:relative;z-index:2}
+.fab{all:unset;cursor:pointer;width:50px;height:50px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);font-size:24px;display:flex;align-items:center;justify-content:center}
+.fab[hidden]{display:none}
+.fab:active,.pill:active{transform:scale(.94)}
+#stage canvas{touch-action:none}
+/* confetti, mud, sponge, flash */
+.conf{position:fixed;top:-40px;font-size:26px;pointer-events:none;z-index:9;animation:fall 2.2s ease-in forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg);opacity:.6}}
+.mud{position:absolute;border-radius:50%;background:radial-gradient(circle at 40% 40%,#8a5a2b,#5b3714);transform:translate(-50%,-50%);pointer-events:none;transition:opacity .3s}
+#sponge{position:absolute;font-size:44px;transform:translate(-50%,-50%);pointer-events:none;display:none;z-index:3}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8;transition:opacity .35s}
+#flash.on{opacity:.9;transition:none}
+#decor{position:absolute;inset:0;z-index:0;pointer-events:none}
+#decor span{position:absolute;transform:translate(-50%,-50%);font-size:34px}
+/* tabs, quests, week */
+.tabs{display:flex;gap:8px;margin-bottom:10px}
+.tab{all:unset;cursor:pointer;padding:8px 14px;border-radius:12px;background:var(--line);font-weight:700}
+.tab.sel{background:var(--accent);color:var(--accent-ink)}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:6px 0 14px}
+.week div{text-align:center;border-radius:12px;padding:8px 0;background:var(--line);font-weight:800;font-size:13px}
+.week div.got{background:var(--accent);color:var(--accent-ink)}
+.week div span{display:block;font-size:20px}
+.quest{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.quest .qb{flex:1}
+.quest .bar{margin-top:6px}
+.quest.done{opacity:.6}
+/* new games */
+.playArea{position:relative;height:min(50vh,360px);border-radius:18px;background:linear-gradient(#bfe8ff,#e8f7ff);overflow:hidden;touch-action:none}
+#catcher{position:absolute;bottom:6px;font-size:44px;transform:translateX(-50%)}
+.drop{position:absolute;font-size:32px;transform:translate(-50%,-50%)}
+#flappy{display:block;width:100%;height:min(50vh,360px);border-radius:18px;touch-action:none}
+.mem{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:min(100%,330px);margin:8px auto}
+.mem button{all:unset;cursor:pointer;aspect-ratio:1;border-radius:14px;background:var(--accent);font-size:32px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.mem button.open{background:var(--line)}
+.mem button.gone{opacity:.35}
+#photoImg{display:block;width:100%;border-radius:16px;box-shadow:var(--shadow);-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto}
+/* rooms */
+body[data-room="beach"]{--sky-top:#5fc8f5;--sky-bot:#fff1c9;--hill:#f3d9a4;--hill-dark:#e3bf7a}
+body[data-room="candy"]{--sky-top:#ffb6d9;--sky-bot:#fff0f7;--hill:#ff9cc7;--hill-dark:#f57fb3}
+body[data-room="snow"]{--sky-top:#a9c9e8;--sky-bot:#eef6ff;--hill:#ffffff;--hill-dark:#dde9f5}
+body[data-room="space"],body.night{--ink:#f3efff;--ink-soft:#b9b2d6;--card:rgba(30,28,56,.88);--card-solid:#25224a;--line:rgba(255,255,255,.14)}
+body[data-room="space"]{--sky-top:#0b0630;--sky-bot:#3b1f6e;--hill:#8b80a8;--hill-dark:#5e547d}
+body.night{--sky-top:#0f1640;--sky-bot:#3a3a7a;--hill:#2f5d3b;--hill-dark:#244a2f}
+body.asleep{--sky-top:#0d1030;--sky-bot:#2a2558;--hill:#24452e;--hill-dark:#1c3824;--ink:#f3efff;--ink-soft:#b9b2d6;--card:rgba(30,28,56,.88);--card-solid:#25224a;--line:rgba(255,255,255,.14)}
+@media (prefers-reduced-motion: reduce){.conf{animation-duration:.01s}}
 @media (prefers-reduced-motion: reduce){.pop{animation-duration:.01s}.sheet,.fly{transition:none}}
 </style>
 
 <div id="app">
   <div id="hill"></div>
+  <div id="decor"></div>
   <div id="stage"></div>
   <header>
-    <div class="name">🐥 Bbokari</div>
+    <div class="nameBox"><div class="name" aria-label="Bbokari">🐥 <span class="lvl" id="lvl">Lv 1</span></div><div class="xp"><i id="barXp"></i></div></div>
     <div class="stars" id="stars">⭐ 0</div>
     <button class="floatBtn" id="bIsland" hidden>🏝️</button>
     <button class="floatBtn" id="bFocus" hidden>🍅</button>
@@ -118,26 +172,42 @@ body.render #bubble{font-size:22px;padding:12px 18px;transition:none}
     <div class="stat"><b><span>🍓 Food</span></b><div class="bar"><i id="barFood" style="background:var(--food)"></i></div></div>
     <div class="stat"><b><span>⚡ Energy</span></b><div class="bar"><i id="barEnergy" style="background:var(--energy)"></i></div></div>
   </div>
+  <div class="chips"><button class="pill" id="bQuests">📋 Quests 0/3</button><button class="pill" id="streak">🔥 1 day</button></div>
   <div id="loading">Bbokari is waking up…</div>
   <div class="spacer"></div>
+  <div class="fabs"><button class="fab" id="bPhoto" aria-label="Take a photo">📸</button><span style="flex:1"></span><button class="fab" id="bChat" hidden aria-label="Chat">💬</button></div>
   <nav id="dock">
     <button id="bFeed"><span>🍓</span>Feed</button>
     <button id="bBall"><span>⚽</span>Play</button>
+    <button id="bBath"><span>🛁</span>Bath</button>
     <button id="bGames"><span>🎮</span>Games</button>
-    <button id="bOutfit"><span>🎀</span>Outfit</button>
-    <button id="bChat" hidden><span>💬</span>Chat</button>
+    <button id="bOutfit"><span>🛍️</span>Shop</button>
     <button id="bSleep"><span>💤</span>Sleep</button>
   </nav>
-  <div id="fx"><div id="ball">⚽</div></div>
+  <div id="fx"><div id="ball">⚽</div><div id="mud"></div><div id="sponge">🧽</div></div>
   <div id="bubble"></div>
 </div>
 
 <div id="scrim"></div>
 <section class="sheet" id="sheetOutfit">
-  <h2>🎀 Outfits <button class="close" data-close>✕</button></h2>
-  <p class="muted" style="margin:0 0 10px">Win games and play ball to earn ⭐ stars, then spend them on new outfits.</p>
+  <h2>🛍️ Shop <button class="close" data-close>✕</button></h2>
+  <div class="tabs"><button class="tab sel" data-tab="outfits">🎀 Outfits</button><button class="tab" data-tab="rooms">🏡 Rooms</button></div>
+  <p class="muted" style="margin:0 0 10px">Earn ⭐ stars from games, quests, daily rewards and leveling up.</p>
   <div class="grid" id="outfits"></div>
+  <div class="grid" id="rooms" hidden></div>
+  <div class="row"><button class="btn ghost" id="bSound">🔊 Sounds: on</button></div>
 </section>
+<section class="sheet" id="sheetDaily">
+  <h2>📋 Today <button class="close" data-close>✕</button></h2>
+  <div id="dailyBody"></div>
+</section>
+<section class="sheet" id="sheetPhoto">
+  <h2>📸 Photo <button class="close" data-close>✕</button></h2>
+  <img id="photoImg" alt="Photo of Bbokari">
+  <p class="muted" id="photoHint" style="text-align:center"></p>
+  <div class="row"><button class="btn" id="bShare">Save / Share</button></div>
+</section>
+<div id="flash"></div>
 <section class="sheet" id="sheetGames">
   <h2 id="gameTitle">🎮 Games <button class="close" data-close>✕</button></h2>
   <div id="gameBody"></div>
@@ -182,10 +252,14 @@ const RENDER = !!window.__RENDER__;
 let vclock = 0;
 const clock = () => (RENDER ? vclock * 1000 : performance.now());
 if (RENDER) document.body.classList.add('render');
+// Inside the Bbokari iPhone app: messages to the app, and what the app can do (e.g. chat with Apple's on-device AI).
+const NATIVE = window.webkit?.messageHandlers?.bbokari;
+const CAPS = window.__nativeCaps || {};
 
 /* ---------------- saved state ---------------- */
 const KEY = 'pocketBbokari.v1';
-const S = { love: 70, food: 70, energy: 80, stars: 3, outfit: 'none', owned: ['none', 'bow'], asleep: false, at: Date.now() };
+const S = { love: 70, food: 70, energy: 80, stars: 3, outfit: 'none', owned: ['none', 'bow'], asleep: false, at: Date.now(),
+  xp: 0, level: 1, dirt: 10, room: 'meadow', rooms: ['meadow'], sound: true, lastDay: null, streak: 0, quests: null };
 if (!RENDER) try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
 { // time away: stats drift down a little (never below 10 while away)
   const mins = clamp((Date.now() - (S.at || Date.now())) / 60000, 0, 60 * 24);
@@ -193,6 +267,7 @@ if (!RENDER) try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}'
   else S.energy = Math.max(Math.min(S.energy, 10), S.energy - mins / 6);
   S.food = Math.max(Math.min(S.food, 10), S.food - mins / 4);
   S.love = Math.max(Math.min(S.love, 10), S.love - mins / 6);
+  S.dirt = Math.min(100, S.dirt + mins / 8);
 }
 function save() { if (RENDER) return; S.at = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
 function bump(k, d) { S[k] = clamp(S[k] + d, 0, 100); renderStats(); save(); }
@@ -201,6 +276,8 @@ function renderStats() {
   $('barFood').style.width = S.food + '%';
   $('barEnergy').style.width = S.energy + '%';
   $('stars').textContent = '⭐ ' + S.stars;
+  $('lvl').textContent = 'Lv ' + S.level;
+  $('barXp').style.width = Math.min(100, (S.xp / xpNeed()) * 100) + '%';
 }
 function addStars(n) { S.stars += n; renderStats(); save(); }
 renderStats();
@@ -430,6 +507,8 @@ function updatePet(dt) {
     pose.y = Math.sin(Math.min(1, t / act.dur) * Math.PI) * 0.1; pose.rR = pose.rL = 1.5; pose.flap = 1; happy = 1;
   } else if (a === 'surprised') {
     pose.y = Math.sin(Math.min(1, t / 0.4) * Math.PI) * 0.12; pose.rR = pose.rL = 1.8; pose.hp = -0.15;
+  } else if (a === 'bath') {
+    happy = 1; blush = 1; pose.roll = Math.sin(t * 5) * 0.08; pose.rR = pose.rL = 1.2; pose.y = Math.abs(Math.sin(t * 5)) * 0.03;
   } else if (a === 'sleep') {
     open = 0; pose.hp = 0.38 + breathe * 0.03; pose.crouch = 0.05; pose.hr = 0.12;
   }
@@ -526,8 +605,10 @@ function petHit(x, y) {
 }
 let down = null;
 renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+renderer.domElement.addEventListener('pointermove', (e) => { if (bathing && down) scrub(e); });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!down) return;
+  if (bathing) { down = null; return; }
   const r = stage.getBoundingClientRect();
   const dx = e.clientX - down.x, dt = (performance.now() - down.t) / 1000;
   const x = e.clientX - r.left, y = e.clientY - r.top;
@@ -543,7 +624,7 @@ function tapPet(x, y) {
   if (S.asleep) { wake(); return; }
   taps++; clearTimeout(tapTimer); tapTimer = setTimeout(() => (taps = 0), 1500);
   popAt(x, y, ['💗', '💛', '✨', '💕'], 2);
-  bump('love', 3);
+  bump('love', 3); sfx('bbok'); buzz('light'); gainXP(1); quest('pet');
   if (busy()) return;
   if (taps >= 6) { play('surprised', 0.6); say(pick(['Hehe that tickles!! 🤭', 'Okay okay! 😆'])); taps = 0; return; }
   if (Math.random() < 0.3) { play('wave', 1.2); say(pick(['Hi hi! 👋', 'Bbok bbok! 🐥', 'You came back! 💛'])); }
@@ -564,7 +645,7 @@ function feed() {
   play('think', 0.6, () => {
     f.remove(); play('eat', 1.6, () => { play('hop', 0.8); }); say(line, 3);
     const b = beak(); popAt(b.x, b.y, ['✨', '😋'], 2);
-    bump('food', 22); bump('love', 2);
+    bump('food', 22); bump('love', 2); sfx('munch'); buzz('soft'); gainXP(5); quest('feed');
   });
 }
 
@@ -592,12 +673,12 @@ function updateBall(dt) {
     B.kicks++;
     const dir = Math.abs(root.position.x) > lim * 0.5 ? -Math.sign(root.position.x) : pick([-1, 1]);
     B.vx = dir * rand(1.6, 2.6); B.vy = rand(3, 4.5); B.x = root.position.x + dir * 0.3;
-    play('kick', 0.5);
+    play('kick', 0.5); sfx('pop'); buzz('light'); S.dirt = Math.min(100, S.dirt + 2);
     bump('energy', -2); bump('love', 2);
     if (B.kicks >= 5) {
       setTimeout(() => {
         B.on = false; ballEl.style.display = 'none'; targetX = 0;
-        play('dance', 1.6); say('That was fun!! +1 ⭐', 3); addStars(1);
+        play('dance', 1.6); say('That was fun!! +1 ⭐', 3); addStars(1); gainXP(8); quest('ball');
       }, 900);
     }
   }
@@ -611,8 +692,8 @@ function setSleep(on) {
   S.asleep = on; save();
   document.body.classList.toggle('asleep', on);
   $('bSleep').innerHTML = on ? '<span>☀️</span>Wake' : '<span>💤</span>Sleep';
-  if (on) { B.on = false; ballEl.style.display = 'none'; targetX = 0; play('sleep', Infinity); say('Good night… 🌙', 2.5); }
-  else { play('surprised', 0.6); }
+  if (on) { if (bathing) endBath(false); B.on = false; ballEl.style.display = 'none'; targetX = 0; play('sleep', Infinity); say('Good night… 🌙', 2.5); moodIsland('sleep'); }
+  else { play('surprised', 0.6); moodIsland('idle'); }
 }
 function wake() { setSleep(false); say(S.energy > 60 ? 'Good morning!! ☀️' : 'Five more minutes… 😪'); }
 let zzz = 0;
@@ -620,7 +701,7 @@ let zzz = 0;
 /* sheets */
 let openSheet = null;
 function showSheet(id) { closeSheet(); openSheet = $(id); openSheet.classList.add('on'); $('scrim').classList.add('on'); }
-function closeSheet() { openSheet?.classList.remove('on'); $('scrim').classList.remove('on'); openSheet = null; stopGame(); }
+function closeSheet() { if (openSheet?.id === 'sheetGames') moodIsland(S.asleep ? 'sleep' : 'idle'); openSheet?.classList.remove('on'); $('scrim').classList.remove('on'); openSheet = null; stopGame(); }
 $('scrim').onclick = closeSheet;
 document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeSheet));
 
@@ -648,16 +729,21 @@ function renderOutfits() {
 let gameTimer = null, gameRaf = 0;
 function stopGame() { clearInterval(gameTimer); cancelAnimationFrame(gameRaf); gameTimer = null; }
 function setGame(title, html) { $('gameTitle').firstChild.textContent = title + ' '; $('gameBody').innerHTML = html; }
-function win(n, line) { addStars(n); setTimeout(() => { if (!S.asleep) { play('dance', 1.6); say(line, 3); } }, 200); }
+function win(n, line) { addStars(n); sfx('coin'); buzz('success'); gainXP(10); quest('win'); setTimeout(() => { if (!S.asleep) { play('dance', 1.6); say(line, 3); } }, 200); }
 
 function gameMenu() {
   stopGame();
   setGame('🎮 Games', `<div class="grid">
     <button class="chip" id="gT"><span>⭕</span>Tic-tac-toe<small>Win: +3 ⭐</small></button>
     <button class="chip" id="gR"><span>✊</span>Rock paper scissors<small>Win: +1 ⭐</small></button>
-    <button class="chip" id="gB"><span>🫧</span>Bubble pop<small>Up to +5 ⭐</small></button></div>
+    <button class="chip" id="gB"><span>🫧</span>Bubble pop<small>Up to +5 ⭐</small></button>
+    <button class="chip" id="gC"><span>🧺</span>Snack catch<small>Up to +5 ⭐</small></button>
+    <button class="chip" id="gF"><span>🐥</span>Flappy Bbokari<small>Up to +5 ⭐</small></button>
+    <button class="chip" id="gM"><span>🃏</span>Memory<small>Up to +5 ⭐</small></button></div>
     <p class="muted">Games use a little energy ⚡ — let Bbokari sleep if it gets tired.</p>`);
-  $('gT').onclick = ticTacToe; $('gR').onclick = rps; $('gB').onclick = bubbles;
+  const go = (fn) => () => { quest('game'); fn(); };
+  $('gT').onclick = go(ticTacToe); $('gR').onclick = go(rps); $('gB').onclick = go(bubbles);
+  $('gC').onclick = go(snackCatch); $('gF').onclick = go(flappy); $('gM').onclick = go(memory);
 }
 function tired() {
   if (S.energy >= 8) return false;
@@ -762,7 +848,7 @@ function addMsg(text, who) { const m = document.createElement('div'); m.classNam
 $('chatForm').onsubmit = async (e) => {
   e.preventDefault();
   const text = $('chatInput').value.trim();
-  if (!text || chatCtl || !sample) return;
+  if (!text || chatCtl || !(sample || nativeChat)) return;
   $('chatInput').value = '';
   addMsg(text, 'me');
   turns.push({ role: 'user', content: text });
@@ -772,7 +858,12 @@ $('chatForm').onsubmit = async (e) => {
   const rules = RULES.replace('{LOVE}', Math.round(S.love)).replace('{FOOD}', Math.round(S.food)).replace('{ENERGY}', Math.round(S.energy));
   const msgs = [{ role: 'user', content: rules + '\n\n(Conversation starts now.)' }, { role: 'assistant', content: 'Bbok! Okay! 🐥' }, ...turns.slice(-12)];
   try {
-    const r = await sample(msgs, { cache: false, modelTier: 'quick', signal: chatCtl.signal, onText: ({ text }) => { out.textContent = text; $('chatLog').scrollTop = 1e9; } });
+    let r;
+    if (nativeChat) {
+      const t = await askNative(rules, turns.slice(-12));
+      if (!t) throw { code: 'native_fail' };
+      r = { text: t };
+    } else r = await sample(msgs, { cache: false, modelTier: 'quick', signal: chatCtl.signal, onText: ({ text }) => { out.textContent = text; $('chatLog').scrollTop = 1e9; } });
     out.textContent = r.text.trim() || 'Bbok? 🐥';
     turns.push({ role: 'assistant', content: out.textContent });
     say(out.textContent, 6); bump('love', 2);
@@ -786,10 +877,362 @@ $('chatForm').onsubmit = async (e) => {
   } finally { chatCtl = null; }
 };
 
+/* ---------------- sounds & vibration ---------------- */
+let actx = null;
+function tone(f1, f2, dur, type = 'sine', vol = 0.15, delay = 0) {
+  const t = actx.currentTime + delay;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f1, t);
+  o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(actx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function sfx(kind) {
+  if (!S.sound || RENDER) return;
+  try {
+    actx ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    if (kind === 'bbok') { tone(900, 1300, 0.07, 'triangle', 0.12); tone(1100, 1500, 0.08, 'triangle', 0.12, 0.1); }
+    else if (kind === 'pop') tone(700, 180, 0.09, 'sine', 0.18);
+    else if (kind === 'coin') { tone(988, 988, 0.08, 'square', 0.05); tone(1319, 1319, 0.18, 'square', 0.05, 0.08); }
+    else if (kind === 'munch') { for (let i = 0; i < 3; i++) tone(220, 120, 0.06, 'square', 0.05, i * 0.14); }
+    else if (kind === 'level') [523, 659, 784, 1047].forEach((f, i) => tone(f, f * 1.01, 0.14, 'triangle', 0.12, i * 0.1));
+    else if (kind === 'splash') tone(1600, 400, 0.12, 'sine', 0.06);
+    else if (kind === 'shutter') { tone(2000, 800, 0.05, 'square', 0.05); tone(1200, 500, 0.06, 'square', 0.05, 0.06); }
+    else if (kind === 'flap') tone(500, 800, 0.06, 'triangle', 0.08);
+    else if (kind === 'bad') tone(300, 90, 0.25, 'sawtooth', 0.06);
+  } catch {}
+}
+function buzz(style) { NATIVE?.postMessage({ cmd: 'haptic', style }); }
+function moodIsland(mode) { NATIVE?.postMessage({ cmd: 'mood', mode }); }
+function renderSound() { $('bSound').textContent = S.sound ? '🔊 Sounds: on' : '🔇 Sounds: off'; }
+
+/* ---------------- levels ---------------- */
+function xpNeed() { return 20 + (S.level - 1) * 15; }
+function gainXP(n) {
+  if (RENDER) return;
+  S.xp += n;
+  let up = false;
+  while (S.xp >= xpNeed()) { S.xp -= xpNeed(); S.level++; S.stars += 2; up = true; }
+  renderStats(); save();
+  if (up) {
+    confetti(); sfx('level'); buzz('success');
+    setTimeout(() => { if (!S.asleep) play('dance', 1.6); say(`Level up! I'm level ${S.level} now! 🎉 +2 ⭐`, 4); }, 300);
+  }
+}
+function confetti() {
+  if (reduced) return;
+  for (let i = 0; i < 28; i++) {
+    const c = document.createElement('div');
+    c.className = 'conf'; c.textContent = pick(['🎉', '✨', '⭐', '💛', '🎊']);
+    c.style.left = rand(0, 100) + 'vw'; c.style.animationDelay = rand(0, 0.6) + 's';
+    document.body.appendChild(c); setTimeout(() => c.remove(), 3000);
+  }
+}
+
+/* ---------------- daily reward, streak & quests ---------------- */
+const QUESTS = [['feed', 'Feed Bbokari 3 times', 3], ['pet', 'Pet Bbokari 10 times', 10], ['ball', 'Play ball once', 1], ['win', 'Win 2 games', 2],
+  ['bath', 'Give Bbokari a bath', 1], ['photo', 'Take a photo of Bbokari', 1], ['game', 'Play 3 games', 3]];
+const dayKey = (d = new Date()) => d.toDateString();
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function daily() {
+  const today = dayKey();
+  if (S.quests?.day !== today) S.quests = { day: today, list: shuffle(QUESTS).slice(0, 3).map(([id, text, goal]) => ({ id, text, goal, n: 0 })) };
+  let reward = 0;
+  if (S.lastDay !== today) {
+    S.streak = S.lastDay === dayKey(new Date(Date.now() - 864e5)) ? S.streak + 1 : 1;
+    S.lastDay = today;
+    reward = Math.min(S.streak, 7);
+    S.stars += reward;
+  }
+  save(); renderStats(); renderChips();
+  if (reward) setTimeout(() => { renderDaily(reward); showSheet('sheetDaily'); sfx('coin'); }, 1600);
+}
+function quest(id) {
+  const q = S.quests?.day === dayKey() && S.quests.list.find((x) => x.id === id && x.n < x.goal);
+  if (!q) return;
+  q.n++;
+  if (q.n >= q.goal) {
+    S.stars += 2; renderStats(); gainXP(15); sfx('coin'); buzz('success');
+    setTimeout(() => say(`Quest done: ${q.text}! +2 ⭐`, 3.5), 600);
+  }
+  save(); renderChips();
+}
+function renderChips() {
+  const list = S.quests?.list || [];
+  $('bQuests').textContent = `📋 Quests ${list.filter((q) => q.n >= q.goal).length}/${list.length || 3}`;
+  $('streak').textContent = `🔥 ${S.streak || 1} day${(S.streak || 1) === 1 ? '' : 's'}`;
+}
+function renderDaily(reward) {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const got = i < ((S.streak - 1) % 7) + 1;
+    return `<div class="${got ? 'got' : ''}"><span>${got ? '⭐' : '·'}</span>+${i + 1}</div>`;
+  }).join('');
+  const quests = (S.quests?.list || []).map((q) => `<div class="quest ${q.n >= q.goal ? 'done' : ''}"><span style="font-size:24px">${q.n >= q.goal ? '✅' : '📌'}</span>
+    <div class="qb"><b>${q.text}</b> <span class="muted">${Math.min(q.n, q.goal)}/${q.goal} · +2 ⭐</span><div class="bar"><i style="width:${Math.min(100, (q.n / q.goal) * 100)}%;background:var(--accent)"></i></div></div></div>`).join('');
+  $('dailyBody').innerHTML = (reward ? `<p class="score" style="font-size:20px">Daily reward: +${reward} ⭐</p>` : '') +
+    `<p style="margin:0"><b>🔥 ${S.streak || 1}-day streak.</b> <span class="muted">Come back every day for bigger rewards!</span></p><div class="week">${days}</div>
+    <p style="margin:0 0 4px"><b>Today's quests</b></p>${quests}`;
+}
+
+/* ---------------- rooms ---------------- */
+const ROOMS = [['meadow', '🌼', 'Meadow', 0], ['beach', '🏖️', 'Beach', 6], ['candy', '🍭', 'Candy land', 8], ['snow', '⛄', 'Snow day', 10], ['space', '🪐', 'Space', 12]];
+const DECOR = {
+  meadow: [['🌼', 10, 86], ['🌷', 90, 88], ['🌼', 76, 93], ['☁️', 16, 24], ['☁️', 82, 31]],
+  night: [['🌙', 84, 22], ['✨', 14, 24], ['⭐', 60, 30], ['🌼', 10, 86], ['🌷', 90, 88]],
+  beach: [['☀️', 86, 22], ['🌴', 8, 72], ['🐚', 82, 92], ['🦀', 18, 93], ['🌊', 60, 86]],
+  candy: [['🍭', 9, 76], ['🧁', 86, 89], ['🍬', 24, 94], ['🍩', 70, 95], ['☁️', 78, 27]],
+  snow: [['❄️', 14, 23], ['❄️', 72, 20], ['🌲', 8, 72], ['⛄', 87, 82], ['❄️', 45, 32]],
+  space: [['🪐', 83, 23], ['⭐', 14, 22], ['✨', 58, 30], ['🚀', 10, 62], ['🌍', 89, 62]],
+};
+let decorKey = '';
+function applyRoom() {
+  const h = new Date().getHours();
+  const night = S.room === 'meadow' && (h >= 20 || h < 6);
+  document.body.dataset.room = S.room;
+  document.body.classList.toggle('night', night);
+  const key = night ? 'night' : S.room;
+  if (key === decorKey) return;
+  decorKey = key;
+  $('decor').innerHTML = (DECOR[key] || []).map(([e, x, y]) => `<span style="left:${x}%;top:${y}%">${e}</span>`).join('');
+}
+function renderRooms() {
+  const g = $('rooms'); g.innerHTML = '';
+  for (const [id, emoji, label, cost] of ROOMS) {
+    const owned = S.rooms.includes(id);
+    const b = document.createElement('button');
+    b.className = 'chip' + (S.room === id ? ' sel' : '') + (owned ? '' : ' locked');
+    b.innerHTML = `<span>${emoji}</span>${label}<small>${owned ? (S.room === id ? 'Here now' : 'Owned') : '⭐ ' + cost}</small>`;
+    b.onclick = () => {
+      if (!owned) {
+        if (S.stars < cost) { b.querySelector('small').textContent = `Need ${cost - S.stars} more ⭐`; return; }
+        S.stars -= cost; S.rooms.push(id); renderStats(); sfx('coin');
+      }
+      S.room = id; save(); applyRoom(); renderRooms();
+      if (!S.asleep) { play('hop', 0.9); say(pick(['New place! I love it 😍', 'Ooh, so pretty! ✨', 'Let’s live here! 🏡'])); }
+    };
+    g.appendChild(b);
+  }
+}
+
+/* ---------------- bath ---------------- */
+let bathing = false, bathTimer = 0, scrubN = 0;
+const MUD = [[-0.17, 0.86], [0.2, 0.97], [0.04, 0.46], [-0.16, 0.3], [0.21, 0.36], [0.01, 1.08]];
+const mudEls = MUD.map(() => { const d = document.createElement('div'); d.className = 'mud'; $('mud').appendChild(d); return d; });
+function updateMud() {
+  const x = root.position.x, base = toScreen(x, 0.6, 0.32), unit = Math.abs(toScreen(x + 1, 0.6, 0.32).x - base.x);
+  const hidden = Math.abs(root.rotation.y) > 0.6 || !P.loaded;
+  MUD.forEach(([dx, dy], i) => {
+    const el = mudEls[i], p = toScreen(x + dx, dy + hips.position.y - HOVER, 0.32);
+    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+    el.style.width = el.style.height = unit * (0.08 + (i % 3) * 0.015) + 'px';
+    el.style.opacity = hidden ? 0 : clamp((S.dirt - 10 - i * 14) / 14, 0, 0.9);
+  });
+}
+function startBath() {
+  if (S.asleep) { say('Zzz… 💤 (tap me to wake me up)'); return; }
+  if (busy() && act.name !== 'think') return;
+  closeSheet(); bathing = true; play('bath', Infinity);
+  $('bBath').innerHTML = '<span>✅</span>Done';
+  say(S.dirt > 12 ? 'Bath time! Scrub me with your finger 🧽🫧' : 'I’m already clean, but bubbles are fun! 🫧', 4);
+  clearTimeout(bathTimer); bathTimer = setTimeout(() => endBath(false), 40000);
+}
+function scrub(e) {
+  const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const sp = $('sponge'); sp.style.display = 'block'; sp.style.left = x + 'px'; sp.style.top = y + 'px';
+  if (!petHit(x, y)) return;
+  scrubN++;
+  if (scrubN % 4 === 0) popAt(x, y, ['🫧', '🫧', '✨']);
+  if (scrubN % 10 === 0) { sfx('splash'); buzz('soft'); }
+  S.dirt = Math.max(0, S.dirt - 0.8);
+  if (S.dirt <= 0 && scrubN > 20) endBath(true);
+}
+function endBath(clean) {
+  if (!bathing) return;
+  bathing = false; clearTimeout(bathTimer); scrubN = 0;
+  $('sponge').style.display = 'none';
+  $('bBath').innerHTML = '<span>🛁</span>Bath';
+  if (clean || S.dirt < 8) {
+    S.dirt = 0; bump('love', 6); gainXP(8); quest('bath'); sfx('coin');
+    const p = headTop(); popAt(p.x, p.y + 60, ['✨', '🌟', '🫧'], 6);
+    play('hop', 0.9); say('So fresh and clean! ✨ Thank you!', 3);
+  } else { play('idle', 0); say(S.dirt > 30 ? 'Still a bit muddy… 😅' : 'Bubbles! 🫧', 2.5); }
+  save();
+}
+
+/* ---------------- photo ---------------- */
+let photoURL = '';
+function takePhoto() {
+  if (!P.loaded) return;
+  sfx('shutter'); buzz('medium');
+  const f = $('flash'); f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+  const r = stage.getBoundingClientRect(), dpr = Math.min(devicePixelRatio, 2);
+  const c = document.createElement('canvas'); c.width = r.width * dpr; c.height = r.height * dpr;
+  const g = c.getContext('2d'); g.scale(dpr, dpr);
+  const cs = getComputedStyle(document.body), v = (n) => cs.getPropertyValue(n).trim();
+  g.fillStyle = v('--sky-bot'); g.fillRect(0, 0, r.width, r.height);
+  const grd = g.createLinearGradient(0, 0, 0, r.height * 0.62); grd.addColorStop(0, v('--sky-top')); grd.addColorStop(1, v('--sky-bot'));
+  g.fillStyle = grd; g.fillRect(0, 0, r.width, r.height * 0.62);
+  const hr = $('hill').getBoundingClientRect(), cx = hr.left - r.left + hr.width / 2, top = hr.top - r.top;
+  g.fillStyle = v('--hill'); g.beginPath(); g.ellipse(cx, top + hr.height / 2, hr.width / 2, hr.height / 2, 0, Math.PI, 0); g.fill();
+  g.fillRect(hr.left - r.left, top + hr.height / 2, hr.width, hr.height / 2);
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '34px system-ui';
+  for (const s of $('decor').children) { const b = s.getBoundingClientRect(); g.fillText(s.textContent, b.left - r.left + b.width / 2, b.top - r.top + b.height / 2); }
+  renderer.render(scene, camera);
+  g.drawImage(renderer.domElement, 0, 0, r.width, r.height);
+  g.textAlign = 'left'; g.font = 'bold 16px system-ui'; g.fillStyle = 'rgba(0,0,0,.45)';
+  g.fillText(`🐥 Bbokari · Lv ${S.level} · ${new Date().toLocaleDateString()}`, 14, r.height - 20);
+  photoURL = c.toDataURL('image/jpeg', 0.9);
+  $('photoImg').src = photoURL;
+  $('photoHint').textContent = 'Press and hold the picture to save it.';
+  $('bShare').hidden = !(NATIVE && CAPS.share);
+  setTimeout(() => showSheet('sheetPhoto'), 250);
+  gainXP(3); quest('photo');
+  if (!S.asleep && !busy()) { play('wave', 1.2); say('Cheese! 📸', 2); }
+}
+function sharePhoto() { if (NATIVE && photoURL) NATIVE.postMessage({ cmd: 'share', image: photoURL }); }
+
+/* ---------------- chat with Apple's on-device AI (in the iPhone app) ---------------- */
+const nativeChat = !!(NATIVE && CAPS.chat);
+let chatSeq = 0;
+const pendingChat = {};
+window.nativeChatReply = (id, text) => { pendingChat[id]?.(text || null); delete pendingChat[id]; };
+function askNative(rules, history) {
+  return new Promise((res) => {
+    const id = ++chatSeq;
+    pendingChat[id] = res;
+    NATIVE.postMessage({ cmd: 'chat', id, rules, history });
+    setTimeout(() => { if (pendingChat[id]) { delete pendingChat[id]; res(null); } }, 30000);
+  });
+}
+
+/* ---------------- more games ---------------- */
+const SNACKS = ['🍓', '🍪', '🍉', '🍙', '🍦', '🌽', '🍩', '🧁'];
+function gameOver(score, stars, unit, again, line) {
+  $('gameBody').innerHTML = `<p class="score" style="font-size:22px">${score} ${unit}!</p><p style="text-align:center">${stars ? `+${stars} ⭐` : 'Try again for stars!'}</p>
+    <div class="row"><button class="btn ghost" id="back">Back</button><button class="btn" id="again">Play again</button></div>`;
+  $('back').onclick = gameMenu; $('again').onclick = again;
+  bump('energy', -3);
+  if (stars) win(stars, line); else { sfx('bad'); play('sad', 1.2); say('Aww, so close! 🥺', 2); }
+}
+function snackCatch() {
+  if (tired()) return;
+  let score = 0, lives = 3, left = 30, last = performance.now(), acc = 0, over = false;
+  setGame('🧺 Snack catch', `<p class="score" id="sS"></p><div class="playArea" id="catchArea"><div id="catcher">🐥</div></div><div class="row"><button class="btn ghost" id="back">Back</button></div>`);
+  $('back').onclick = gameMenu;
+  const area = $('catchArea'), cat = $('catcher'), items = [];
+  let cx = area.clientWidth / 2;
+  const hud = () => ($('sS').textContent = `🍓 ${score} · ${'❤️'.repeat(lives)}${'🤍'.repeat(3 - lives)} · ⏱ ${left}`);
+  hud();
+  area.onpointerdown = area.onpointermove = (e) => { const r = area.getBoundingClientRect(); cx = clamp(e.clientX - r.left, 22, r.width - 22); };
+  const end = () => { if (over) return; over = true; stopGame(); gameOver(score, Math.min(5, Math.floor(score / 6)), 'snacks', snackCatch, `${score} snacks! Yum yum! 😋`); };
+  const loop = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
+    const W = area.clientWidth, H = area.clientHeight;
+    if (acc > Math.max(0.35, 0.75 - (30 - left) * 0.012)) {
+      acc = 0;
+      const r = Math.random(), kind = r < 0.15 ? 'bomb' : r < 0.25 ? 'star' : 'food';
+      const el = document.createElement('div'); el.className = 'drop';
+      el.textContent = kind === 'bomb' ? '💣' : kind === 'star' ? '⭐' : pick(SNACKS);
+      area.appendChild(el);
+      items.push({ el, kind, x: rand(20, W - 20), y: -20, v: rand(140, 210) + (30 - left) * 5 });
+    }
+    cat.style.left = cx + 'px';
+    for (const it of items) {
+      if (it.dead) continue;
+      it.y += it.v * dt;
+      it.el.style.left = it.x + 'px'; it.el.style.top = it.y + 'px';
+      if (it.y > H - 50 && it.y < H - 10 && Math.abs(it.x - cx) < 36) {
+        it.dead = true; it.el.remove();
+        if (it.kind === 'bomb') { lives--; sfx('bad'); buzz('heavy'); if (lives <= 0) return end(); }
+        else { score += it.kind === 'star' ? 3 : 1; sfx(it.kind === 'star' ? 'coin' : 'pop'); }
+        hud();
+      } else if (it.y > H + 30) { it.dead = true; it.el.remove(); }
+    }
+    gameRaf = requestAnimationFrame(loop);
+  };
+  gameRaf = requestAnimationFrame(loop);
+  gameTimer = setInterval(() => { left--; hud(); if (left <= 0) end(); }, 1000);
+}
+function flappy() {
+  if (tired()) return;
+  setGame('🐥 Flappy Bbokari', `<p class="score" id="fS">Tap to fly! Dodge the clouds ☁️</p><canvas id="flappy"></canvas><div class="row"><button class="btn ghost" id="back">Back</button></div>`);
+  $('back').onclick = gameMenu;
+  const cv = $('flappy'), dpr = Math.min(devicePixelRatio, 2);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.scale(dpr, dpr);
+  let y = H / 2, vy = 0, started = false, dead = false, score = 0, spawn = 0, last = performance.now();
+  const pipes = [], GAP = Math.max(120, H * 0.36), X = W * 0.28;
+  const flap = (e) => { e.preventDefault(); if (dead) return; started = true; vy = -260; sfx('flap'); };
+  cv.addEventListener('pointerdown', flap);
+  const cloud = (x, y0, h) => { g.fillStyle = '#fff'; g.beginPath(); g.roundRect(x, y0, 56, h, 18); g.fill(); g.strokeStyle = '#d6ecff'; g.lineWidth = 3; g.stroke(); };
+  const loop = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (started && !dead) {
+      vy += 760 * dt; y += vy * dt; spawn -= dt;
+      if (spawn <= 0) { spawn = 1.55; pipes.push({ x: W + 30, gap: rand(GAP / 2 + 20, H - GAP / 2 - 20), passed: false }); }
+      for (const p of pipes) {
+        p.x -= 135 * dt;
+        if (!p.passed && p.x + 56 < X) { p.passed = true; score++; sfx('coin'); $('fS').textContent = `Score: ${score}`; }
+        const hitX = X + 14 > p.x && X - 14 < p.x + 56, hitY = y - 14 < p.gap - GAP / 2 || y + 14 > p.gap + GAP / 2;
+        if (hitX && hitY) dead = true;
+      }
+      if (y > H - 14 || y < 0) dead = true;
+      if (dead) { sfx('bad'); buzz('heavy'); setTimeout(() => gameOver(score, Math.min(5, Math.floor(score / 3)), 'clouds dodged', flappy, `${score} clouds! I can fly!! 🐥`), 700); }
+    }
+    const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, '#8fd3ff'); grd.addColorStop(1, '#e6f6ff');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    for (const p of pipes) { cloud(p.x, -20, p.gap - GAP / 2 + 20); cloud(p.x, p.gap + GAP / 2, H - p.gap - GAP / 2 + 20); }
+    g.save(); g.translate(X, y); g.rotate(clamp(vy / 600, -0.5, 0.9)); g.font = '34px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🐥', 0, 0); g.restore();
+    if (!started) { g.fillStyle = 'rgba(43,33,64,.7)'; g.font = 'bold 20px system-ui'; g.textAlign = 'center'; g.fillText('Tap to fly!', W / 2, H * 0.72); }
+    if (!dead) gameRaf = requestAnimationFrame(loop);
+  };
+  gameRaf = requestAnimationFrame(loop);
+}
+function memory() {
+  if (tired()) return;
+  const icons = shuffle(SNACKS.concat(['🥕', '🍭'])).slice(0, 6), deck = shuffle(icons.concat(icons));
+  let open = [], moves = 0, found = 0, lock = false;
+  setGame('🃏 Memory', `<p class="score" id="mS">Find the pairs! Moves: 0</p><div class="mem" id="mB"></div><div class="row"><button class="btn ghost" id="back">Back</button></div>`);
+  $('back').onclick = gameMenu;
+  const btns = deck.map((icon, i) => {
+    const b = document.createElement('button'); b.textContent = '❔';
+    b.onclick = () => {
+      if (lock || b.classList.contains('open')) return;
+      b.classList.add('open'); b.textContent = icon; sfx('pop'); open.push(i);
+      if (open.length === 2) {
+        moves++; $('mS').textContent = `Find the pairs! Moves: ${moves}`;
+        const [a, c] = open; open = [];
+        if (deck[a] === deck[c]) {
+          found++; setTimeout(() => { btns[a].classList.add('gone'); btns[c].classList.add('gone'); }, 300); sfx('coin');
+          if (found === 6) setTimeout(() => { const st = moves <= 10 ? 5 : moves <= 14 ? 3 : 2; gameOver(moves, st, 'moves', memory, `Wow, what a memory! 🧠✨`); }, 700);
+        } else { lock = true; setTimeout(() => { for (const k of [a, c]) { btns[k].classList.remove('open'); btns[k].textContent = '❔'; } lock = false; }, 700); }
+      }
+    };
+    $('mB').appendChild(b); return b;
+  });
+}
+
 /* ---------------- buttons ---------------- */
 $('bFeed').onclick = feed;
 $('bBall').onclick = playBall;
-$('bGames').onclick = () => { gameMenu(); showSheet('sheetGames'); };
+$('bGames').onclick = () => { gameMenu(); showSheet('sheetGames'); moodIsland('gaming'); };
+$('bBath').onclick = () => (bathing ? endBath(false) : startBath());
+$('bPhoto').onclick = takePhoto;
+$('bQuests').onclick = () => { renderDaily(0); showSheet('sheetDaily'); };
+$('streak').onclick = () => { renderDaily(0); showSheet('sheetDaily'); };
+$('bSound').onclick = () => { S.sound = !S.sound; save(); renderSound(); sfx('bbok'); };
+document.querySelectorAll('.tab').forEach((t) => (t.onclick = () => {
+  document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('sel', x === t));
+  $('outfits').hidden = t.dataset.tab !== 'outfits';
+  $('rooms').hidden = t.dataset.tab !== 'rooms';
+  if (t.dataset.tab === 'rooms') renderRooms();
+}));
+$('bShare').onclick = sharePhoto;
 $('bOutfit').onclick = () => { renderOutfits(); showSheet('sheetOutfit'); };
 $('bChat').onclick = () => { showSheet('sheetChat'); if (!$('chatLog').children.length) addMsg('Hi! Talk to me! 🐥💬', 'pet'); };
 /* floating window: a looping video of Bbokari, shown picture-in-picture so it stays above other apps */
@@ -838,6 +1281,7 @@ function greet() {
   else if (S.energy < 25) line += ' I’m sleepy… 💤';
   else if (S.love < 30) line += ' I missed you! 🥺';
   play('wave', 1.4); say(line, 4);
+  daily();
 }
 
 /* ---------------- main loop ---------------- */
@@ -849,17 +1293,19 @@ function frame(now) {
   if (statTick > 10) { // slow drift while open
     statTick = 0;
     if (S.asleep) bump('energy', 2);
-    else { bump('food', -0.5); bump('energy', -0.3); bump('love', -0.2); }
+    else { bump('food', -0.5); bump('energy', -0.3); bump('love', -0.2); S.dirt = Math.min(100, S.dirt + 0.1); }
+    applyRoom();
   }
   if (S.asleep) { zzz -= dt; if (zzz < 0) { zzz = 1.6; const p = headTop(); popAt(p.x + 30, p.y + 20, 'z'); } }
   else if (P.loaded && !openSheet && act.name === 'idle' && !B.on) {
     idleChat -= dt;
     if (idleChat < 0) { idleChat = rand(15, 30);
       if (S.food < 30) say('My tummy is rumbling… 🍓');
+      else if (S.dirt > 70) say('I’m all muddy… bath time? 🛁');
       else if (S.energy < 20) say('*yawn* 😪');
       else { const r = Math.random(); if (r < 0.4) { play('dance', 1.6); say(pick(['🎵 la la la~', 'Dance break! 💃'])); } else say(pick(['Play with me! ⚽', 'Tap me! 💛', 'Bbok bbok! 🐥', 'I like your phone 📱', 'Wanna play a game? 🎮'])); } }
   }
-  placeBubble();
+  placeBubble(); updateMud();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -871,5 +1317,7 @@ loadModel();
 addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => document.hidden && save());
 
+if (nativeChat) $('bChat').hidden = false;
+applyRoom(); renderSound(); renderChips();
 window.claude?.use?.('sample').then((s) => { if (s) { sample = s; $('bChat').hidden = false; } }).catch(() => {});
 </script>
