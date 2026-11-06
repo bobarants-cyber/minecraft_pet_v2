@@ -108,9 +108,11 @@ host?.onSay(({ text, error }) => chat.say(text, { error }));
 host?.onNotes((state) => {
   notesBadge.set(state);
   if (state.active) {
+    // Hear both: the teacher through the computer (💻, needs BlackHole) and you through the microphone (🎤).
     captions.listen('notes', {
       computer: true,
-      mic: false,
+      mic: true,
+      anySource: true,
       onLine: (line) => {
         host.notesAdd(line);
         notesBadge.line();

@@ -71,7 +71,8 @@ export class NotesBadge {
     else {
       const secs = Math.floor((Date.now() - s.startedAt) / 1000);
       const time = `${Math.floor(secs / 60)}:${pad(secs % 60)}`;
-      text = `📝 Taking notes${s.title && s.title !== 'Notes' ? ` · ${s.title}` : ''} · ${time} · ${this.lines} line${this.lines === 1 ? '' : 's'}`;
+      const lines = this.lines || secs < 40 ? `${this.lines} line${this.lines === 1 ? '' : 's'}` : 'nothing heard yet: is the sound on Multi-Output Device?';
+      text = `📝 Taking notes${s.title && s.title !== 'Notes' ? ` · ${s.title}` : ''} · ${time} · ${lines}`;
     }
     // Only touch the page when something changed (the timer ticks once a second), so it isn't redrawn every frame.
     if (text !== this.shown) {

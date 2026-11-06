@@ -141,9 +141,11 @@ export class Captions {
           const needComputer = [...this.listeners.values()].filter((l) => l.computer);
           if (needComputer.length) {
             for (const l of needComputer) Object.assign(l, { computer: false, mic: true });
-            this.onNotice?.('No BlackHole, so I’m listening through the 🎤 microphone instead.', false);
+            if (!needComputer.some((l) => l.anySource)) this.onNotice?.('No BlackHole, so I’m listening through the 🎤 microphone instead.', false);
           }
-          if (this.settings.captionsComputer) this.save({ captionsComputer: false });
+          // Only a problem if you asked the captions panel for the computer's sound; notes just use the mic.
+          if (!this.settings.captionsComputer || !this.visible) return;
+          this.save({ captionsComputer: false });
           return this.#notice('To caption the computer’s sound, install BlackHole first (see “Live captions” in the README).', true);
         }
         deviceId = dev.deviceId;
