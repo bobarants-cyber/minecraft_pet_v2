@@ -403,7 +403,12 @@ async function rewriteSelection(mode) {
       return send('rewrite', { stage: 'error', mode, text: selection.explain(err) });
     }
     if (!text) {
-      return send('rewrite', { stage: 'error', mode, text: 'I couldn’t find any highlighted text. Highlight some words first, then pick the command again!' });
+      const where = targetApp.last?.name ? ` in ${targetApp.last.name}` : '';
+      return send('rewrite', {
+        stage: 'error',
+        mode,
+        text: `I couldn’t find any highlighted text${where}. Click into the app with your text, highlight some words, then pick the command again!`,
+      });
     }
     if (text.length > MAX_REWRITE_CHARS) {
       return send('rewrite', { stage: 'error', mode, text: `That’s a lot of text! Try highlighting less than ${MAX_REWRITE_CHARS} characters at a time.` });

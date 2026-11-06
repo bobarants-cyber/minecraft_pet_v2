@@ -8,9 +8,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function osascript(script) {
   return new Promise((resolve, reject) => {
-    execFile('osascript', ['-e', script], { timeout: 4000 }, (err, stdout, stderr) => {
+    execFile('osascript', ['-e', script], { timeout: 4000, maxBuffer: 4_000_000 }, (err, stdout, stderr) => {
       if (err) reject(new Error(stderr?.trim() || err.message));
-      else resolve(stdout.trim());
+      else resolve(stdout.replace(/\n$/, ''));
     });
   });
 }
@@ -23,18 +23,53 @@ export function hasPermission(prompt = false) {
   return systemPreferences.isTrustedAccessibilityClient(prompt);
 }
 
-/** The app in front right now: { pid, id } (id = bundle identifier), or null. */
+/** The app in front right now: { pid, id, name } (id = bundle identifier), or null. */
 export async function frontmostApp() {
   if (!supported) return null;
   try {
     const out = await osascript(
       'tell application "System Events" to set p to first application process whose frontmost is true\n' +
-        'return (unix id of p as text) & "|" & (bundle identifier of p)',
+        'return (unix id of p as text) & "|" & (bundle identifier of p) & "|" & (name of p)',
     );
-    const [pid, id] = out.split('|');
-    return { pid: Number(pid), id };
+    const [pid, id, name] = out.split('|');
+    return { pid: Number(pid), id, name };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Waits (up to ~1.5 s) until no modifier keys are held. Pressing ⌘C while you're still holding ⌃⌥ from the shortcut
+ * would send ⌃⌥⌘C, which isn't "copy", and nothing would be copied.
+ */
+export function waitForKeysUp() {
+  return new Promise((resolve) => {
+    const js =
+      "ObjC.import('AppKit');" +
+      // Shift, Control, Option, Command.
+      'var mask = (1 << 17) | (1 << 18) | (1 << 19) | (1 << 20);' +
+      'for (var i = 0; i < 30 && ($.NSEvent.modifierFlags & mask); i++) delay(0.05);';
+    execFile('osascript', ['-l', 'JavaScript', '-e', js], { timeout: 3000 }, () => resolve());
+  });
+}
+
+/** The highlighted text in an app, read straight through Accessibility (no clipboard). '' if the app doesn't share it. */
+export async function selectedTextAX(appId) {
+  if (!appId) return '';
+  const id = appId.replace(/[^\w.-]/g, '');
+  try {
+    const out = await osascript(
+      'tell application "System Events"\n' +
+        `set p to first application process whose bundle identifier is "${id}"\n` +
+        'set f to value of attribute "AXFocusedUIElement" of p\n' +
+        'set v to value of attribute "AXSelectedText" of f\n' +
+        'if class of v is text then return v\n' +
+        'return ""\n' +
+        'end tell',
+    );
+    return out;
+  } catch {
+    return '';
   }
 }
 
@@ -66,6 +101,11 @@ async function keystroke(key) {
 
 /** Copies the current selection in `target` and returns it ('' if nothing was highlighted). */
 export async function copySelection(target) {
+  await waitForKeysUp();
+  const app = (await target.refresh()) ?? target.last;
+  // First try reading the highlight directly: works in Notes, Pages, TextEdit… and leaves your clipboard alone.
+  const direct = (await selectedTextAX(app?.id)).trim();
+  if (direct) return direct;
   const saved = clipboard.readText();
   const marker = `⁣mob-${Date.now()}`;
   clipboard.writeText(marker);
@@ -85,6 +125,7 @@ export async function copySelection(target) {
 
 /** Pastes `text` into `target`, replacing what's highlighted there, then restores your clipboard. */
 export async function pasteText(target, text) {
+  await waitForKeysUp();
   const saved = clipboard.readText();
   clipboard.writeText(text);
   await target.activate();
