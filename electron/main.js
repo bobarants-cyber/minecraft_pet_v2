@@ -251,39 +251,42 @@ function buildTray() {
       ],
     },
     { type: 'separator' },
-    { label: asleep ? 'Wake up' : 'Go to sleep', click: () => command('trigger', { name: asleep ? 'wake' : 'sleepy' }) },
-    { label: 'Dance', click: () => command('trigger', { name: 'dance' }), enabled: !asleep },
-    { label: 'Wave', click: () => command('trigger', { name: 'wave' }), enabled: !asleep },
-    { type: 'separator' },
-    { label: 'Wanders around', type: 'checkbox', checked: settings.autoWalk, click: (i) => applySettings({ autoWalk: i.checked }) },
     {
-      label: 'Mob',
-      submenu: Object.entries(MOBS).map(([key, label]) => radio(label, 'mob', key)),
-    },
-    {
-      label: 'Size',
-      submenu: Object.entries(SIZES).map(([name, px]) => radio(name[0].toUpperCase() + name.slice(1), 'petSize', px)),
-    },
-    {
-      label: 'Sleep when idle',
-      submenu: [radio('Never', 'idleSleepMin', 0), radio('After 2 min', 'idleSleepMin', 2), radio('After 5 min', 'idleSleepMin', 5), radio('After 15 min', 'idleSleepMin', 15)],
-    },
-    {
-      label: 'AI brain',
-      submenu: Object.entries(AI_MODELS).map(([key, label]) => radio(label, 'aiModel', key)),
-    },
-    {
-      label: '🎀 Outfit',
+      label: '🐥 Do something',
       submenu: [
-        ['none', 'None'], ['party', '🎉 Party hat'], ['crown', '👑 Crown'], ['beanie', '🧢 Beanie'], ['bow', '🎀 Bow'], ['flower', '🌼 Flower'], ['sunglasses', '😎 Sunglasses'],
-      ].map(([key, label]) => radio(label, 'outfit', key)),
+        { label: asleep ? 'Wake up' : 'Go to sleep', click: () => command('trigger', { name: asleep ? 'wake' : 'sleepy' }) },
+        { label: 'Dance', click: () => command('trigger', { name: 'dance' }), enabled: !asleep },
+        { label: 'Wave', click: () => command('trigger', { name: 'wave' }), enabled: !asleep },
+      ],
     },
-    { label: '👀 React to what I’m doing', type: 'checkbox', checked: settings.reactToActivity, click: (i) => applySettings({ reactToActivity: i.checked }) },
-    { label: '🔍 Spot mistakes while I write or code', type: 'checkbox', checked: settings.checkWriting, click: (i) => applySettings({ checkWriting: i.checked }) },
-    { label: '⏰ Stretch break reminders', type: 'checkbox', checked: settings.breakReminders, click: (i) => applySettings({ breakReminders: i.checked }) },
-    { label: 'Open at login', type: 'checkbox', checked: settings.openAtLogin, click: (i) => applySettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
-    { label: 'Quit Minecraft Mob', role: 'quit' },
+    // All the on/off settings in one place, so the menu stays short enough to fit on a laptop screen.
+    {
+      label: '⚙️ Settings',
+      submenu: [
+        { label: '🔍 Spot mistakes while I write or code', type: 'checkbox', checked: settings.checkWriting, click: (i) => applySettings({ checkWriting: i.checked }) },
+        { label: '👀 React to what I’m doing', type: 'checkbox', checked: settings.reactToActivity, click: (i) => applySettings({ reactToActivity: i.checked }) },
+        { label: '⏰ Stretch break reminders', type: 'checkbox', checked: settings.breakReminders, click: (i) => applySettings({ breakReminders: i.checked }) },
+        { label: 'Wanders around', type: 'checkbox', checked: settings.autoWalk, click: (i) => applySettings({ autoWalk: i.checked }) },
+        { label: 'Open at login', type: 'checkbox', checked: settings.openAtLogin, click: (i) => applySettings({ openAtLogin: i.checked }) },
+        { type: 'separator' },
+        { label: 'Mob', submenu: Object.entries(MOBS).map(([key, label]) => radio(label, 'mob', key)) },
+        {
+          label: '🎀 Outfit',
+          submenu: [
+            ['none', 'None'], ['party', '🎉 Party hat'], ['crown', '👑 Crown'], ['beanie', '🧢 Beanie'], ['bow', '🎀 Bow'], ['flower', '🌼 Flower'], ['sunglasses', '😎 Sunglasses'],
+          ].map(([key, label]) => radio(label, 'outfit', key)),
+        },
+        { label: 'Size', submenu: Object.entries(SIZES).map(([name, px]) => radio(name[0].toUpperCase() + name.slice(1), 'petSize', px)) },
+        {
+          label: 'Sleep when idle',
+          submenu: [radio('Never', 'idleSleepMin', 0), radio('After 2 min', 'idleSleepMin', 2), radio('After 5 min', 'idleSleepMin', 5), radio('After 15 min', 'idleSleepMin', 15)],
+        },
+        { label: 'AI brain', submenu: Object.entries(AI_MODELS).map(([key, label]) => radio(label, 'aiModel', key)) },
+      ],
+    },
+    { type: 'separator' },
+    { label: `Quit ${personaFor(settings.mob).name}`, role: 'quit' },
   ]));
 }
 

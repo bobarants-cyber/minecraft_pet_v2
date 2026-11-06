@@ -115,7 +115,7 @@ While you're writing (Notes, Pages, Word, TextEdit…) or coding (VS Code, Xcode
 pause typing, reads the text box you're typing in, and asks Ollama for spelling, grammar or code mistakes. If it finds
 any, a bubble shows them (~~teh~~ → **the**); otherwise it stays quiet. It checks at most every 90 seconds and only
 when the text changed. Some apps, notably **Google Docs**, don't share their text: highlight it and use **✏️ Improve**
-(⌃⌥B) instead. Turn it off in the menu bar: **🔍 Spot mistakes while I write or code**.
+(⌃⌥B) instead. It's on by default; turn it off in the menu bar under **⚙️ Settings → 🔍 Spot mistakes while I write or code**.
 
 ## Invisible mode 🙈
 
