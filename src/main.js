@@ -13,6 +13,9 @@ import { Captions } from './captions/Captions.js';
 import { Classes } from './interaction/Classes.js';
 import { NotesBadge } from './interaction/NotesBadge.js';
 import { Voice } from './interaction/Voice.js';
+import { FocusBadge } from './interaction/FocusBadge.js';
+import { Wardrobe } from './character/Outfits.js';
+import { Toys } from './character/Toys.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -29,11 +32,23 @@ const captions = new Captions({ character, settings, save, host });
 const classes = new Classes({ character, host, onOpen: () => chat.close() });
 const notesBadge = new NotesBadge({ character, host });
 const voice = new Voice({ character, chat, captions, settings, host });
+const focusBadge = new FocusBadge({ character, host });
+const wardrobe = new Wardrobe();
+const toys = new Toys({ character, stage, wardrobe });
+/** Effects that skills ask for (confetti when your to-do list is done, sunglasses for sunny weather…). */
+function playEffect(effect) {
+  if (!effect) return;
+  if (effect === 'confetti') toys.burst();
+  else if (effect === 'sparkle') character.emote('sparkle', 0.5);
+  else if (effect.startsWith('weather:')) toys.weather(effect.slice(8));
+}
+host?.onEffect?.(({ effect }) => playEffect(effect));
 // While the pet talks out loud, the mic would hear it, so pause listening (and a moment after).
 host?.onSpeaking?.(({ on }) => (captions.mutedUntil = on ? Infinity : performance.now() + 900));
 captions.onNotice = (text, isProblem) => notesBadge.notice(text, isProblem);
 chat.onReply = (reply) => {
   if (reply.kind === 'classes') setTimeout(() => classes.open(), 600);
+  playEffect(reply.effect);
 };
 const playGame = (id) => {
   chat.close();
@@ -51,12 +66,15 @@ const menu = new MobMenu({
   onClasses: () => classes.open(),
   onNotes: () => (notesBadge.state.active ? host?.stopNotes() : host?.startNotes()),
   onVoice: () => save({ voiceOn: !settings.voiceOn }),
+  onFeed: () => toys.feed(),
+  onBall: () => toys.playBall(),
+  onOutfit: (name) => save({ outfit: name }),
 });
 menu.captionsOn = () => settings.captionsOn;
 menu.notesOn = () => notesBadge.state.active;
 menu.voiceOn = () => settings.voiceOn;
 menu.playing = () => game.currentId;
-const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes, notesBadge] });
+const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes, notesBadge, focusBadge] });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
 function applyMob(name) {
@@ -93,6 +111,10 @@ const loop = new Loop((dt, t) => {
   captions.update();
   classes.update();
   notesBadge.update(chat.isOpen);
+  focusBadge.update(chat.isOpen, notesBadge.visible);
+  toys.update(dt);
+  wardrobe.wear(character.mob, settings.outfit);
+  if (!['typing', 'activity'].includes(character.stateName)) wardrobe.refresh();
   voice.update();
 });
 loop.start();
@@ -106,7 +128,20 @@ host?.onTyping(({ on }) => (on ? character.startTyping('type') : character.stopT
 host?.onSay(({ text, error }) => chat.say(text, { error }));
 
 // React to what you're doing (the Mac side tells us: video, writing, music, meeting, gaming, coding, reading, drawing).
-host?.onActivity?.(({ kind }) => (character.activity = settings.reactToActivity ? kind : null));
+let seenActivity = null;
+let focusing = false;
+const applyActivity = () => (character.activity = focusing ? 'coding' : settings.reactToActivity ? seenActivity : null);
+host?.onActivity?.(({ kind }) => {
+  seenActivity = kind;
+  applyActivity();
+});
+// Focus timer: the pet works at its desk next to you; confetti when it's done.
+host?.onFocus?.((f) => {
+  focusBadge.set(f);
+  focusing = f.active;
+  applyActivity();
+  if (f.finished) toys.burst();
+});
 host?.onWellbeing?.(({ kind, minutes }) => {
   if (kind === 'break') {
     character.trigger('stretch', { then: 'idle' }, true);
@@ -192,4 +227,4 @@ if (!host) {
   });
 }
 
-window.mob = { stage, character, director, menu, chat, game, captions, settings, screen, loop, get pet() { return character.mob; } };
+window.mob = { stage, character, director, menu, chat, game, captions, toys, settings, screen, loop, get pet() { return character.mob; } };

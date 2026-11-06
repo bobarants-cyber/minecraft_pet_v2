@@ -16,6 +16,8 @@ export const DEFAULTS = {
   voiceSpeak: false,
   reactToActivity: true,
   breakReminders: true,
+  homeCity: '',
+  outfit: 'none',
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

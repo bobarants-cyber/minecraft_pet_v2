@@ -35,6 +35,8 @@ export const DEFAULTS = {
   voiceSpeak: false,
   reactToActivity: true,
   breakReminders: true,
+  homeCity: '',
+  outfit: 'none',
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

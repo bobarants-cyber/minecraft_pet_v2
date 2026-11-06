@@ -1,12 +1,13 @@
 import { MOBS, nextMob } from '../mobs/index.js';
 import { GAME_LIST } from '../games/Games.js';
+import { OUTFITS } from '../character/Outfits.js';
 
 const MARGIN_PX = 8;
 const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -18,6 +19,17 @@ export class MobMenu {
         <span>💬 Chat</span>
         <span class="mob-menu__value">Ask me anything</span>
       </button>
+      <div class="mob-menu__text mob-menu__play">
+        <div class="mob-menu__text-label">🐥 Play with me</div>
+        <div class="mob-menu__chips mob-menu__chips--wrap">
+          <button type="button" class="mob-menu__chip" data-toy="feed">🍓 Feed</button>
+          <button type="button" class="mob-menu__chip" data-toy="ball">⚽ Ball</button>
+        </div>
+        <div class="mob-menu__text-label mob-menu__outfit-label">🎀 Outfit</div>
+        <div class="mob-menu__chips mob-menu__chips--wrap mob-menu__outfits">
+          ${Object.entries(OUTFITS).map(([k, label]) => `<button type="button" class="mob-menu__chip" data-outfit="${k}" title="${label}">${k === 'none' ? '✖' : label.split(' ')[0]}</button>`).join('')}
+        </div>
+      </div>
       <div class="mob-menu__text mob-menu__games">
         <div class="mob-menu__text-label">🎮 Play a game</div>
         <div class="mob-menu__chips mob-menu__chips--wrap">
@@ -87,6 +99,18 @@ export class MobMenu {
       this.close();
       onClasses?.();
     });
+    for (const chip of this.el.querySelectorAll('.mob-menu__chip[data-toy]')) {
+      chip.addEventListener('click', () => {
+        this.close();
+        (chip.dataset.toy === 'feed' ? onFeed : onBall)?.();
+      });
+    }
+    for (const chip of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) {
+      chip.addEventListener('click', () => {
+        onOutfit?.(chip.dataset.outfit);
+        for (const o of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) o.classList.toggle('is-on', o === chip);
+      });
+    }
     this.voiceRow = this.el.querySelector('.mob-menu__voice');
     this.voiceRow.addEventListener('click', () => {
       this.close();
@@ -132,6 +156,8 @@ export class MobMenu {
     const noting = this.notesOn?.();
     this.notesRow.querySelector('span').textContent = noting ? '⏹ Stop notes' : '📝 Take notes';
     this.notesRow.querySelector('.mob-menu__value').textContent = noting ? 'Write them up' : 'Listen & write';
+    for (const o of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) o.classList.toggle('is-on', o.dataset.outfit === (this.settings.outfit ?? 'none'));
+    this.el.querySelector('.mob-menu__outfits').style.display = this.el.querySelector('.mob-menu__outfit-label').style.display = this.settings.mob === 'bbokari' ? '' : 'none';
     const playing = this.playing?.();
     this.stopRow.style.display = playing ? '' : 'none';
     for (const chip of this.el.querySelectorAll('.mob-menu__game')) chip.classList.toggle('is-on', chip.dataset.game === playing);

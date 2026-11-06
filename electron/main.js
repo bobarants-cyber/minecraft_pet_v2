@@ -10,6 +10,7 @@ import * as opener from './opener.js';
 import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
 import { NOTES_DIR, NotesSession } from './notes.js';
 import { ActivityWatcher } from './activity.js';
+import { Skills } from './skills.js';
 import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
@@ -37,6 +38,8 @@ let chatOpen = false;
 let reminders = null;
 let classes = null;
 let notes = null;
+let skills = null;
+let focus = null; // { endAt, minutes, timer }
 let activity = null; // what you're doing right now (video, writing, …) or null
 let activeMs = 0; // computer time since your last real break, for stretch reminders
 let lateNightTold = '';
@@ -185,6 +188,22 @@ function buildTray() {
       ],
     },
     {
+      label: focus ? `🍅 Focus: ${Math.max(0, Math.ceil((focus.endAt - Date.now()) / 60_000))} min left` : '🍅 Focus timer',
+      submenu: focus
+        ? [{ label: 'Stop focus timer', click: () => stopFocus(false) }]
+        : [15, 25, 50].map((m) => ({ label: `${m} minutes`, click: () => (startFocus(m), send('say', { text: `🍅 Focus time! ${m} minutes. Let’s go! 💪` })) })),
+    },
+    {
+      label: `✅ To-do list${skills?.todos.list().length ? ` (${skills.todos.list().length})` : ''}`,
+      submenu: skills?.todos.list().length
+        ? [
+            ...skills.todos.list().map((x, i) => ({ label: `☐  ${x.text}`, toolTip: 'Click to tick it off', click: () => tickTodo(i) })),
+            { type: 'separator' },
+            { label: 'Add with “add … to my list” in the chat', enabled: false },
+          ]
+        : [{ label: 'Empty! Say “add … to my list” in the chat', enabled: false }],
+    },
+    {
       label: '🚀 Open',
       submenu: [
         ...QUICK_OPEN.map(([label, what]) => ({ label, click: () => openThing(what) })),
@@ -234,6 +253,12 @@ function buildTray() {
     {
       label: 'AI brain',
       submenu: Object.entries(AI_MODELS).map(([key, label]) => radio(label, 'aiModel', key)),
+    },
+    {
+      label: '🎀 Outfit',
+      submenu: [
+        ['none', 'None'], ['party', '🎉 Party hat'], ['crown', '👑 Crown'], ['beanie', '🧢 Beanie'], ['bow', '🎀 Bow'], ['flower', '🌼 Flower'], ['sunglasses', '😎 Sunglasses'],
+      ].map(([key, label]) => radio(label, 'outfit', key)),
     },
     { label: '👀 React to what I’m doing', type: 'checkbox', checked: settings.reactToActivity, click: (i) => applySettings({ reactToActivity: i.checked }) },
     { label: '⏰ Stretch break reminders', type: 'checkbox', checked: settings.breakReminders, click: (i) => applySettings({ breakReminders: i.checked }) },
@@ -307,6 +332,12 @@ ipcMain.on('chat:focus', (_e, on) => {
 });
 
 ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
+  // Quick skills first (maths, dates, coin flips, to-do list, weather, translate, focus): instant, no AI needed.
+  const skill = await skills?.handle(String(text)).catch(() => null);
+  if (skill) {
+    buildTray();
+    return { ok: true, kind: 'skill', text: skill.text, effect: skill.effect ?? null };
+  }
   const cmd = parseCommand(String(text));
   if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
   if (/^(?:please\s+)?(?:start\s+)?(?:take|taking|start)\s+(?:some\s+)?notes\b/i.test(String(text).trim())) {
@@ -449,6 +480,39 @@ ipcMain.on('voice:speak', (_e, text) => {
   });
 });
 
+// Focus timer: the pet works at its desk next to you, then tells you it's break time.
+function startFocus(minutes) {
+  stopFocus(true);
+  const endAt = Date.now() + minutes * 60_000;
+  focus = { endAt, minutes, timer: setTimeout(() => stopFocus(false, true), minutes * 60_000) };
+  focus.tick = setInterval(buildTray, 60_000);
+  send('focus', { active: true, endAt, minutes });
+  buildTray();
+}
+
+function stopFocus(quiet = false, finished = false) {
+  if (!focus) return;
+  clearTimeout(focus.timer);
+  clearInterval(focus.tick);
+  const { minutes } = focus;
+  focus = null;
+  send('focus', { active: false, finished, minutes });
+  if (finished) {
+    if (Notification.isSupported()) new Notification({ title: '🍅 Focus done!', body: `${minutes} minutes of focus. Time for a break!` }).show();
+    send('say', { text: `🍅 Done! ${minutes} minutes of focus. Amazing work! 🎉 Take a 5-minute break: stretch, drink some water.` });
+  } else if (!quiet) send('say', { text: 'Focus timer stopped. Good work! 🌟' });
+  buildTray();
+}
+
+function tickTodo(i) {
+  const item = skills.todos.list()[i];
+  if (!item) return;
+  skills.todos.handle(`done #${i + 1}`);
+  send('say', { text: skills.todos.list().length ? `Done: “${item.text}” ✔️` : `Done: “${item.text}”. Your list is clear! 🎉` });
+  if (!skills.todos.list().length) send('effect', { effect: 'confetti' });
+  buildTray();
+}
+
 ipcMain.on('notes:add', (_e, line) => notes?.add(line));
 ipcMain.on('notes:start', () => startNotes({ title: 'Notes' }));
 ipcMain.on('notes:stop', () => stopNotes());
@@ -543,6 +607,15 @@ app.whenReady().then(() => {
   // Start once the page can hear us, so reminders that came due while the app was closed still pop up.
   win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
   classes = new ClassSchedule({ file: path.join(app.getPath('userData'), 'classes.json') });
+  skills = new Skills({
+    dir: app.getPath('userData'),
+    settings,
+    saveSettings: (patch) => applySettings(patch),
+    translate: (text, to) => translateText({ text, to, model: settings.aiModel }),
+    startFocus,
+    stopFocus: () => stopFocus(true),
+    focusLeft: () => (focus ? focus.endAt - Date.now() : null),
+  });
   buildTray();
   setInterval(checkClasses, 15_000);
   // After the Mac wakes up, check straight away (you might be in the middle of a class).

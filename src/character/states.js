@@ -744,4 +744,80 @@ STATES.stretch = {
   },
 };
 
+// Munching a snack it just caught.
+STATES.eat = {
+  priority: 4,
+  enter(c) {
+    c.loco.stop();
+    c.face.setExpression('uwu');
+  },
+  update(c, dt, t, s, p) {
+    c.poseRate = 10;
+    const chew = t < 1.8 ? 1 : 0;
+    c.overlay.headPitch = Math.sin(t * 20) * 0.04 * chew;
+    c.overlay.bodyY = Math.abs(Math.sin(t * 10)) * 0.01 * chew;
+    c.target.armSwingL = c.target.armSwingR = 0.7 * chew;
+    c.target.armRaiseL = c.target.armRaiseR = 0.3 * chew;
+    if (t > 0.9 && !s.loved) {
+      s.loved = true;
+      c.face.setExpression('love');
+      c.emote('heart', 0.5);
+    }
+    if (t > 1.9 && !s.thanks) {
+      s.thanks = true;
+      c.face.setExpression('joy');
+      jump(c, t, t, 0.4, 0.1);
+    }
+    if (t > 2.6) return then(p);
+  },
+};
+
+// Chasing and kicking a ball (src/character/Toys.js moves the ball).
+STATES.chase = {
+  priority: 3,
+  enter(c) {
+    c.face.setExpression('excited');
+    c.speedBoost = 2;
+  },
+  update(c, dt, t, s, p) {
+    const toy = p.toy;
+    if (!toy?.ball) return { name: 'happy', params: { then: 'idle' } };
+    c.restLift = 0;
+    const bx = toy.ball.mesh.position.x;
+    c.loco.walkTo(bx - Math.sign(bx - c.loco.x) * 0.3 * c.placement.scale);
+    c.attention ??= toy.ball.mesh.position.clone();
+    c.attention.copy(toy.ball.mesh.position);
+    if (toy.tryKick()) {
+      s.kickAt = t;
+      c.face.setExpression(Math.random() < 0.5 ? 'joy' : 'excited');
+      if (Math.random() < 0.4) c.emote('sparkle', 0.4);
+    }
+    const k = s.kickAt !== undefined ? (t - s.kickAt) / 0.35 : 1;
+    if (k < 1) {
+      c.overlay.legSwingR = Math.sin(k * Math.PI) * 1.4;
+      c.overlay.bodyY += Math.sin(k * Math.PI) * 0.05;
+    }
+  },
+  exit(c) {
+    c.speedBoost = 1;
+    c.attention = null;
+  },
+};
+
+// Holding up an umbrella in the rain.
+STATES.umbrella = {
+  priority: 4,
+  enter(c) {
+    c.loco.stop();
+    c.face.setExpression('happy');
+  },
+  update(c, dt, t, s, p) {
+    c.target.armRaiseR = 1.1;
+    c.target.armSwingR = 0.5;
+    c.target.headPitch = -0.12;
+    c.overlay.torsoRoll = Math.sin(t * 2) * 0.04;
+    if (t > 6.8) return then(p);
+  },
+};
+
 export const ACTIONS = ['idle', 'happy', 'sad', 'sleepy', 'sleep', 'wake', 'curious', 'surprised', 'excited', 'wave', 'dance', 'pet'];

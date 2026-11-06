@@ -52,6 +52,27 @@ app links) are allowed. The menu bar's **📅 Classes** lists today's classes; c
 
 The pet has to be running for this, so tick **Open at login** in its menu-bar menu.
 
+## Ask Bbokari instead of opening an app ⚡
+
+These work instantly in the chat (or with “Hey Bbokari, …”), most of them without the AI or the internet:
+
+| Say… | Bbokari… |
+|---|---|
+| “what’s 23 x 19”, “15% of 80”, “square root of 144” | 🧮 does the maths |
+| “what time is it”, “what’s the date”, “how many days until christmas” | 🕐 tells you |
+| “flip a coin”, “roll 2 dice”, “random number from 1 to 50”, “magic 8 ball…”, “pick pizza or tacos” | 🎲 decides for you |
+| “add homework to my list”, “my list”, “done homework”, “clear my list” | ✅ keeps your to-do list (also in the menu bar; confetti when it's empty!) |
+| “my city is Madrid”, then “weather” (or “weather in Tokyo”) | 🌤 checks the weather (free, open-meteo.com) and wears sunglasses when it's sunny or holds an umbrella when it rains |
+| “translate good morning to Korean” | 🌍 translates (with Ollama) |
+| “focus” / “focus 50” / “stop focus” | 🍅 starts a focus timer: it works at its desk next to you, with a countdown, then confetti and a break |
+
+## Play with Bbokari 🐥
+
+Right-click the pet:
+- **🍓 Feed:** a strawberry or a cookie falls from the sky; it catches it, munches and sends you a heart.
+- **⚽ Ball:** a beach ball bounces around and it chases and kicks it.
+- **🎀 Outfit:** party hat, crown, beanie, bow, flower or sunglasses (Bbokari only). It remembers what it's wearing.
+
 ## Bbokari reacts to what you're doing 👀
 
 Every few seconds the pet checks which app is in front (and, in a browser, the current tab's address and title) and
