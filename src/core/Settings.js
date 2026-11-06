@@ -19,6 +19,7 @@ export const DEFAULTS = {
   homeCity: '',
   outfit: 'none',
   autoSwitchAudio: true,
+  normalOutput: '',
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

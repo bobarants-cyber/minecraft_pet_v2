@@ -23,7 +23,8 @@ export class NotesBadge {
   }
 
   get visible() {
-    return this.state.active || this.state.writing;
+    // Always a real true/false: classList.toggle('on', undefined) *flips* the class, which made the badge blink.
+    return !!(this.state.active || this.state.writing);
   }
 
   set(state) {
@@ -58,7 +59,7 @@ export class NotesBadge {
   update(hidden = false) {
     const show = this.visible && !hidden;
     if (show !== this.el.classList.contains('on')) {
-      this.el.classList.toggle('on', show);
+      this.el.classList.toggle('on', !!show);
       this.shown = null;
     }
     if (!show) return;

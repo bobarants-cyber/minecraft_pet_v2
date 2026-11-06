@@ -17,7 +17,7 @@ export class FocusBadge {
   }
 
   get visible() {
-    return this.state.active;
+    return !!this.state.active;
   }
 
   set(state) {
@@ -36,7 +36,7 @@ export class FocusBadge {
 
   update(hidden = false, stackAbove = false) {
     const show = this.visible && !hidden;
-    if (show !== this.el.classList.contains('on')) this.el.classList.toggle('on', show);
+    if (show !== this.el.classList.contains('on')) this.el.classList.toggle('on', !!show);
     if (!show) return;
     const left = Math.max(0, this.state.endAt - Date.now());
     const secs = Math.ceil(left / 1000);

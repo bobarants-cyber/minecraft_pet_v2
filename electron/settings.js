@@ -38,6 +38,7 @@ export const DEFAULTS = {
   homeCity: '',
   outfit: 'none',
   autoSwitchAudio: true,
+  normalOutput: '',
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

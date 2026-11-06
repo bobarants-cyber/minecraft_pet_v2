@@ -40,7 +40,16 @@ let reminders = null;
 let classes = null;
 let notes = null;
 let skills = null;
-const audioSwitch = new AudioSwitcher({ onProblem: (text) => send('say', { text }) });
+const audioSwitch = new AudioSwitcher({
+  onProblem: (text) => send('say', { text }),
+  getNormal: () => settings.normalOutput || null,
+  setNormal: (name) => {
+    if (name !== settings.normalOutput) {
+      settings.normalOutput = name;
+      saveSettings(settings);
+    }
+  },
+});
 let focus = null; // { endAt, minutes, timer }
 let activity = null; // what you're doing right now (video, writing, …) or null
 let activeMs = 0; // computer time since your last real break, for stretch reminders
@@ -634,6 +643,8 @@ app.whenReady().then(() => {
   setInterval(buildTray, 10 * 60_000);
   setInterval(pollIdle, IDLE_POLL_MS);
   win.webContents.once('did-finish-load', () => setTimeout(syncActivity, 4000));
+  // If the sound was left on the Multi-Output Device (volume keys off), put it back on your normal output.
+  if (process.platform === 'darwin' && settings.autoSwitchAudio) setTimeout(() => audioSwitch.normalize(), 2500);
   for (const [mode, key] of Object.entries(REWRITE_KEYS)) {
     if (!globalShortcut.register(key, () => rewriteSelection(mode))) console.log(`Shortcut ${key} is taken by another app.`);
   }
