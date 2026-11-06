@@ -617,6 +617,7 @@ async function checkWritingNow() {
   }
 }
 ipcMain.on('proofread:now', () => checkWritingNow());
+ipcMain.on('app:quit', () => app.quit());
 
 function checkClasses() {
   if (!classes) return;

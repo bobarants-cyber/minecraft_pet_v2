@@ -7,7 +7,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, onHide = null, onCheck = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, onHide = null, onCheck = null, onQuit = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -71,7 +71,7 @@ export class MobMenu {
         <span>Switch mob</span>
         <span class="mob-menu__value"></span>
       </button>
-      <div class="mob-menu__text">
+      <div class="mob-menu__text mob-menu__write">
         <div class="mob-menu__text-label">✏️ Highlight text in any app, then:</div>
         <button type="button" class="mob-menu__row mob-menu__check">🔍 Check my writing <span class="mob-menu__value">spot mistakes</span></button>
         <div class="mob-menu__chips">
@@ -155,6 +155,16 @@ export class MobMenu {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close();
     });
+    const quit = document.createElement('button');
+    quit.type = 'button';
+    quit.className = 'mob-menu__row mob-menu__quit';
+    quit.innerHTML = '<span>⏻ Quit</span><span class="mob-menu__value">close the app</span>';
+    quit.addEventListener('click', () => {
+      this.close();
+      onQuit?.();
+    });
+    this.el.appendChild(quit);
+    window.addEventListener('resize', () => this.place());
     parent.appendChild(this.el);
   }
 
@@ -177,10 +187,21 @@ export class MobMenu {
     this.value.textContent = MOBS[nextMob(this.settings.mob)].label;
     this.isOpen = true;
     this.el.classList.add('open');
-    // Sit to the right of the cursor, vertically centred on it, kept inside the window.
+    // Remember where you clicked as a distance from the bottom: the window grows upwards to make room for the menu
+    // (it's only a strip along the bottom of the screen otherwise), and the click spot moves with it.
+    this.anchor = { px, fromBottom: window.innerHeight - py };
+    this.place();
+  }
+
+  /** Right of the cursor, vertically centred on it, inside the window (it scrolls if it's taller than the window). */
+  place() {
+    if (!this.isOpen || !this.anchor) return;
+    const H = window.innerHeight;
+    this.el.style.maxHeight = `${H - 2 * MARGIN_PX}px`;
     const { offsetWidth: w, offsetHeight: h } = this.el;
-    const x = Math.max(MARGIN_PX, Math.min(px + OFFSET_PX, window.innerWidth - w - MARGIN_PX));
-    const y = Math.max(MARGIN_PX, Math.min(py - h / 2, window.innerHeight - h - MARGIN_PX));
+    const py = H - this.anchor.fromBottom;
+    const x = Math.max(MARGIN_PX, Math.min(this.anchor.px + OFFSET_PX, window.innerWidth - w - MARGIN_PX));
+    const y = Math.max(MARGIN_PX, Math.min(py - h / 2, H - h - MARGIN_PX));
     this.el.style.left = `${x}px`;
     this.el.style.top = `${y}px`;
   }

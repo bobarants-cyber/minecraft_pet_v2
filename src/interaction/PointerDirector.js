@@ -161,7 +161,7 @@ export class PointerDirector {
 
     const airborne = !!this.drag || AIRBORNE.has(c.stateName) || c.lift > 0.03 || c.restLift > 0.03;
     // The window also grows to full height while the bubble shows, so it has room above the pet.
-    const expanded = airborne || !!this.chat?.visible || !!this.game?.active;
+    const expanded = airborne || !!this.chat?.visible || !!this.game?.active || !!this.menu?.isOpen;
     this.airborne = airborne;
     if (expanded !== this.expanded) {
       this.expanded = expanded;

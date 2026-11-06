@@ -45,6 +45,16 @@
         visibility: hidden;
         transition: opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
       }
+      .mob-menu {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      .mob-menu__quit {
+        margin-top: 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 0 0 9px 9px;
+        color: #ffb3b3;
+      }
       .mob-menu.open {
         opacity: 1;
         transform: none;
