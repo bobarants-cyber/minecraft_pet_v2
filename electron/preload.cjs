@@ -32,4 +32,6 @@ contextBridge.exposeInMainWorld('mobHost', {
   openNotes: (file) => ipcRenderer.send('notes:open', file),
   onNotes: (fn) => ipcRenderer.on('notes', (_e, n) => fn(n)),
   onNotesDone: (fn) => ipcRenderer.on('notesDone', (_e, n) => fn(n)),
+  speak: (text) => ipcRenderer.send('voice:speak', text),
+  onSpeaking: (fn) => ipcRenderer.on('speaking', (_e, s) => fn(s)),
 });

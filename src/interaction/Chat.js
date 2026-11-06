@@ -273,6 +273,54 @@ export class Chat {
     this.#toast(this.log.lastElementChild.cloneNode(true), { opensChat: true });
   }
 
+  /** A question you asked out loud ("Hey Bbokari, …"): answered like a chat message, shown in a bubble. */
+  async voiceAsk(text) {
+    if (this.busy) return;
+    const c = this.character;
+    this.#add('me', `🎤 ${text}`);
+    this.history.push({ role: 'user', content: text });
+    this.busy = true;
+    const asked = () => {
+      const q = document.createElement('div');
+      q.className = 'chat__asked';
+      q.textContent = `🎤 “${text}”`;
+      return q;
+    };
+    let typing = null;
+    if (this.isOpen) typing = this.#add('pet', '', 'typing');
+    else {
+      const row = document.createElement('div');
+      row.className = 'chat__msg chat__msg--pet';
+      const dots = document.createElement('div');
+      dots.className = 'chat__msg--typing';
+      dots.innerHTML = '<span></span><span></span><span></span>';
+      row.append(asked(), dots);
+      this.#toast(row, { hideAfter: 0, opensChat: true });
+    }
+    c.startTyping('think');
+    const reply = this.host?.ask
+      ? await this.host.ask({ text, history: this.history.slice(-MAX_HISTORY), mob: this.settings.mob })
+      : { ok: false, text: 'I can only think inside the desktop app.' };
+    typing?.remove();
+    this.#add('pet', reply.text, reply.ok ? '' : 'error');
+    this.history.push({ role: 'assistant', content: reply.text });
+    this.history = this.history.slice(-MAX_HISTORY * 2);
+    this.busy = false;
+    c.stopTyping();
+    this.onReply?.(reply);
+    c.face.setExpression(reply.ok ? 'happy' : 'nervous');
+    if (!this.isOpen) {
+      const row = document.createElement('div');
+      row.className = `chat__msg chat__msg--pet${reply.ok ? '' : ' chat__msg--error'}`;
+      const answer = document.createElement('div');
+      answer.textContent = reply.text;
+      row.append(asked(), answer);
+      // Long answers stay up longer.
+      this.#toast(row, { opensChat: true, hideAfter: Math.min(30_000, 8000 + reply.text.length * 60) });
+    }
+    if (reply.ok && this.settings.voiceSpeak) this.host?.speak?.(reply.text);
+  }
+
   async send() {
     const text = this.input.value.trim();
     if (!text || this.busy) return;

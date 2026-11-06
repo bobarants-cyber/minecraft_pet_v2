@@ -98,7 +98,7 @@ export class Whisper {
    * Transcribes one WAV clip. With `translate`, Whisper translates it into English instead.
    * Resolves with { text, language } (language is Whisper's lowercase English name, e.g. "spanish").
    */
-  async transcribe(wav, { translate = false } = {}) {
+  async transcribe(wav, { translate = false, prompt } = {}) {
     await this.start();
     const form = new FormData();
     form.append('file', new Blob([wav], { type: 'audio/wav' }), 'clip.wav');
@@ -107,6 +107,8 @@ export class Whisper {
     form.append('temperature', '0');
     form.append('no_timestamps', 'true');
     form.append('translate', translate ? 'true' : 'false');
+    // A hint of words to expect (e.g. the pet's name), so Whisper spells them right.
+    if (prompt) form.append('prompt', String(prompt).slice(0, 200));
     const res = await fetch(`${URL}/inference`, { method: 'POST', body: form, signal: AbortSignal.timeout(30_000) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);

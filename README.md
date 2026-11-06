@@ -52,6 +52,17 @@ app links) are allowed. The menu bar's **📅 Classes** lists today's classes; c
 
 The pet has to be running for this, so tick **Open at login** in its menu-bar menu.
 
+## Hey Bbokari 🗣
+
+A voice assistant: right-click the pet → **🗣 Hey Bbokari** (or the menu bar → **🗣 Hey Bbokari**) to turn it on. Then
+say **“Hey Bbokari, …”** followed by your question, e.g. “Hey Bbokari, why is the sky blue?”. You can also say just
+“Hey Bbokari”, wait for “Yes? 👂”, then ask. Chat commands work too: “Hey Bbokari, set a timer for 5 minutes”,
+“Hey Bbokari, open YouTube”. The answer pops up in a bubble and is added to the chat.
+
+It only listens to **your microphone** and only answers when it hears its name; it never listens to the computer's
+sound. It uses the live-captions speech recognizer (set that up first). Tick **Speak answers out loud** to hear the
+answers in the Mac's own free voice; the mic pauses while it talks, so it doesn't hear itself.
+
 ## Class notes 📝
 
 When the pet opens a class from **My classes**, it also starts taking notes, and when the class ends it writes them up:

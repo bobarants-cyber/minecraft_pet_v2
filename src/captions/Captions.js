@@ -33,11 +33,15 @@ export class Captions {
     this.lines = [];
     this.syncing = false;
     this.problem = null;
-    /** While taking notes: which sources to listen to even with the captions panel hidden ({ mic, computer }). */
-    this.listenFor = null;
-    /** Called with every caption line (used by notes), and with notices/problems. */
-    this.onLine = null;
+    /**
+     * Other features that need to hear even with the captions panel hidden (notes, the voice assistant), by name:
+     * name → { mic, computer, onLine(line), prompt }.
+     */
+    this.listeners = new Map();
+    /** Called with notices/problems (e.g. for the notes badge). */
     this.onNotice = null;
+    /** While the pet is speaking out loud, ignore what the mic hears (it would hear itself). */
+    this.mutedUntil = 0;
 
     this.el = document.createElement('div');
     this.el.className = 'captions';
@@ -83,10 +87,10 @@ export class Captions {
   update() {
     const on = this.visible;
     this.el.classList.toggle('on', on);
-    const extra = this.listenFor ?? {};
+    const extra = [...this.listeners.values()];
     const want = {
-      mic: (on && !!this.settings.captionsMic) || !!extra.mic,
-      computer: (on && !!this.settings.captionsComputer) || !!extra.computer,
+      mic: (on && !!this.settings.captionsMic) || extra.some((l) => l.mic),
+      computer: (on && !!this.settings.captionsComputer) || extra.some((l) => l.computer),
     };
     for (const chip of this.el.querySelectorAll('.captions__chip')) chip.classList.toggle('is-on', !!this.settings[SOURCES[chip.dataset.src].setting]);
     this.langEl.textContent = `→ ${LANG_NAMES[this.settings.captionsLang] ?? 'English'}`;
@@ -134,8 +138,9 @@ export class Captions {
         const dev = devices.find((d) => d.kind === 'audioinput' && VIRTUAL_DEVICE.test(d.label));
         if (!dev) {
           // Taking notes without BlackHole: listen through the microphone instead.
-          if (this.listenFor?.computer) {
-            this.listenFor = { mic: true, computer: false };
+          const needComputer = [...this.listeners.values()].filter((l) => l.computer);
+          if (needComputer.length) {
+            for (const l of needComputer) Object.assign(l, { computer: false, mic: true });
             this.onNotice?.('No BlackHole, so I’m listening through the 🎤 microphone instead.', false);
           }
           if (this.settings.captionsComputer) this.save({ captionsComputer: false });
@@ -188,7 +193,17 @@ export class Captions {
     delete this.sources[kind];
   }
 
+  /** Start (or update) a background listener; see `listeners`. */
+  listen(name, opts) {
+    this.listeners.set(name, { ...opts });
+  }
+
+  unlisten(name) {
+    this.listeners.delete(name);
+  }
+
   #enqueue(kind, clip) {
+    if (kind === 'mic' && performance.now() < this.mutedUntil) return;
     this.queue.push({ kind, wav: encodeWav(clip), at: performance.now() });
     // Stay live: if speech comes faster than it can be read, skip the oldest clips.
     while (this.queue.length > MAX_QUEUE) this.queue.shift();
@@ -201,7 +216,8 @@ export class Captions {
     try {
       while (this.queue.length) {
         const job = this.queue.shift();
-        const res = await this.host.transcribe({ wav: job.wav, target: this.settings.captionsLang || 'english' });
+        const prompt = [...this.listeners.values()].map((l) => l.prompt).filter(Boolean).join(' ') || undefined;
+        const res = await this.host.transcribe({ wav: job.wav, target: this.settings.captionsLang || 'english', prompt });
         if (!res.ok) {
           this.#notice(`Captions hit a problem: ${res.error}`, true);
           continue;
@@ -211,8 +227,8 @@ export class Captions {
         // With speakers on, the mic hears the computer too; don't show the same words twice.
         if (job.kind === 'mic' && this.lines.some((l) => l.kind === 'computer' && job.at - l.at < 6000 && similar(l.text, text))) continue;
         const line = { kind: job.kind, text, language: res.language, translation: cleanTranscript(res.translation) || null, at: job.at };
-        this.#add(line);
-        this.onLine?.({ ...line, time: Date.now() });
+        if (this.visible) this.#add(line);
+        for (const l of this.listeners.values()) if (l.onLine && (l[job.kind] || l.anySource)) l.onLine({ ...line, time: Date.now() });
       }
     } finally {
       this.working = false;

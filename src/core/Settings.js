@@ -12,6 +12,8 @@ export const DEFAULTS = {
   captionsComputer: false,
   captionsLang: 'english',
   autoNotes: true,
+  voiceOn: false,
+  voiceSpeak: false,
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

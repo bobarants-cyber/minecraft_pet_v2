@@ -31,6 +31,8 @@ export const DEFAULTS = {
   captionsComputer: false,
   captionsLang: 'english',
   autoNotes: true,
+  voiceOn: false,
+  voiceSpeak: false,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

@@ -9,7 +9,7 @@ import { Whisper } from './captions.js';
 import * as opener from './opener.js';
 import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
 import { NOTES_DIR, NotesSession } from './notes.js';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
 const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet', 'google meet'], ['Zoom', 'zoom'], ['Notes', 'notes']];
@@ -151,6 +151,13 @@ function buildTray() {
           : [{ label: 'No classes today', enabled: false }]),
         { type: 'separator' },
         { label: 'My classes…', click: () => command('classes') },
+      ],
+    },
+    {
+      label: `🗣 Hey ${personaFor(settings.mob).name}`,
+      submenu: [
+        { label: `Listen for “Hey ${personaFor(settings.mob).name}” (microphone only)`, type: 'checkbox', checked: settings.voiceOn, click: (i) => applySettings({ voiceOn: i.checked }) },
+        { label: 'Speak answers out loud', type: 'checkbox', checked: settings.voiceSpeak, click: (i) => applySettings({ voiceSpeak: i.checked }) },
       ],
     },
     {
@@ -382,6 +389,26 @@ async function stopNotes() {
   }
 }
 
+// Speaking answers out loud with the Mac's own free voice (`say`), one answer at a time.
+let speaker = null;
+ipcMain.on('voice:speak', (_e, text) => {
+  if (process.platform !== 'darwin') return;
+  speaker?.kill();
+  const clean = String(text ?? '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/[*_#`]/g, '')
+    .trim()
+    .slice(0, 1200);
+  if (!clean) return;
+  const proc = spawn('say', [clean], { stdio: 'ignore' });
+  speaker = proc;
+  send('speaking', { on: true });
+  proc.on('exit', () => {
+    if (speaker === proc) speaker = null;
+    send('speaking', { on: false });
+  });
+});
+
 ipcMain.on('notes:add', (_e, line) => notes?.add(line));
 ipcMain.on('notes:start', () => startNotes({ title: 'Notes' }));
 ipcMain.on('notes:stop', () => stopNotes());
@@ -423,9 +450,9 @@ ipcMain.handle('captions:status', async () => {
   return { ...s, mic };
 });
 ipcMain.handle('captions:askMic', async () => (process.platform === 'darwin' ? systemPreferences.askForMediaAccess('microphone') : true));
-ipcMain.handle('captions:transcribe', async (_e, { wav, target = 'english' }) => {
+ipcMain.handle('captions:transcribe', async (_e, { wav, target = 'english', prompt }) => {
   try {
-    const heard = await whisper.transcribe(Buffer.from(wav));
+    const heard = await whisper.transcribe(Buffer.from(wav), { prompt });
     let translation = null;
     const lang = heard.language;
     if (heard.text && lang && lang !== target) {

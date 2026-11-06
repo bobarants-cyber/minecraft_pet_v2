@@ -12,6 +12,7 @@ import { Games } from './games/Games.js';
 import { Captions } from './captions/Captions.js';
 import { Classes } from './interaction/Classes.js';
 import { NotesBadge } from './interaction/NotesBadge.js';
+import { Voice } from './interaction/Voice.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -27,6 +28,9 @@ const game = new Games({ character, stage, settings, host });
 const captions = new Captions({ character, settings, save, host });
 const classes = new Classes({ character, host, onOpen: () => chat.close() });
 const notesBadge = new NotesBadge({ character, host });
+const voice = new Voice({ character, chat, captions, settings, host });
+// While the pet talks out loud, the mic would hear it, so pause listening (and a moment after).
+host?.onSpeaking?.(({ on }) => (captions.mutedUntil = on ? Infinity : performance.now() + 900));
 captions.onNotice = (text, isProblem) => notesBadge.notice(text, isProblem);
 chat.onReply = (reply) => {
   if (reply.kind === 'classes') setTimeout(() => classes.open(), 600);
@@ -46,9 +50,11 @@ const menu = new MobMenu({
   onOpen: (what) => (what ? host?.openThing(what) : chat.prefill('open ')),
   onClasses: () => classes.open(),
   onNotes: () => (notesBadge.state.active ? host?.stopNotes() : host?.startNotes()),
+  onVoice: () => save({ voiceOn: !settings.voiceOn }),
 });
 menu.captionsOn = () => settings.captionsOn;
 menu.notesOn = () => notesBadge.state.active;
+menu.voiceOn = () => settings.voiceOn;
 menu.playing = () => game.currentId;
 const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes, notesBadge] });
 
@@ -87,6 +93,7 @@ const loop = new Loop((dt, t) => {
   captions.update();
   classes.update();
   notesBadge.update(chat.isOpen);
+  voice.update();
 });
 loop.start();
 
@@ -101,15 +108,17 @@ host?.onSay(({ text, error }) => chat.say(text, { error }));
 host?.onNotes((state) => {
   notesBadge.set(state);
   if (state.active) {
-    captions.listenFor = { computer: true, mic: false };
-    captions.onLine = (line) => {
-      host.notesAdd(line);
-      notesBadge.line();
-    };
+    captions.listen('notes', {
+      computer: true,
+      mic: false,
+      onLine: (line) => {
+        host.notesAdd(line);
+        notesBadge.line();
+      },
+    });
     character.emote('exclaim', 0.4);
   } else {
-    captions.listenFor = null;
-    captions.onLine = null;
+    captions.unlisten('notes');
     if (state.writing) character.startTyping('think');
   }
 });

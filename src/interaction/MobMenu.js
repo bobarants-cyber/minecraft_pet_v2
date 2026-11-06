@@ -6,7 +6,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -38,6 +38,10 @@ export class MobMenu {
       <button type="button" class="mob-menu__row mob-menu__classes">
         <span>📅 My classes</span>
         <span class="mob-menu__value">Calendar</span>
+      </button>
+      <button type="button" class="mob-menu__row mob-menu__voice">
+        <span>🗣 Hey Bbokari</span>
+        <span class="mob-menu__value">Off</span>
       </button>
       <button type="button" class="mob-menu__row mob-menu__notes">
         <span>📝 Take notes</span>
@@ -83,6 +87,11 @@ export class MobMenu {
       this.close();
       onClasses?.();
     });
+    this.voiceRow = this.el.querySelector('.mob-menu__voice');
+    this.voiceRow.addEventListener('click', () => {
+      this.close();
+      onVoice?.();
+    });
     this.notesRow = this.el.querySelector('.mob-menu__notes');
     this.notesRow.addEventListener('click', () => {
       this.close();
@@ -118,6 +127,8 @@ export class MobMenu {
 
   open(px, py) {
     this.captionsRow.querySelector('.mob-menu__value').textContent = this.captionsOn?.() ? 'On' : 'Off';
+    this.voiceRow.querySelector('span').textContent = `🗣 Hey ${MOBS[this.settings.mob]?.label ?? 'Bbokari'}`;
+    this.voiceRow.querySelector('.mob-menu__value').textContent = this.voiceOn?.() ? 'Listening' : 'Off';
     const noting = this.notesOn?.();
     this.notesRow.querySelector('span').textContent = noting ? '⏹ Stop notes' : '📝 Take notes';
     this.notesRow.querySelector('.mob-menu__value').textContent = noting ? 'Write them up' : 'Listen & write';
