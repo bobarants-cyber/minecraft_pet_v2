@@ -34,14 +34,26 @@ export class Bbokari {
     this.pose = null;
   }
 
-  /** Glasses on or off (for typing and thinking). */
-  setGlasses(on) {
+  /** Glasses on or off (for typing and thinking); `style` picks other lenses, e.g. red/blue 3D glasses. */
+  setGlasses(on, style = {}) {
     if (!this.parts.loaded) return;
-    if (on && !this.glasses) {
-      this.glasses = buildGlasses(this.parts.eyes.eyes);
-      this.parts.head.add(this.glasses);
+    this.allGlasses ??= {};
+    const key = JSON.stringify(style);
+    if (on && !this.allGlasses[key]) {
+      this.allGlasses[key] = buildGlasses(this.parts.eyes.eyes, style);
+      this.parts.head.add(this.allGlasses[key]);
     }
-    if (this.glasses) this.glasses.visible = on;
+    for (const [k, g] of Object.entries(this.allGlasses)) g.visible = on && k === key;
+    this.glasses = this.allGlasses[key];
+  }
+
+  /** Where scene props go: 'head' (worn) or 'handR' / 'handL' (held), as { parent, at } in model units. */
+  anchor(slot) {
+    if (!this.parts.loaded) return null;
+    if (slot === 'head') return { parent: this.parts.head, at: null };
+    if (slot === 'handR') return { parent: this.parts.arms[0], at: [0.1, -0.13, 0.05] };
+    if (slot === 'handL') return { parent: this.parts.arms[1], at: [-0.1, -0.13, 0.05] };
+    return null;
   }
 
   /** Put something (a ping pong paddle) in Bbokari's right hand. */

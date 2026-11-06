@@ -14,6 +14,8 @@ export const DEFAULTS = {
   autoNotes: true,
   voiceOn: false,
   voiceSpeak: false,
+  reactToActivity: true,
+  breakReminders: true,
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';

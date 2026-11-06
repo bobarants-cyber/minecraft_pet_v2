@@ -1,4 +1,5 @@
 import { SEAT_HEIGHT, buildOffice } from './Props.js';
+import { SCENES } from './Scenes.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -639,6 +640,107 @@ STATES.typing = {
     c.office?.removeFromParent();
     c.mob.setGlasses?.(false);
     c.typingDone = false;
+  },
+};
+
+// Acting out what you're doing (src/character/Scenes.js): props pop in, it hops into its seat, then the scene's pose.
+// Stays until the activity changes; anything else (petting, chat, a nap) interrupts and it comes back afterwards.
+function attachScene(c, parts) {
+  const mob = c.mob;
+  const placed = [];
+  for (const [slot, obj] of Object.entries(parts)) {
+    if (!obj) continue;
+    if (slot === 'root') mob.root.add(obj);
+    else if (slot === 'torso') mob.joints.torso.add(obj);
+    else {
+      const a = mob.anchor?.(slot);
+      if (a) {
+        obj.userData.home ??= obj.position.clone();
+        if (a.at) obj.position.set(...a.at);
+        else obj.position.copy(obj.userData.home);
+        a.parent.add(obj);
+      } else if (slot !== 'head') {
+        // Pets without hands hold things beside the body.
+        obj.position.set((slot === 'handR' ? 1 : -1) * mob.halfWidth * 0.7, mob.height * 0.4, 0.3);
+        mob.joints.torso.add(obj);
+      } else continue;
+    }
+    obj.userData.full ??= obj.scale.clone();
+    placed.push(obj);
+  }
+  return placed;
+}
+
+STATES.activity = {
+  priority: 1,
+  autoLook: false,
+  attentive: false,
+  enter(c, p, s) {
+    s.kind = p.kind;
+    s.scene = SCENES[s.kind];
+    if (!s.scene) return;
+    c.loco.stop();
+    c.restLift = 0;
+    c.sceneParts ??= {};
+    s.parts = c.sceneParts[s.kind] ??= s.scene.build();
+    s.placed = attachScene(c, s.parts);
+    // Coming straight back to the same scene (after a pat, say) skips the big entrance.
+    s.quick = c.lastScene?.kind === s.kind && performance.now() - c.lastScene.at < 6000;
+    for (const o of s.placed) o.scale.copy(o.userData.full).multiplyScalar(s.quick ? 1 : 0.001);
+    c.face.setExpression('happy');
+    if (!s.quick && s.kind !== 'meeting') c.emote(s.kind === 'music' ? 'note' : 'sparkle', 0.5);
+  },
+  update(c, dt, t, s) {
+    if (!s.scene || c.activity !== s.kind) return 'idle';
+    c.poseRate = 9;
+    const tt = s.quick ? t + 1 : t;
+    const grow = popIn((tt - 0.15) / 0.45);
+    for (const o of s.placed) o.scale.copy(o.userData.full).multiplyScalar(Math.max(0.001, grow));
+    const ready = s.scene.seated ? Math.min(1, Math.max(0, (tt - 0.35) / 0.25)) : Math.min(1, tt / 0.4);
+    if (s.scene.seated) {
+      if (!s.quick) c.overlay.bodyY += hop(t, 0, 0.55, 0.3);
+      c.target.sit = ready;
+      c.target.bodyY = SEAT_HEIGHT * 0.55 * ready;
+      c.target.legSwingL = c.target.legSwingR = 1.35 * ready;
+    }
+    if (ready > 0.9 && !s.dressed) {
+      s.dressed = true;
+      if (s.scene.glasses) c.mob.setGlasses?.(true, s.scene.glasses);
+    }
+    if (ready < 0.5) return;
+    s.scene.pose(c, t, s, s.parts);
+  },
+  exit(c, s) {
+    for (const o of s.placed ?? []) o.removeFromParent();
+    if (s.scene?.glasses) c.mob.setGlasses?.(false);
+    c.lastScene = { kind: s.kind, at: performance.now() };
+  },
+};
+
+// A stretch break: arms up, lean side to side, shake it out.
+STATES.stretch = {
+  priority: 5,
+  enter(c) {
+    c.loco.stop();
+    c.face.setExpression('happy');
+  },
+  update(c, dt, t, s, p) {
+    c.poseRate = 5;
+    const up = env(t, 0.2, 4.6, 0.6);
+    c.target.armRaiseL = c.target.armRaiseR = 2.4 * up;
+    c.target.armSwingL = c.target.armSwingR = 0.3 * up;
+    c.target.torsoRoll = Math.sin(Math.max(0, t - 1) * 1.6) * 0.18 * up;
+    c.target.headPitch = -0.2 * up;
+    c.target.crouch = -0.02 * up;
+    if (t > 1.2 && !s.yawned) {
+      s.yawned = true;
+      c.face.setExpression('joy');
+    }
+    if (t > 4.6 && t < 5.6) {
+      c.overlay.torsoRoll = Math.sin(t * 30) * 0.05;
+      c.face.setExpression('uwu');
+    }
+    if (t > 5.8) return then(p);
   },
 };
 

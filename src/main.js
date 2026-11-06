@@ -104,6 +104,33 @@ host?.onRewrite((r) => chat.showRewrite(r));
 
 host?.onTyping(({ on }) => (on ? character.startTyping('type') : character.stopTyping()));
 host?.onSay(({ text, error }) => chat.say(text, { error }));
+
+// React to what you're doing (the Mac side tells us: video, writing, music, meeting, gaming, coding, reading, drawing).
+host?.onActivity?.(({ kind }) => (character.activity = settings.reactToActivity ? kind : null));
+host?.onWellbeing?.(({ kind, minutes }) => {
+  if (kind === 'break') {
+    character.trigger('stretch', { then: 'idle' }, true);
+    chat.say(`You’ve been on the computer for ${minutes} minutes. Stretch break! 🧘 Stand up, roll your shoulders and look at something far away for a bit.`);
+  } else if (kind === 'late') {
+    character.face.setExpression('sleepy');
+    character.emote('zzz', 0.4);
+    chat.say('It’s getting late! 🌙 Don’t forget to sleep. I’m getting sleepy too…');
+  }
+});
+// Say hello once a day, depending on the time.
+setTimeout(() => {
+  const today = new Date().toDateString();
+  let last = null;
+  try {
+    last = localStorage.getItem('mob.greeted');
+    localStorage.setItem('mob.greeted', today);
+  } catch {}
+  if (last === today) return;
+  const h = new Date().getHours();
+  const name = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' }[settings.mob] ?? 'your buddy';
+  const hello = h < 5 ? `You’re up late! 🌙 ${name} is here.` : h < 12 ? 'Good morning! ☀️ Ready for today?' : h < 18 ? 'Good afternoon! 🌤 Nice to see you.' : 'Good evening! 🌆 How was your day?';
+  chat.say(hello);
+}, 6500);
 // Class notes: listen in the background (computer sound first, the mic if there's no BlackHole) while a session runs.
 host?.onNotes((state) => {
   notesBadge.set(state);

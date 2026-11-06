@@ -52,6 +52,30 @@ app links) are allowed. The menu bar's **📅 Classes** lists today's classes; c
 
 The pet has to be running for this, so tick **Open at login** in its menu-bar menu.
 
+## Bbokari reacts to what you're doing 👀
+
+Every few seconds the pet checks which app is in front (and, in a browser, the current tab's address and title) and
+acts it out:
+
+| You're… | The pet… |
+|---|---|
+| 🎬 watching a video (YouTube, Netflix, TikTok, Twitch, the TV app…) | sits in a red cinema seat with red/blue 3D glasses, eating popcorn |
+| 📝 writing (Google Docs, Pages, Word, Notes, Notion…) | sits in a chair writing in a notebook |
+| 🎵 listening to music (Spotify, Apple Music, YouTube Music…) | puts on headphones and bops to the beat |
+| 🎥 in a call (Zoom, Meet, FaceTime, Teams) | waves hello, then sits quietly with a headset, nodding |
+| 🎮 gaming (Minecraft, Roblox, Poki, chess…) | mashes a controller and cheers |
+| 💻 coding (Terminal, VS Code, GitHub, Scratch…) | types at its laptop with glasses on |
+| 📖 reading (PDFs, Books, Wikipedia…) | reads an open book, turning pages |
+| 🎨 drawing (Canva, Figma, Slides…) | paints at an easel, wearing a beret |
+
+Petting it, chatting or playing interrupts the scene, and it goes back afterwards. It doesn't doze off while you watch
+a video, listen to music or sit in a call. Other touches: a daily hello, a **stretch-break** reminder after 50 minutes
+of non-stop computer time, and a sleepy nudge after 11 pm.
+
+The first time, macOS asks whether Electron may control your browser (to read the current tab's address). Click
+**OK**. Nothing is saved or sent anywhere. Turn it off in the menu bar: **👀 React to what I'm doing** /
+**⏰ Stretch break reminders**.
+
 ## Hey Bbokari 🗣
 
 A voice assistant: right-click the pet → **🗣 Hey Bbokari** (or the menu bar → **🗣 Hey Bbokari**) to turn it on. Then

@@ -9,6 +9,7 @@ import { Whisper } from './captions.js';
 import * as opener from './opener.js';
 import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
 import { NOTES_DIR, NotesSession } from './notes.js';
+import { ActivityWatcher } from './activity.js';
 import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
@@ -36,6 +37,17 @@ let chatOpen = false;
 let reminders = null;
 let classes = null;
 let notes = null;
+let activity = null; // what you're doing right now (video, writing, …) or null
+let activeMs = 0; // computer time since your last real break, for stretch reminders
+let lateNightTold = '';
+const BREAK_AFTER_MS = 50 * 60_000;
+const BREAK_IDLE_S = 5 * 60;
+const watcher = new ActivityWatcher({
+  onChange: (kind) => {
+    activity = kind;
+    send('activity', { kind });
+  },
+});
 let notesTimer = null;
 let writingNotes = false;
 const clock = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -98,6 +110,7 @@ function applySettings(patch) {
   saveSettings(settings);
   if (settings.petSize !== prevSize) win?.setBounds(stripBounds());
   if ('openAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
+  if ('reactToActivity' in patch) syncActivity();
   send('settings', settings);
   buildTray();
 }
@@ -222,15 +235,42 @@ function buildTray() {
       label: 'AI brain',
       submenu: Object.entries(AI_MODELS).map(([key, label]) => radio(label, 'aiModel', key)),
     },
+    { label: '👀 React to what I’m doing', type: 'checkbox', checked: settings.reactToActivity, click: (i) => applySettings({ reactToActivity: i.checked }) },
+    { label: '⏰ Stretch break reminders', type: 'checkbox', checked: settings.breakReminders, click: (i) => applySettings({ breakReminders: i.checked }) },
     { label: 'Open at login', type: 'checkbox', checked: settings.openAtLogin, click: (i) => applySettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
     { label: 'Quit Minecraft Mob', role: 'quit' },
   ]));
 }
 
+function syncActivity() {
+  if (settings.reactToActivity && process.platform === 'darwin') watcher.start();
+  else watcher.stop();
+}
+
+/** Stretch breaks and late-night nudges, checked along with the idle timer. */
+function checkWellbeing(idle) {
+  // Only count time you're actually using the computer; a 5-minute pause counts as a break.
+  if (idle >= BREAK_IDLE_S) activeMs = 0;
+  else activeMs += IDLE_POLL_MS;
+  if (settings.breakReminders && activeMs >= BREAK_AFTER_MS && activity !== 'meeting') {
+    activeMs = 0;
+    send('wellbeing', { kind: 'break', minutes: Math.round(BREAK_AFTER_MS / 60_000) });
+  }
+  const now = new Date();
+  const night = now.getHours() >= 23 || now.getHours() < 4;
+  const tonight = new Date(now.getTime() - 4 * 3_600_000).toDateString();
+  if (night && idle < 60 && lateNightTold !== tonight) {
+    lateNightTold = tonight;
+    send('wellbeing', { kind: 'late' });
+  }
+}
+
 function pollIdle() {
   const idle = powerMonitor.getSystemIdleTime();
-  const limit = settings.idleSleepMin * 60;
+  checkWellbeing(idle);
+  // Watching a video, in a call or listening to music isn't "idle", even without touching the mouse.
+  const limit = ['video', 'meeting', 'music'].includes(activity) ? 0 : settings.idleSleepMin * 60;
   if (limit > 0 && !idleSleeping && idle >= limit) {
     idleSleeping = true;
     if (!ASLEEP.has(beeState)) command('trigger', { name: 'sleepy' });
@@ -511,6 +551,7 @@ app.whenReady().then(() => {
   // The tray's "today" list changes at midnight.
   setInterval(buildTray, 10 * 60_000);
   setInterval(pollIdle, IDLE_POLL_MS);
+  win.webContents.once('did-finish-load', () => setTimeout(syncActivity, 4000));
   for (const [mode, key] of Object.entries(REWRITE_KEYS)) {
     if (!globalShortcut.register(key, () => rewriteSelection(mode))) console.log(`Shortcut ${key} is taken by another app.`);
   }

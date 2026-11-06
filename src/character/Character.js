@@ -96,6 +96,8 @@ export class Character {
     this.poseRate = 8;
     this.lookHint = null;
 
+    // Back to acting out what you're doing once nothing else is going on.
+    if (this.activity && this.fsm.name === 'idle' && this.fsm.time > 0.4 && !this.game?.active) this.trigger('activity', { kind: this.activity });
     this.fsm.update(dt);
     const state = this.fsm.state;
     this.brain.update(dt, this.fsm.name);

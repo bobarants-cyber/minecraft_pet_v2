@@ -5,11 +5,11 @@ import * as THREE from 'three';
  * Built in the pet's own units (about 1.25 tall), so it can be a child of the pet's root and scale with it.
  * The laptop faces the pet, so from the screen you see the back of its lid (with a sticker) and the pet's face above.
  */
-function mat(color, extra = {}) {
+export function mat(color, extra = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0, ...extra });
 }
 
-function box(w, h, d, material) {
+export function box(w, h, d, material) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
   m.castShadow = true;
   m.receiveShadow = true;
@@ -35,11 +35,8 @@ function stickerTexture() {
 
 export const SEAT_HEIGHT = 0.24;
 
-export function buildOffice() {
-  const office = new THREE.Group();
-  office.name = 'office';
-
-  // Chair: a cushy seat and backrest on a single stem with a round foot.
+/** The purple desk chair on its own (seat top at SEAT_HEIGHT). */
+export function buildChair() {
   const chair = new THREE.Group();
   const cushion = mat(0x7c6cf2, { roughness: 0.85 });
   const metal = mat(0x3a3a44, { roughness: 0.4, metalness: 0.3 });
@@ -54,6 +51,13 @@ export function buildOffice() {
   foot.position.set(0, 0.015, -0.06);
   for (const m of [stem, foot]) m.castShadow = true;
   chair.add(seat, back, stem, foot);
+  return chair;
+}
+
+export function buildOffice() {
+  const office = new THREE.Group();
+  office.name = 'office';
+  const chair = buildChair();
 
   // Desk in front with a laptop on it.
   const desk = new THREE.Group();
@@ -98,18 +102,21 @@ export function buildOffice() {
 }
 
 /** Round glasses, sized for Bbokari's head (model units); `eyes` are the eye groups to centre the lenses on. */
-export function buildGlasses(eyes) {
+export function buildGlasses(eyes, { lenses = null, frameColor = 0x2a1a10 } = {}) {
   const g = new THREE.Group();
   g.name = 'glasses';
-  const frame = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.3, metalness: 0.2 });
-  const glass = new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.18, depthWrite: false });
+  const frame = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.3, metalness: 0.2 });
+  const glassFor = (i) =>
+    lenses
+      ? new THREE.MeshBasicMaterial({ color: lenses[i], transparent: true, opacity: 0.62, depthWrite: false })
+      : new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.18, depthWrite: false });
   const pts = eyes.map((e) => e.eye.position.clone());
   const centers = pts.map((p) => p.clone().add(new THREE.Vector3(0, 0.002, 0.022)));
   for (const [i, c] of centers.entries()) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.007, 8, 28), frame);
     ring.position.copy(c);
     ring.rotation.y = eyes[i].side * 0.12;
-    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.052, 24), glass);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.052, 24), glassFor(i));
     lens.position.copy(c);
     lens.rotation.y = eyes[i].side * 0.12;
     // Arm back towards the ear.

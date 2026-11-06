@@ -33,6 +33,8 @@ export const DEFAULTS = {
   autoNotes: true,
   voiceOn: false,
   voiceSpeak: false,
+  reactToActivity: true,
+  breakReminders: true,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');
