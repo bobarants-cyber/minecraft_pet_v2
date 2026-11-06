@@ -39,6 +39,21 @@ A speech bubble opens above the pet. Type and press Enter.
 
 For a faster but simpler brain, run `ollama pull llama3.2:1b` and pick **AI brain → Llama 3.2 Mini** in the pet's menu-bar menu.
 
+## Open things for you 🚀
+
+Right-click the pet → **🚀 Open for me** (YouTube, Google, Meet, Zoom, or **Other…**), use the menu bar → **🚀 Open**,
+or say it in the chat: “open youtube”, “open notes”, “go to wikipedia.org”. The pet sits at its desk and types it for you,
+one key at a time: websites in a new tab of Chrome (or Safari), apps in Spotlight. It uses the same Accessibility
+permission as the text tools.
+
+The pet only opens things you ask for. It never opens links other people send, for example in a meeting chat,
+because anyone could send a harmful link.
+
+## Typing animation ⌨️
+
+Whenever the pet types for you, thinks about a chat answer or rewrites your text, it hops up, a chair and a desk with a
+laptop pop in, it puts on its glasses, sits down and types. When it's done, everything shrinks away.
+
 ## Live captions 🎙
 
 Right-click the pet → **🎙 Live captions**, or the menu bar → **🎙 Live captions → Show captions**. A small subtitle

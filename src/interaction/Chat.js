@@ -152,13 +152,13 @@ export class Chat {
       dots.className = 'chat__msg--typing';
       dots.innerHTML = '<span></span><span></span><span></span>';
       row.appendChild(dots);
-      c.face.setExpression('curious');
-      if (!this.el.classList.contains('working')) c.emote('question', 0.5);
+      if (!this.el.classList.contains('working')) c.startTyping('think');
       this.el.classList.add('working');
       this.#toast(row, { hideAfter: 0 });
       return;
     }
     this.el.classList.remove('working');
+    c.stopTyping();
     if (stage === 'error') {
       row.classList.add('chat__msg--error');
       row.textContent = text;
@@ -202,6 +202,25 @@ export class Chat {
     setTimeout(() => this.mode === 'toast' && this.el.classList.contains('result') && this.close(), 900);
   }
 
+  /** A short note from the pet in a bubble (e.g. "I opened YouTube"), added to the chat if it's open. */
+  say(text, { error = false } = {}) {
+    if (this.isOpen) {
+      this.#add('pet', text, error ? 'error' : '');
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = `chat__msg chat__msg--pet${error ? ' chat__msg--error' : ''}`;
+    row.textContent = text;
+    this.#toast(row, { opensChat: true, hideAfter: error ? 16_000 : 6000 });
+  }
+
+  /** Open the chat with something already typed in the box (e.g. "open "). */
+  prefill(text) {
+    this.open();
+    this.input.value = text;
+    setTimeout(() => this.input.setSelectionRange(text.length, text.length), 450);
+  }
+
   /** Show a message from the pet without opening the text box, e.g. when a reminder goes off. */
   announce(text) {
     this.#add('pet', text, 'alert');
@@ -224,8 +243,7 @@ export class Chat {
     this.el.classList.add('busy');
     const typing = this.#add('pet', '', 'typing');
     const c = this.character;
-    c.face.setExpression('curious');
-    c.emote('question', 0.5);
+    c.startTyping('think');
 
     let reply;
     if (this.host?.ask) {
@@ -240,6 +258,7 @@ export class Chat {
     this.history = this.history.slice(-MAX_HISTORY * 2);
     this.busy = false;
     this.el.classList.remove('busy');
+    c.stopTyping();
     c.face.setExpression(reply.ok ? 'happy' : 'nervous');
     c.emote(reply.kind === 'reminder' ? 'sparkle' : reply.ok ? 'note' : 'question', -0.5);
     if (this.isOpen) this.input.focus();

@@ -54,6 +54,21 @@ export class Character {
     return true;
   }
 
+  /** Sit at the desk and type ('type') or ponder ('think') until stopTyping(); then go back to `then`. */
+  startTyping(mode = 'type', then = null) {
+    if (this.stateName === 'typing') {
+      this.typingDone = false;
+      return;
+    }
+    if (['sleep', 'carried', 'drop'].includes(this.stateName)) return;
+    const back = this.game?.active ? 'minigame' : then ?? 'idle';
+    this.trigger('typing', { mode, then: back }, true);
+  }
+
+  stopTyping() {
+    if (this.stateName === 'typing') this.typingDone = true;
+  }
+
   setPlacement(p) {
     Object.assign(this.placement, p);
     this.loco.setBounds(p.minX, p.maxX);

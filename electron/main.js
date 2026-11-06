@@ -5,6 +5,10 @@ import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
 import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText } from './ai.js';
 import { Whisper } from './captions.js';
+import * as opener from './opener.js';
+
+/** Shortcuts in the Open menus: label → what to type. */
+const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet', 'google meet'], ['Zoom', 'zoom'], ['Notes', 'notes']];
 import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 
@@ -131,6 +135,14 @@ function buildTray() {
       ],
     },
     {
+      label: '🚀 Open',
+      submenu: [
+        ...QUICK_OPEN.map(([label, what]) => ({ label, click: () => openThing(what) })),
+        { type: 'separator' },
+        { label: 'Something else… (say “open …” in the chat)', click: () => command('chat', { prefill: 'open ' }) },
+      ],
+    },
+    {
       label: '🎙 Live captions',
       submenu: [
         { label: 'Show captions', type: 'checkbox', checked: settings.captionsOn, click: (i) => applySettings({ captionsOn: i.checked }) },
@@ -220,6 +232,12 @@ ipcMain.on('chat:focus', (_e, on) => {
 ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
   const cmd = parseCommand(String(text));
   if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
+  const target = opener.parseOpen(text);
+  if (target) {
+    if (!selection.hasPermission(true)) return { ok: false, kind: 'open', text: selection.explain('not allowed') };
+    setTimeout(() => openThing(target), 400);
+    return { ok: true, kind: 'open', text: `On it! I’ll type “${target.text}” ${target.kind === 'web' ? 'in a new tab' : 'in Spotlight'} for you 🐥` };
+  }
   const res = await askAI({ history, mob, model: settings.aiModel, remindersSummary: reminders.describeAll() });
   return { ...res, kind: 'ai' };
 });
@@ -256,6 +274,27 @@ async function rewriteSelection(mode) {
 }
 
 ipcMain.on('rewrite:run', (_e, mode) => rewriteSelection(mode));
+ipcMain.on('open:run', (_e, what) => openThing(what));
+
+/** Open a website or app by having the pet type it (see opener.js), with the typing animation while it does. */
+let opening = false;
+async function openThing(what) {
+  const target = typeof what === 'string' ? opener.resolve(what) : what;
+  if (!target || opening) return;
+  if (!selection.supported) return send('say', { text: 'Opening things only works on a Mac for now.', error: true });
+  if (!selection.hasPermission(true)) return send('say', { text: selection.explain('not allowed'), error: true });
+  opening = true;
+  send('typing', { on: true });
+  try {
+    await opener.openByTyping(target);
+    send('say', { text: `Ta-da! I opened ${target.label} 🐥` });
+  } catch (err) {
+    send('say', { text: selection.explain(err), error: true });
+  } finally {
+    send('typing', { on: false });
+    opening = false;
+  }
+}
 
 // Live captions: the page records and cuts speech into clips; here they're turned into text (and translated).
 ipcMain.handle('captions:status', async () => {

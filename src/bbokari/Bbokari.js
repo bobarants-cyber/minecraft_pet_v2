@@ -1,5 +1,6 @@
 import { BBOKARI_HEIGHT, HOVER, buildBbokariRig } from './BbokariRig.js';
 import { FaceDisplay } from '../bee/face/FaceDisplay.js';
+import { buildGlasses } from '../character/Props.js';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
@@ -31,6 +32,16 @@ export class Bbokari {
     this.walkAmount = 0;
     this.walkPhase = 0;
     this.pose = null;
+  }
+
+  /** Glasses on or off (for typing and thinking). */
+  setGlasses(on) {
+    if (!this.parts.loaded) return;
+    if (on && !this.glasses) {
+      this.glasses = buildGlasses(this.parts.eyes.eyes);
+      this.parts.head.add(this.glasses);
+    }
+    if (this.glasses) this.glasses.visible = on;
   }
 
   /** Put something (a ping pong paddle) in Bbokari's right hand. */

@@ -6,7 +6,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -24,6 +24,16 @@ export class MobMenu {
           ${GAME_LIST.map((g) => `<button type="button" class="mob-menu__chip mob-menu__game" data-game="${g.id}">${g.label}</button>`).join('')}
         </div>
         <button type="button" class="mob-menu__row mob-menu__stop">⏹ Stop the game</button>
+      </div>
+      <div class="mob-menu__text mob-menu__open">
+        <div class="mob-menu__text-label">🚀 Open for me</div>
+        <div class="mob-menu__chips mob-menu__chips--wrap">
+          <button type="button" class="mob-menu__chip" data-open="youtube">YouTube</button>
+          <button type="button" class="mob-menu__chip" data-open="google">Google</button>
+          <button type="button" class="mob-menu__chip" data-open="google meet">Meet</button>
+          <button type="button" class="mob-menu__chip" data-open="zoom">Zoom</button>
+          <button type="button" class="mob-menu__chip" data-open="">Other…</button>
+        </div>
       </div>
       <button type="button" class="mob-menu__row mob-menu__captions">
         <span>🎙 Live captions</span>
@@ -53,6 +63,12 @@ export class MobMenu {
       chip.addEventListener('click', () => {
         this.close();
         onGame?.(chip.dataset.game);
+      });
+    }
+    for (const chip of this.el.querySelectorAll('.mob-menu__chip[data-open]')) {
+      chip.addEventListener('click', () => {
+        this.close();
+        onOpen?.(chip.dataset.open);
       });
     }
     this.captionsRow = this.el.querySelector('.mob-menu__captions');

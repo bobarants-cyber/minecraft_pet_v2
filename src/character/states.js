@@ -1,3 +1,5 @@
+import { SEAT_HEIGHT, buildOffice } from './Props.js';
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => {
@@ -566,6 +568,77 @@ STATES.minigame = {
     c.target.crouch = 0.012 + 0.008 * Math.sin(t * 2.2);
     c.target.torsoRoll = Math.sin(t * 0.9) * 0.03;
     c.target.headRoll = Math.sin(t * 0.7 + 1) * 0.06;
+  },
+};
+
+// Typing or thinking at a little desk: hop, a chair and a desk with a laptop pop in, glasses on, sit and type.
+// Character.startTyping() / stopTyping() drive it; stopTyping plays the outro (props shrink away, hop off the chair).
+const popIn = (k) => (k <= 0 ? 0 : k >= 1 ? 1 : 1 + 2.70158 * (k - 1) ** 3 + 1.70158 * (k - 1) ** 2);
+STATES.typing = {
+  priority: 6,
+  autoLook: false,
+  attentive: false,
+  enter(c, p, s) {
+    s.mode = p.mode ?? 'type';
+    s.out = null;
+    c.loco.stop();
+    c.restLift = 0;
+    c.typingDone = false;
+    c.office ??= buildOffice();
+    c.office.scale.setScalar(0.001);
+    c.mob.root.add(c.office);
+    c.face.setExpression(s.mode === 'think' ? 'curious' : 'neutral');
+    c.mob.setGlasses?.(false);
+  },
+  update(c, dt, t, s, p) {
+    c.poseRate = 10;
+    // Outro once the work is done: props shrink, hop off, back to what it was doing.
+    if (c.typingDone && s.out === null) {
+      s.out = t;
+      c.mob.setGlasses?.(false);
+      c.face.setExpression('happy');
+    }
+    const outK = s.out === null ? 0 : (t - s.out) / 0.55;
+    const inK = (t - 0.15) / 0.45;
+    const show = s.out === null ? popIn(inK) : 1 - Math.min(1, outK * 1.4);
+    c.office.scale.setScalar(Math.max(0.001, show));
+    if (s.out !== null && outK >= 1) return then(p);
+    if (t > 90) c.typingDone = true; // never type forever
+
+    // Jump up, land on the seat with legs out in front.
+    const seated = s.out === null ? Math.min(1, Math.max(0, (t - 0.35) / 0.25)) : Math.max(0, 1 - outK * 1.6);
+    c.overlay.bodyY += hop(t, 0, 0.55, 0.32) + (s.out !== null ? hop(t, s.out, 0.5, 0.25) : 0);
+    c.target.sit = seated;
+    c.target.bodyY = SEAT_HEIGHT * 0.55 * seated;
+    c.target.legSwingL = c.target.legSwingR = 1.35 * seated;
+    if (seated > 0.9 && !s.glasses) {
+      s.glasses = true;
+      c.mob.setGlasses?.(true);
+    }
+    if (seated < 0.5) return;
+
+    // Typing: both arms forward on the keys, tapping in a quick uneven rhythm; eyes on the screen.
+    const think = s.mode === 'think';
+    const speed = think ? 9 : 15;
+    const burst = think ? 0.5 + 0.5 * Math.sin(t * 1.3) : 1; // thinking types in little bursts
+    c.target.armSwingL = c.target.armSwingR = 1.05;
+    c.target.elbowL = c.target.elbowR = 0.35;
+    c.overlay.armSwingR = Math.max(0, Math.sin(t * speed)) * 0.22 * burst;
+    c.overlay.armSwingL = Math.max(0, Math.sin(t * speed * 1.13 + 1.7)) * 0.22 * burst;
+    c.target.headPitch = 0.16 + (think ? Math.sin(t * 0.8) * 0.06 : 0);
+    c.target.headRoll = think ? Math.sin(t * 0.6) * 0.12 : Math.sin(t * 2.1) * 0.03;
+    c.lookHint = [Math.sin(t * (think ? 0.7 : 2.6)) * 0.25, -0.55];
+    c.overlay.bodyY += Math.abs(Math.sin(t * speed * 0.5)) * 0.004;
+    if (think && !s.nextQ) s.nextQ = t + 1.2;
+    if (think && t > s.nextQ) {
+      c.emote(Math.random() < 0.6 ? 'question' : 'sparkle', Math.random() < 0.5 ? -0.5 : 0.5);
+      s.nextQ = t + 2.2 + Math.random() * 1.5;
+    }
+  },
+  exit(c) {
+    c.office?.removeFromParent();
+    c.mob.setGlasses?.(false);
+    c.typingDone = false;
   },
 };
 

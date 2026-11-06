@@ -18,4 +18,7 @@ contextBridge.exposeInMainWorld('mobHost', {
   captionsStatus: () => ipcRenderer.invoke('captions:status'),
   askMic: () => ipcRenderer.invoke('captions:askMic'),
   transcribe: (payload) => ipcRenderer.invoke('captions:transcribe', payload),
+  openThing: (what) => ipcRenderer.send('open:run', what),
+  onTyping: (fn) => ipcRenderer.on('typing', (_e, t) => fn(t)),
+  onSay: (fn) => ipcRenderer.on('say', (_e, m) => fn(m)),
 });

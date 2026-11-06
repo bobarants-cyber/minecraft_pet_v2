@@ -35,6 +35,7 @@ const menu = new MobMenu({
   onStopGame: () => game.stop(),
   onRewrite: (mode) => host?.rewrite(mode),
   onCaptions: () => save({ captionsOn: !settings.captionsOn }),
+  onOpen: (what) => (what ? host?.openThing(what) : chat.prefill('open ')),
 });
 menu.captionsOn = () => settings.captionsOn;
 menu.playing = () => game.currentId;
@@ -81,10 +82,14 @@ character.fsm.listeners.add((name) => host?.reportState(name));
 host?.onReminder(({ text }) => chat.announce(text));
 host?.onRewrite((r) => chat.showRewrite(r));
 
-host?.onCommand(({ type, name, surprised }) => {
+host?.onTyping(({ on }) => (on ? character.startTyping('type') : character.stopTyping()));
+host?.onSay(({ text, error }) => chat.say(text, { error }));
+
+host?.onCommand(({ type, name, surprised, prefill }) => {
   if (type === 'chat') {
     game.stop();
-    chat.open();
+    if (prefill) chat.prefill(prefill);
+    else chat.open();
   } else if (type === 'game') {
     if (name === 'stop') game.stop();
     else playGame(name);
