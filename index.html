@@ -124,6 +124,63 @@
         padding: 7px 10px;
       }
 
+      /* Notes badge */
+      .notes-badge {
+        position: fixed;
+        z-index: 7;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 6px 5px 11px;
+        border-radius: 999px;
+        background: rgba(20, 20, 22, 0.82);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 6px 18px rgba(0, 0, 0, 0.3);
+        color: #fff;
+        font: 600 12.5px/1.2 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        white-space: nowrap;
+        cursor: default;
+      }
+      .notes-badge.on {
+        display: flex;
+      }
+      .notes-badge__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ff4d5e;
+        animation: notes-blink 1.4s ease-in-out infinite;
+      }
+      .notes-badge.writing .notes-badge__dot {
+        background: #ffd23f;
+      }
+      .notes-badge.problem .notes-badge__text {
+        color: #ffb36b;
+        white-space: normal;
+        max-width: 300px;
+      }
+      @keyframes notes-blink {
+        50% { opacity: 0.3; }
+      }
+      .notes-badge__stop {
+        padding: 3px 10px;
+        border: 0;
+        border-radius: 999px;
+        background: #ffd23f;
+        color: #2b2412;
+        font: 700 12px/1.2 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .chat__result--notes {
+        max-height: 280px;
+      }
+      .chat__notes-h {
+        display: block;
+        margin-top: 6px;
+        color: #8a5a00;
+      }
+
       /* My classes */
       .classes {
         position: fixed;

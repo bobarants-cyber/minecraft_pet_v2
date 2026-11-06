@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
@@ -7,6 +8,8 @@ import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText
 import { Whisper } from './captions.js';
 import * as opener from './opener.js';
 import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
+import { NOTES_DIR, NotesSession } from './notes.js';
+import { execFile } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
 const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet', 'google meet'], ['Zoom', 'zoom'], ['Notes', 'notes']];
@@ -32,6 +35,9 @@ let expanded = false;
 let chatOpen = false;
 let reminders = null;
 let classes = null;
+let notes = null;
+let notesTimer = null;
+let writingNotes = false;
 const clock = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 let rewriting = false;
 const whisper = new Whisper(path.join(__dirname, '..'));
@@ -148,6 +154,17 @@ function buildTray() {
       ],
     },
     {
+      label: notes ? `📝 Taking notes: ${notes.title}` : writingNotes ? '📝 Writing your notes…' : '📝 Notes',
+      submenu: [
+        notes
+          ? { label: 'Stop and write my notes', click: () => stopNotes() }
+          : { label: 'Take notes now', enabled: !writingNotes, click: () => startNotes({ title: 'Notes' }) },
+        { label: 'Take notes automatically in class', type: 'checkbox', checked: settings.autoNotes, click: (i) => applySettings({ autoNotes: i.checked }) },
+        { type: 'separator' },
+        { label: 'Open my notes folder', click: () => (fs.mkdirSync(NOTES_DIR, { recursive: true }), shell.openPath(NOTES_DIR)) },
+      ],
+    },
+    {
       label: '🚀 Open',
       submenu: [
         ...QUICK_OPEN.map(([label, what]) => ({ label, click: () => openThing(what) })),
@@ -245,6 +262,16 @@ ipcMain.on('chat:focus', (_e, on) => {
 ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
   const cmd = parseCommand(String(text));
   if (cmd) return { ok: true, kind: 'reminder', text: reminders.handle(cmd) };
+  if (/^(?:please\s+)?(?:start\s+)?(?:take|taking|start)\s+(?:some\s+)?notes\b/i.test(String(text).trim())) {
+    if (notes) return { ok: true, kind: 'notes', text: `I’m already taking notes (${notes.title}). Say “stop notes” when you’re done.` };
+    startNotes({ title: 'Notes' });
+    return { ok: true, kind: 'notes', text: 'Okay! I’m listening and taking notes 📝 Say “stop notes” (or click Stop) when you’re done.' };
+  }
+  if (/^(?:please\s+)?(?:stop|end|finish)\s+(?:taking\s+)?(?:the\s+)?notes\b/i.test(String(text).trim())) {
+    if (!notes) return { ok: true, kind: 'notes', text: 'I’m not taking notes right now. Say “take notes” to start.' };
+    stopNotes();
+    return { ok: true, kind: 'notes', text: 'Done! Give me a moment to write your notes ✍️' };
+  }
   if (/^(?:show\s+)?(?:my\s+)?(?:classes|class schedule|schedule|timetable|calendar)\??$/i.test(String(text).trim())) {
     return { ok: true, kind: 'classes', text: 'Here’s your class calendar! 📅' };
   }
@@ -313,12 +340,56 @@ ipcMain.on('classes:join', (_e, id) => {
 function openClass(c, { late = false, now = false } = {}) {
   if (!c.link) return;
   classes.markOpened(c);
+  if (settings.autoNotes) startNotes({ title: c.name, endAt: c.endAt ?? classes.times(c, new Date()).end, auto: true });
   const text = now ? `📚 Opening ${c.name}…` : late ? `📚 ${c.name} already started. Opening it now!` : `📚 ${c.name} starts in ${LEAD_MINUTES} minutes! Opening your class…`;
   if (!now && Notification.isSupported()) new Notification({ title: `${personaFor(settings.mob).name}: class time!`, body: text.replace(/^📚\s*/, ''), silent: false }).show();
   send('classTime', { text });
   // Give the pet a moment to sit down at its desk, then open the link in your browser or Zoom.
   setTimeout(() => shell.openExternal(c.link).catch((err) => send('say', { text: `I couldn’t open the link for ${c.name}: ${err.message}`, error: true })), 2500);
 }
+
+// Class notes: the page listens (with the captions speech recogniser) and sends each line here while a session runs.
+function startNotes({ title = 'Notes', endAt = null, auto = false } = {}) {
+  if (notes || writingNotes) return;
+  notes = new NotesSession({ title, endAt, auto });
+  clearTimeout(notesTimer);
+  // Stop by itself shortly after the class ends (a minute's grace for the goodbye).
+  if (notes.endAt) notesTimer = setTimeout(() => stopNotes(), Math.max(10_000, notes.endAt.getTime() - Date.now() + 60_000));
+  send('notes', { active: true, title, startedAt: notes.startedAt.getTime(), endAt: notes.endAt?.getTime() ?? null, auto });
+  buildTray();
+}
+
+async function stopNotes() {
+  if (!notes) return;
+  const session = notes;
+  notes = null;
+  clearTimeout(notesTimer);
+  writingNotes = true;
+  send('notes', { active: false, writing: true, title: session.title });
+  buildTray();
+  try {
+    const r = await session.finish({ model: settings.aiModel });
+    send('notesDone', { title: session.title, file: r.file, notes: r.notes, ok: r.notesOk, lines: r.lines });
+    if (Notification.isSupported()) {
+      new Notification({ title: `${personaFor(settings.mob).name}: your notes are ready 📝`, body: `${session.title}: saved in Documents → Bbokari Notes` }).show();
+    }
+  } catch (err) {
+    send('say', { text: `I couldn’t save your notes: ${err.message}`, error: true });
+  } finally {
+    writingNotes = false;
+    send('notes', { active: false, writing: false });
+    buildTray();
+  }
+}
+
+ipcMain.on('notes:add', (_e, line) => notes?.add(line));
+ipcMain.on('notes:start', () => startNotes({ title: 'Notes' }));
+ipcMain.on('notes:stop', () => stopNotes());
+ipcMain.on('notes:open', (_e, file) => {
+  const f = String(file ?? '');
+  if (!f.startsWith(NOTES_DIR + path.sep) || !fs.existsSync(f)) return;
+  execFile('open', ['-a', 'TextEdit', f], (err) => err && shell.openPath(f));
+});
 
 function checkClasses() {
   if (!classes) return;

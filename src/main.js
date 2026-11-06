@@ -11,6 +11,7 @@ import { Chat } from './interaction/Chat.js';
 import { Games } from './games/Games.js';
 import { Captions } from './captions/Captions.js';
 import { Classes } from './interaction/Classes.js';
+import { NotesBadge } from './interaction/NotesBadge.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -25,6 +26,8 @@ const chat = new Chat({ character, stage, settings, host });
 const game = new Games({ character, stage, settings, host });
 const captions = new Captions({ character, settings, save, host });
 const classes = new Classes({ character, host, onOpen: () => chat.close() });
+const notesBadge = new NotesBadge({ character, host });
+captions.onNotice = (text, isProblem) => notesBadge.notice(text, isProblem);
 chat.onReply = (reply) => {
   if (reply.kind === 'classes') setTimeout(() => classes.open(), 600);
 };
@@ -42,10 +45,12 @@ const menu = new MobMenu({
   onCaptions: () => save({ captionsOn: !settings.captionsOn }),
   onOpen: (what) => (what ? host?.openThing(what) : chat.prefill('open ')),
   onClasses: () => classes.open(),
+  onNotes: () => (notesBadge.state.active ? host?.stopNotes() : host?.startNotes()),
 });
 menu.captionsOn = () => settings.captionsOn;
+menu.notesOn = () => notesBadge.state.active;
 menu.playing = () => game.currentId;
-const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes] });
+const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes, notesBadge] });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
 function applyMob(name) {
@@ -81,6 +86,7 @@ const loop = new Loop((dt, t) => {
   chat.update();
   captions.update();
   classes.update();
+  notesBadge.update(chat.isOpen);
 });
 loop.start();
 
@@ -91,6 +97,26 @@ host?.onRewrite((r) => chat.showRewrite(r));
 
 host?.onTyping(({ on }) => (on ? character.startTyping('type') : character.stopTyping()));
 host?.onSay(({ text, error }) => chat.say(text, { error }));
+// Class notes: listen in the background (computer sound first, the mic if there's no BlackHole) while a session runs.
+host?.onNotes((state) => {
+  notesBadge.set(state);
+  if (state.active) {
+    captions.listenFor = { computer: true, mic: false };
+    captions.onLine = (line) => {
+      host.notesAdd(line);
+      notesBadge.line();
+    };
+    character.emote('exclaim', 0.4);
+  } else {
+    captions.listenFor = null;
+    captions.onLine = null;
+    if (state.writing) character.startTyping('think');
+  }
+});
+host?.onNotesDone((r) => {
+  character.stopTyping();
+  chat.showNotes(r);
+});
 // Class time: wake up if napping, sit at the desk for a moment, and say which class is opening.
 host?.onClassTime(({ text }) => {
   if (['sleep', 'sleepy'].includes(character.stateName)) character.trigger('surprised', { then: 'idle' }, true);

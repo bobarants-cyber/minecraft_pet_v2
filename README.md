@@ -52,6 +52,20 @@ app links) are allowed. The menu bar's **📅 Classes** lists today's classes; c
 
 The pet has to be running for this, so tick **Open at login** in its menu-bar menu.
 
+## Class notes 📝
+
+When the pet opens a class from **My classes**, it also starts taking notes, and when the class ends it writes them up:
+a summary, key points, important words, homework and dates, and review questions. You can also start and stop notes yourself:
+right-click → **📝 Take notes**, the menu bar → **📝 Notes**, or type “take notes” / “stop notes” in the chat.
+
+While it listens, a **📝 Taking notes** badge with a **Stop** button sits above the pet. It uses the same speech
+recognizer as live captions (set those up first): the computer's sound through BlackHole, or your microphone if
+BlackHole isn't installed. The summary is written by Ollama.
+
+Notes are saved as text in **Documents → Bbokari Notes**, with the full transcript under the summary. No audio is ever
+saved. Turn off automatic notes in the menu bar under **📝 Notes → Take notes automatically in class**. Check that your
+school is okay with transcribing classes.
+
 ## Open things for you 🚀
 
 Right-click the pet → **🚀 Open for me** (YouTube, Google, Meet, Zoom, or **Other…**), use the menu bar → **🚀 Open**,

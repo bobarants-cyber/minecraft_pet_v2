@@ -26,4 +26,10 @@ contextBridge.exposeInMainWorld('mobHost', {
   removeClass: (id) => ipcRenderer.invoke('classes:remove', id),
   joinClass: (id) => ipcRenderer.send('classes:join', id),
   onClassTime: (fn) => ipcRenderer.on('classTime', (_e, m) => fn(m)),
+  notesAdd: (line) => ipcRenderer.send('notes:add', line),
+  startNotes: () => ipcRenderer.send('notes:start'),
+  stopNotes: () => ipcRenderer.send('notes:stop'),
+  openNotes: (file) => ipcRenderer.send('notes:open', file),
+  onNotes: (fn) => ipcRenderer.on('notes', (_e, n) => fn(n)),
+  onNotesDone: (fn) => ipcRenderer.on('notesDone', (_e, n) => fn(n)),
 });

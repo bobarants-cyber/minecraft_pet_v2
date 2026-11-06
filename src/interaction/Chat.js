@@ -60,7 +60,8 @@ export class Chat {
     });
     this.replaceBtn = this.el.querySelector('.chat__replace');
     this.copyBtn = this.el.querySelector('.chat__copy');
-    this.replaceBtn.addEventListener('click', () => this.#replace());
+    // The first result button is "Replace" for rewrites and "Open notes" for class notes.
+    this.replaceBtn.addEventListener('click', () => (this.resultAction ? this.resultAction() : this.#replace()));
     this.copyBtn.addEventListener('click', () => this.#copy());
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.mode !== 'closed') this.close();
@@ -174,6 +175,7 @@ export class Chat {
     body.textContent = text;
     row.append(head, body);
     this.result = text;
+    this.resultAction = null;
     this.replaceBtn.textContent = 'Replace';
     this.copyBtn.textContent = 'Copy';
     this.replaceBtn.disabled = this.copyBtn.disabled = false;
@@ -200,6 +202,44 @@ export class Chat {
     this.host?.copyText(this.result);
     this.copyBtn.textContent = 'Copied ✓';
     setTimeout(() => this.mode === 'toast' && this.el.classList.contains('result') && this.close(), 900);
+  }
+
+  /** Finished class notes: the summary in the bubble, with "Open notes" (the saved file) and "Copy". */
+  showNotes({ title, file, notes, ok, lines }) {
+    if (this.isOpen) this.close();
+    const c = this.character;
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet';
+    const head = document.createElement('b');
+    head.textContent = `📝 ${title} notes`;
+    const body = document.createElement('div');
+    body.className = 'chat__result chat__result--notes';
+    // Headings bold, the rest as plain text (never as HTML, since it comes from the AI).
+    if (ok) {
+      for (const line of notes.trim().split('\n')) {
+        const h = /^#+\s*(.*)$/.exec(line);
+        const el = document.createElement(h ? 'b' : 'div');
+        el.className = h ? 'chat__notes-h' : '';
+        el.textContent = (h ? h[1] : line.replace(/\*\*(.+?)\*\*/g, '$1')) || '\u00a0';
+        body.appendChild(el);
+      }
+    } else body.textContent = lines
+        ? 'I saved everything that was said, but couldn’t write the summary. Is the Ollama app open?'
+        : 'I didn’t hear anything, so there’s nothing to write down. Check that 🎤 or 💻 works in Live captions.';
+    if (ok) body.style.whiteSpace = 'normal';
+    row.append(head, body);
+    this.result = ok ? notes : null;
+    this.resultAction = () => {
+      this.host?.openNotes(file);
+      this.close();
+    };
+    this.replaceBtn.textContent = 'Open notes';
+    this.copyBtn.textContent = 'Copy';
+    this.replaceBtn.disabled = !file;
+    this.copyBtn.disabled = !ok;
+    c.face.setExpression(ok ? 'joy' : 'nervous');
+    if (ok) c.emote('sparkle', -0.5);
+    this.#toast(row, { hideAfter: 0, result: true });
   }
 
   /** A short note from the pet in a bubble (e.g. "I opened YouTube"), added to the chat if it's open. */

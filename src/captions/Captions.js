@@ -33,6 +33,11 @@ export class Captions {
     this.lines = [];
     this.syncing = false;
     this.problem = null;
+    /** While taking notes: which sources to listen to even with the captions panel hidden ({ mic, computer }). */
+    this.listenFor = null;
+    /** Called with every caption line (used by notes), and with notices/problems. */
+    this.onLine = null;
+    this.onNotice = null;
 
     this.el = document.createElement('div');
     this.el.className = 'captions';
@@ -78,9 +83,10 @@ export class Captions {
   update() {
     const on = this.visible;
     this.el.classList.toggle('on', on);
+    const extra = this.listenFor ?? {};
     const want = {
-      mic: on && !!this.settings.captionsMic,
-      computer: on && !!this.settings.captionsComputer,
+      mic: (on && !!this.settings.captionsMic) || !!extra.mic,
+      computer: (on && !!this.settings.captionsComputer) || !!extra.computer,
     };
     for (const chip of this.el.querySelectorAll('.captions__chip')) chip.classList.toggle('is-on', !!this.settings[SOURCES[chip.dataset.src].setting]);
     this.langEl.textContent = `→ ${LANG_NAMES[this.settings.captionsLang] ?? 'English'}`;
@@ -127,7 +133,12 @@ export class Captions {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const dev = devices.find((d) => d.kind === 'audioinput' && VIRTUAL_DEVICE.test(d.label));
         if (!dev) {
-          this.save({ captionsComputer: false });
+          // Taking notes without BlackHole: listen through the microphone instead.
+          if (this.listenFor?.computer) {
+            this.listenFor = { mic: true, computer: false };
+            this.onNotice?.('No BlackHole, so I’m listening through the 🎤 microphone instead.', false);
+          }
+          if (this.settings.captionsComputer) this.save({ captionsComputer: false });
           return this.#notice('To caption the computer’s sound, install BlackHole first (see “Live captions” in the README).', true);
         }
         deviceId = dev.deviceId;
@@ -199,7 +210,9 @@ export class Captions {
         if (!text) continue;
         // With speakers on, the mic hears the computer too; don't show the same words twice.
         if (job.kind === 'mic' && this.lines.some((l) => l.kind === 'computer' && job.at - l.at < 6000 && similar(l.text, text))) continue;
-        this.#add({ kind: job.kind, text, language: res.language, translation: cleanTranscript(res.translation) || null, at: job.at });
+        const line = { kind: job.kind, text, language: res.language, translation: cleanTranscript(res.translation) || null, at: job.at };
+        this.#add(line);
+        this.onLine?.({ ...line, time: Date.now() });
       }
     } finally {
       this.working = false;
@@ -208,6 +221,7 @@ export class Captions {
 
   #notice(text, isProblem = false) {
     this.problem = isProblem ? text : null;
+    this.onNotice?.(text, isProblem);
     this.linesEl.replaceChildren(Object.assign(document.createElement('div'), { className: `captions__notice${isProblem ? ' is-problem' : ''}`, textContent: text }));
     this.lines = [];
   }
