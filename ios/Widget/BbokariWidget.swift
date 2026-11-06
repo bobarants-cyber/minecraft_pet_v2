@@ -39,6 +39,18 @@ struct BbokariProvider: TimelineProvider {
     }
 }
 
+/// Bbokari's picture. With the tinted or clear Home Screen style, iOS paints full-colour widget images as a solid
+/// white shape unless told otherwise; this keeps the picture visible (tinted to match) in those styles.
+struct BbokariPicture: View {
+    var body: some View {
+        if #available(iOS 18.0, *) {
+            Image("Bbokari").resizable().widgetAccentedRenderingMode(.accentedDesaturated)
+        } else {
+            Image("Bbokari").resizable()
+        }
+    }
+}
+
 struct BbokariWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: BbokariEntry
@@ -57,7 +69,7 @@ struct BbokariWidgetView: View {
             }
         case .systemMedium:
             HStack(spacing: 12) {
-                Image("Bbokari").resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18))
+                BbokariPicture().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18))
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Bbokari").font(.headline).foregroundStyle(.secondary)
                     Text(entry.line).font(.title3.bold()).lineLimit(3).minimumScaleFactor(0.7)
@@ -66,7 +78,7 @@ struct BbokariWidgetView: View {
             }
         default:
             ZStack(alignment: .bottom) {
-                Image("Bbokari").resizable().scaledToFill()
+                BbokariPicture().scaledToFill()
                 Text(entry.line)
                     .font(.caption.bold())
                     .lineLimit(2)
