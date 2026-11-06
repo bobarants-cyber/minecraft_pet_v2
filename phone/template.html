@@ -1,0 +1,869 @@
+<meta charset="utf-8">
+<title>Pocket Bbokari</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root{
+  --sky-top:#8fd3ff; --sky-bot:#e6f6ff; --hill:#9be08a; --hill-dark:#6cc35d;
+  --ink:#2b2140; --ink-soft:#5d5470; --card:rgba(255,255,255,.88); --card-solid:#ffffff;
+  --line:rgba(43,33,64,.12); --accent:#ffb21e; --accent-ink:#4a2a00; --pink:#ff6fa8;
+  --love:#ff5f8f; --food:#ffa62b; --energy:#4dabf7; --shadow:0 6px 20px rgba(30,40,80,.18);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --sky-top:#141a3a; --sky-bot:#3a3570; --hill:#2f5d3b; --hill-dark:#244a2f;
+  --ink:#f3efff; --ink-soft:#b9b2d6; --card:rgba(30,28,56,.88); --card-solid:#25224a;
+  --line:rgba(255,255,255,.14); --shadow:0 6px 20px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --sky-top:#141a3a; --sky-bot:#3a3570; --hill:#2f5d3b; --hill-dark:#244a2f;
+  --ink:#f3efff; --ink-soft:#b9b2d6; --card:rgba(30,28,56,.88); --card-solid:#25224a;
+  --line:rgba(255,255,255,.14); --shadow:0 6px 20px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden}
+body{
+  font-family:ui-rounded,"SF Pro Rounded",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--ink); background:var(--sky-bot);
+  background:linear-gradient(var(--sky-top),var(--sky-bot) 62%);
+  user-select:none;-webkit-user-select:none;touch-action:manipulation;
+}
+body.asleep{--sky-top:#0d1030;--sky-bot:#2a2558;--hill:#24452e;--hill-dark:#1c3824;--ink:#f3efff;--ink-soft:#b9b2d6;--card:rgba(30,28,56,.88);--card-solid:#25224a;--line:rgba(255,255,255,.14)}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;
+  padding:max(10px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+#hill{position:absolute;left:-30%;right:-30%;bottom:-8%;height:42%;border-radius:50% 50% 0 0;
+  background:radial-gradient(ellipse at 50% 10%,var(--hill),var(--hill-dark));z-index:0;transition:background .6s}
+#stage{position:absolute;inset:0;z-index:1}
+#stage canvas{display:block;width:100%;height:100%}
+header,#dock,#bubble,#fx,.sheet,#scrim,#loading{position:relative;z-index:2}
+header{display:flex;align-items:center;gap:10px;max-width:520px;width:100%;margin:0 auto}
+.name{font-weight:800;font-size:20px;letter-spacing:.2px;white-space:nowrap}
+.stars{margin-left:auto;background:var(--card);border-radius:999px;padding:6px 12px;font-weight:800;box-shadow:var(--shadow);white-space:nowrap}
+.stats{display:flex;gap:8px;max-width:520px;width:100%;margin:10px auto 0;position:relative;z-index:2}
+.stat{flex:1;background:var(--card);border-radius:14px;padding:6px 8px;box-shadow:var(--shadow);min-width:0}
+.stat b{font-size:12px;display:flex;justify-content:space-between;color:var(--ink-soft);font-weight:700}
+.bar{height:7px;border-radius:9px;background:var(--line);margin-top:4px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:9px;transition:width .5s}
+#bubble{position:absolute;left:0;top:0;max-width:min(78vw,340px);background:var(--card-solid);color:var(--ink);
+  padding:10px 14px;border-radius:18px;font-size:16px;line-height:1.35;box-shadow:var(--shadow);
+  transform:translate(-50%,-100%);opacity:0;transition:opacity .25s;pointer-events:none;white-space:pre-wrap;overflow-wrap:anywhere}
+#bubble.on{opacity:1}
+#bubble::after{content:"";position:absolute;left:50%;bottom:-8px;margin-left:-8px;border:8px solid transparent;border-bottom:0;border-top-color:var(--card-solid)}
+#fx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pop{position:absolute;font-size:28px;transform:translate(-50%,-50%);animation:rise 1.4s ease-out forwards}
+@keyframes rise{to{transform:translate(calc(-50% + var(--dx,0px)),-170%) scale(1.3);opacity:0}}
+.fly{position:absolute;font-size:40px;transform:translate(-50%,-50%);transition:left .55s cubic-bezier(.3,.7,.4,1),top .55s cubic-bezier(.3,-.6,.6,1),transform .55s}
+#ball{position:absolute;font-size:34px;transform:translate(-50%,-50%);display:none}
+.spacer{flex:1}
+#dock{display:flex;gap:8px;max-width:520px;width:100%;margin:0 auto;
+  background:var(--card);border-radius:24px;padding:8px;box-shadow:var(--shadow)}
+#dock button{all:unset;flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:16px;font-size:11px;font-weight:700;color:var(--ink-soft)}
+#dock button span{font-size:26px;line-height:1}
+#dock button:active{background:var(--line);transform:scale(.94)}
+#dock button[hidden],.floatBtn[hidden]{display:none}
+#scrim{position:fixed;inset:0;background:rgba(10,8,30,.35);opacity:0;pointer-events:none;transition:opacity .25s;z-index:3}
+#scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:4;margin:0 auto;max-width:520px;background:var(--card-solid);
+  border-radius:24px 24px 0 0;padding:14px max(16px,env(safe-area-inset-left)) max(18px,env(safe-area-inset-bottom));
+  box-shadow:0 -8px 30px rgba(0,0,0,.25);transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.3,1);max-height:82%;overflow:auto}
+.sheet.on{transform:none}
+.sheet h2{margin:0 0 10px;font-size:19px;display:flex;align-items:center}
+.close{all:unset;margin-left:auto;cursor:pointer;width:34px;height:34px;border-radius:50%;background:var(--line);text-align:center;line-height:34px;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.chip{all:unset;cursor:pointer;text-align:center;border:2px solid var(--line);border-radius:16px;padding:12px 4px;font-weight:700;font-size:14px}
+.chip span{display:block;font-size:30px;margin-bottom:4px}
+.chip small{display:block;color:var(--ink-soft);font-weight:600;margin-top:2px}
+.chip.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.chip.locked{opacity:.6}
+.btn{all:unset;cursor:pointer;background:var(--accent);color:var(--accent-ink);font-weight:800;padding:10px 16px;border-radius:14px;text-align:center}
+.btn.ghost{background:var(--line);color:var(--ink)}
+.muted{color:var(--ink-soft);font-size:14px}
+/* games */
+.ttt{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:min(100%,300px);margin:8px auto}
+.ttt button{all:unset;cursor:pointer;aspect-ratio:1;border-radius:16px;background:var(--line);font-size:44px;display:flex;align-items:center;justify-content:center}
+.rps{display:flex;gap:10px;justify-content:center;margin:12px 0}
+.rps button{all:unset;cursor:pointer;font-size:46px;background:var(--line);border-radius:20px;padding:10px 16px}
+.rps button:active,.ttt button:active{transform:scale(.94)}
+.vs{text-align:center;font-size:44px;margin:6px 0}
+#bubblesArea{position:relative;height:min(52vh,380px);border-radius:18px;background:linear-gradient(#bfe8ff,#e8f7ff);overflow:hidden;touch-action:none}
+.bub{position:absolute;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff,rgba(255,255,255,.2) 40%,rgba(120,200,255,.5));border:2px solid rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;font-size:20px}
+.row{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px}
+.score{font-weight:800;text-align:center;margin:4px 0}
+/* chat */
+#chatLog{display:flex;flex-direction:column;gap:8px;max-height:38vh;overflow:auto;margin-bottom:10px}
+.msg{max-width:85%;padding:8px 12px;border-radius:16px;font-size:15px;line-height:1.35;user-select:text;-webkit-user-select:text;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--accent);color:var(--accent-ink)}
+.msg.pet{align-self:flex-start;background:var(--line)}
+#chatForm{display:flex;gap:8px}
+#chatInput{flex:1;min-width:0;font:inherit;font-size:16px;padding:10px 14px;border-radius:14px;border:2px solid var(--line);background:transparent;color:var(--ink);user-select:text;-webkit-user-select:text}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink-soft)}
+body.render header,body.render .stats,body.render #dock,body.render #loading{display:none}
+body.render #bubble{font-size:22px;padding:12px 18px;transition:none}
+#floatVideo{position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+.floatBtn{all:unset;cursor:pointer;background:var(--card);border-radius:999px;padding:6px 12px;font-weight:800;box-shadow:var(--shadow);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){.pop{animation-duration:.01s}.sheet,.fly{transition:none}}
+</style>
+
+<div id="app">
+  <div id="hill"></div>
+  <div id="stage"></div>
+  <header>
+    <div class="name">🐥 Bbokari</div>
+    <div class="stars" id="stars">⭐ 0</div>
+    <button class="floatBtn" id="bFocus" hidden>🍅</button>
+    <button class="floatBtn" id="bFloat">🪟 Float</button>
+  </header>
+  <div class="stats">
+    <div class="stat"><b><span>💗 Love</span></b><div class="bar"><i id="barLove" style="background:var(--love)"></i></div></div>
+    <div class="stat"><b><span>🍓 Food</span></b><div class="bar"><i id="barFood" style="background:var(--food)"></i></div></div>
+    <div class="stat"><b><span>⚡ Energy</span></b><div class="bar"><i id="barEnergy" style="background:var(--energy)"></i></div></div>
+  </div>
+  <div id="loading">Bbokari is waking up…</div>
+  <div class="spacer"></div>
+  <nav id="dock">
+    <button id="bFeed"><span>🍓</span>Feed</button>
+    <button id="bBall"><span>⚽</span>Play</button>
+    <button id="bGames"><span>🎮</span>Games</button>
+    <button id="bOutfit"><span>🎀</span>Outfit</button>
+    <button id="bChat" hidden><span>💬</span>Chat</button>
+    <button id="bSleep"><span>💤</span>Sleep</button>
+  </nav>
+  <div id="fx"><div id="ball">⚽</div></div>
+  <div id="bubble"></div>
+</div>
+
+<div id="scrim"></div>
+<section class="sheet" id="sheetOutfit">
+  <h2>🎀 Outfits <button class="close" data-close>✕</button></h2>
+  <p class="muted" style="margin:0 0 10px">Win games and play ball to earn ⭐ stars, then spend them on new outfits.</p>
+  <div class="grid" id="outfits"></div>
+</section>
+<section class="sheet" id="sheetGames">
+  <h2 id="gameTitle">🎮 Games <button class="close" data-close>✕</button></h2>
+  <div id="gameBody"></div>
+</section>
+<section class="sheet" id="sheetChat">
+  <h2>💬 Chat with Bbokari <button class="close" data-close>✕</button></h2>
+  <div id="chatLog"></div>
+  <form id="chatForm" autocomplete="off">
+    <input id="chatInput" placeholder="Say something to Bbokari…" maxlength="300" enterkeyhint="send">
+    <button class="btn" type="submit">Send</button>
+  </form>
+</section>
+
+<section class="sheet" id="sheetFloat">
+  <h2>🪟 Floating Bbokari <button class="close" data-close>✕</button></h2>
+  <p style="margin-top:0">Bbokari pops out into a little window that stays on top of your other apps, like on your Mac.</p>
+  <ol class="muted" style="padding-left:20px;line-height:1.5">
+    <li>Tap <b>Float Bbokari</b>.</li>
+    <li>Go to your Home Screen or open any app. Bbokari stays in the corner.</li>
+    <li>Drag him anywhere, pinch to resize, or swipe him to the side of the screen to tuck him away.</li>
+  </ol>
+  <div class="row"><button class="btn" id="bFloatGo">🪟 Float Bbokari</button></div>
+  <p class="muted" id="floatMsg" style="text-align:center"></p>
+</section>
+<video id="floatVideo" muted loop playsinline webkit-playsinline preload="auto"></video>
+<script type="application/octet-stream" id="mp4">__MP4__</script>
+<script type="application/octet-stream" id="glb">__GLB__</script>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Render mode: used only to film the floating-window video (driven frame by frame from outside).
+const RENDER = !!window.__RENDER__;
+let vclock = 0;
+const clock = () => (RENDER ? vclock * 1000 : performance.now());
+if (RENDER) document.body.classList.add('render');
+
+/* ---------------- saved state ---------------- */
+const KEY = 'pocketBbokari.v1';
+const S = { love: 70, food: 70, energy: 80, stars: 3, outfit: 'none', owned: ['none', 'bow'], asleep: false, at: Date.now() };
+if (!RENDER) try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
+{ // time away: stats drift down a little (never below 10 while away)
+  const mins = clamp((Date.now() - (S.at || Date.now())) / 60000, 0, 60 * 24);
+  if (S.asleep) S.energy = clamp(S.energy + mins * 2, 0, 100);
+  else S.energy = Math.max(Math.min(S.energy, 10), S.energy - mins / 6);
+  S.food = Math.max(Math.min(S.food, 10), S.food - mins / 4);
+  S.love = Math.max(Math.min(S.love, 10), S.love - mins / 6);
+}
+function save() { if (RENDER) return; S.at = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
+function bump(k, d) { S[k] = clamp(S[k] + d, 0, 100); renderStats(); save(); }
+function renderStats() {
+  $('barLove').style.width = S.love + '%';
+  $('barFood').style.width = S.food + '%';
+  $('barEnergy').style.width = S.energy + '%';
+  $('stars').textContent = '⭐ ' + S.stars;
+}
+function addStars(n) { S.stars += n; renderStats(); save(); }
+renderStats();
+
+/* ---------------- 3D scene ---------------- */
+const stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a60, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(1.5, 4, 3);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: 0.5, far: 10 });
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(3, 40), new THREE.ShadowMaterial({ opacity: 0.18 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+let viewW = 1.8; // world units visible across at the pet
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  // Fit ~1.9 units across in portrait, but never closer than showing ~2.6 units of height.
+  const dist = Math.max(1.9 / (2 * tan * camera.aspect), 2.6 / (2 * tan));
+  viewW = 2 * tan * camera.aspect * dist;
+  camera.position.set(0, 1.0, dist);
+  // Pet stands a bit below the middle, leaving room for the bubble.
+  camera.lookAt(0, 0.85 - 0.12 * (dist * tan * 2) / 2.6, 0);
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+/* ---------------- Bbokari ---------------- */
+const MODEL_HEIGHT = 1.12, HOVER = 0.06, HEAD_Y = 0.355;
+const root = new THREE.Group(), hips = new THREE.Group(), torso = new THREE.Group();
+hips.position.y = HOVER;
+root.add(hips); hips.add(torso); scene.add(root);
+const P = { loaded: false, head: null, arms: [], legs: [], eyes: [], blush: [], tears: [], mesh: null, hats: {}, glasses: null };
+
+function std(color, extra = {}) { return new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0, ...extra }); }
+function surface(head, mesh, x, y) {
+  const o = head.localToWorld(new THREE.Vector3(x, y - HEAD_Y, 1));
+  const t = head.localToWorld(new THREE.Vector3(x, y - HEAD_Y, 0));
+  const hit = new THREE.Raycaster(o, t.sub(o).normalize()).intersectObject(mesh, true)[0];
+  if (!hit) return { point: new THREE.Vector3(x, y - HEAD_Y, 0.28), normal: new THREE.Vector3(0, 0, 1) };
+  const point = head.worldToLocal(hit.point.clone());
+  const n = (hit.face?.normal ?? new THREE.Vector3(0, 0, 1)).clone().transformDirection(hit.object.matrixWorld);
+  return { point, normal: n.transformDirection(head.matrixWorld.clone().invert()).normalize() };
+}
+function buildEyes(head, mesh) {
+  const r = 0.036, DARK = 0x2a1a10;
+  const black = std(DARK, { roughness: 0.2 }), white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const tearM = std(0x7fd4ff, { transparent: true, opacity: 0.9 });
+  for (const side of [1, -1]) {
+    const { point, normal } = surface(head, mesh, side * 0.115, 0.575);
+    const eye = new THREE.Group();
+    eye.position.copy(point).addScaledVector(normal, 0.002);
+    eye.lookAt(eye.position.clone().add(normal));
+    head.add(eye);
+    const open = new THREE.Group();
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), black); bead.scale.set(1, 1.12, 0.35);
+    const sp = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 12, 8), white); sp.position.set(r * 0.32, r * 0.4, r * 0.3);
+    const sp2 = new THREE.Mesh(new THREE.SphereGeometry(r * 0.13, 8, 6), white); sp2.position.set(-r * 0.3, -r * 0.35, r * 0.3);
+    open.add(bead, sp, sp2);
+    const closed = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.16, r * 1.5, 4, 8), black);
+    closed.rotation.z = Math.PI / 2; closed.position.y = -r * 0.2;
+    const happy = new THREE.Mesh(new THREE.TorusGeometry(r * 0.8, r * 0.17, 8, 20, Math.PI), black);
+    happy.position.y = -r * 0.35;
+    const tear = new THREE.Mesh(new THREE.SphereGeometry(r * 0.32, 12, 10), tearM);
+    tear.scale.set(0.8, 1.2, 0.6); tear.visible = false;
+    eye.add(open, closed, happy, tear);
+    P.eyes.push({ eye, open, closed, happy, sparkle: sp, side, tear });
+    const ch = surface(head, mesh, side * 0.185, 0.505);
+    const blush = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 24), new THREE.MeshBasicMaterial({ color: 0xff7aa2, transparent: true, opacity: 0.3, depthWrite: false }));
+    blush.position.copy(ch.point).addScaledVector(ch.normal, 0.003);
+    blush.lookAt(blush.position.clone().add(ch.normal));
+    blush.scale.set(1.3, 0.75, 1);
+    head.add(blush);
+    P.blush.push(blush);
+  }
+}
+
+/* outfits (head-bone units; the head top is at about y = 0.645) */
+function cyl(rt, rb, h, m, seg = 24) { const x = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m); x.castShadow = true; return x; }
+function ball(r, m) { const x = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m); x.castShadow = true; return x; }
+function stripes(colors) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+  const g = c.getContext('2d');
+  colors.forEach((col, i) => { g.fillStyle = col; g.fillRect((i * 128) / colors.length, 0, 128 / colors.length + 1, 64); });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const HATS = {
+  party() { const g = new THREE.Group();
+    const cone = cyl(0, 0.16, 0.36, new THREE.MeshStandardMaterial({ map: stripes(['#ff6b9a', '#ffd43b', '#4dabf7', '#69db7c', '#ff6b9a', '#ffd43b', '#4dabf7', '#69db7c']), roughness: 0.6 }));
+    cone.position.y = 0.18; const pom = ball(0.05, std(0xffffff, { roughness: 1 })); pom.position.y = 0.37;
+    g.add(cone, pom); g.position.set(0.1, 0.6, 0); g.rotation.z = -0.3; return g; },
+  crown() { const g = new THREE.Group(); const gold = std(0xf2c230, { metalness: 0.7, roughness: 0.25 });
+    const band = cyl(0.17, 0.17, 0.08, gold, 28); band.material.side = THREE.DoubleSide; g.add(band);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
+      const spike = cyl(0, 0.035, 0.09, gold, 4); spike.position.set(Math.cos(a) * 0.15, 0.08, Math.sin(a) * 0.15);
+      const gem = ball(0.02, std([0xff4d6d, 0x4dabf7, 0x69db7c][i % 3], { roughness: 0.15 })); gem.position.set(Math.cos(a) * 0.17, 0, Math.sin(a) * 0.17);
+      g.add(spike, gem); }
+    g.position.set(0.02, 0.64, 0); g.rotation.z = -0.12; return g; },
+  beanie() { const g = new THREE.Group(); const cap = ball(0.33, std(0x4c6ef5, { roughness: 1 })); cap.scale.set(1, 0.6, 1);
+    const cuff = cyl(0.335, 0.335, 0.08, std(0x364fc7, { roughness: 1 }), 32); cuff.position.y = -0.02;
+    const pom = ball(0.07, std(0xffffff, { roughness: 1 })); pom.position.y = 0.22;
+    g.add(cap, cuff, pom); g.position.set(0, 0.48, -0.01); return g; },
+  bow() { const g = new THREE.Group(); const pink = std(0xff5fa2);
+    for (const s of [-1, 1]) { const w = cyl(0, 0.09, 0.16, pink, 4); w.rotation.z = (s * Math.PI) / 2; w.position.x = s * 0.08; w.scale.z = 0.5; g.add(w); }
+    g.add(ball(0.04, std(0xe8368f))); g.position.set(0.2, 0.55, 0.12); g.rotation.set(0.3, 0.3, -0.5); return g; },
+  flower() { const g = new THREE.Group(); const petal = std(0xff8fc8, { roughness: 0.7 });
+    for (let i = 0; i < 6; i++) { const p = ball(0.045, petal); const a = (i / 6) * Math.PI * 2; p.scale.set(1, 0.4, 0.7); p.position.set(Math.cos(a) * 0.055, 0, Math.sin(a) * 0.055); g.add(p); }
+    const m = ball(0.035, std(0xfff3a0)); m.position.y = 0.01; g.add(m);
+    g.position.set(-0.22, 0.5, 0.15); g.rotation.set(1.1, 0, 0.5); return g; },
+  sunglasses() { const g = new THREE.Group(); const frame = std(0x111111, { roughness: 0.3, metalness: 0.2 });
+    const lensM = new THREE.MeshBasicMaterial({ color: 0x14141a, transparent: true, opacity: 0.85, depthWrite: false });
+    const c = P.eyes.map((e) => e.eye.position.clone().add(new THREE.Vector3(0, 0.002, 0.022)));
+    c.forEach((p, i) => { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.007, 8, 28), frame); ring.position.copy(p); ring.rotation.y = P.eyes[i].side * 0.12;
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.052, 24), lensM); lens.position.copy(p); lens.rotation.y = P.eyes[i].side * 0.12;
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.2), frame); arm.position.set(p.x + P.eyes[i].side * 0.06, p.y + 0.01, p.z - 0.1); arm.rotation.y = P.eyes[i].side * 0.35;
+      g.add(ring, lens, arm); });
+    const mid = c[0].clone().add(c[1]).multiplyScalar(0.5); const gap = Math.max(0.015, c[0].distanceTo(c[1]) / 2 - 0.056);
+    const br = new THREE.Mesh(new THREE.TorusGeometry(gap, 0.006, 6, 12, Math.PI), frame); br.position.set(mid.x, mid.y + 0.012, mid.z + 0.004); g.add(br);
+    return g; },
+};
+const OUTFITS = [
+  ['none', '🐥', 'None', 0], ['bow', '🎀', 'Bow', 0], ['flower', '🌼', 'Flower', 3], ['party', '🎉', 'Party hat', 5],
+  ['beanie', '🧢', 'Beanie', 8], ['sunglasses', '😎', 'Shades', 10], ['crown', '👑', 'Crown', 15],
+];
+function wear(name) {
+  if (!P.loaded) return;
+  for (const h of Object.values(P.hats)) h.visible = false;
+  if (name !== 'none' && HATS[name]) {
+    if (!P.hats[name]) { P.hats[name] = HATS[name](); P.head.add(P.hats[name]); }
+    P.hats[name].visible = true;
+  }
+}
+
+function loadModel() {
+  const b64 = $('glb').textContent.trim();
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', (gltf) => {
+    const bones = {};
+    gltf.scene.traverse((o) => {
+      if (o.isSkinnedMesh) { P.mesh = o; o.castShadow = true; o.frustumCulled = false;
+        o.material.vertexColors = true; o.material.roughness = 0.85; o.material.metalness = 0; }
+      if (o.isBone) bones[o.name] = o;
+    });
+    const model = new THREE.Group();
+    model.scale.setScalar(MODEL_HEIGHT);
+    model.add(gltf.scene);
+    torso.add(model);
+    P.head = bones.head; P.arms = [bones.arm_R, bones.arm_L]; P.legs = [bones.leg_R, bones.leg_L];
+    model.updateWorldMatrix(true, true);
+    buildEyes(P.head, P.mesh);
+    P.loaded = true;
+    wear(S.outfit);
+    $('loading').remove();
+    greet();
+  }, (err) => { $('loading').textContent = 'Bbokari could not load 😢 Try reloading.'; console.error(err); });
+}
+
+/* ---------------- behaviour ---------------- */
+const face = { open: 1, happy: 0, blush: 0, tears: 0, look: { x: 0, y: 0 }, blink: 1 };
+let act = { name: 'idle', t: 0, dur: Infinity, done: null };
+let walkPhase = 0, walkAmount = 0, targetX = null, facing = 0, spin = 0, nextBlink = 2, nextLook = 1, lookTarget = { x: 0, y: 0 };
+let time = 0, spinAngle = 0;
+function play(name, dur, done) { act = { name, t: 0, dur, done }; }
+function busy() { return act.name !== 'idle' && act.name !== 'sleep'; }
+
+function updatePet(dt) {
+  time += dt;
+  act.t += dt;
+  if (act.t >= act.dur) { const d = act.done; act = { name: S.asleep ? 'sleep' : 'idle', t: 0, dur: Infinity }; d?.(); }
+  const a = act.name, t = act.t;
+  const pose = { y: 0, crouch: 0, pitch: 0, roll: 0, hp: 0, hy: 0, hr: 0, rR: 0, sR: 0, rL: 0, sL: 0, flap: 0 };
+  let happy = 0, open = 1, tears = 0, blush = 0;
+
+  // walking towards a spot (ball chase)
+  if (targetX !== null) {
+    const dx = targetX - root.position.x;
+    if (Math.abs(dx) > 0.03) {
+      const step = Math.sign(dx) * Math.min(Math.abs(dx), dt * 1.1);
+      root.position.x += step;
+      walkAmount += (1 - walkAmount) * Math.min(1, dt * 8);
+      facing += (Math.sign(dx) * 1.1 - facing) * Math.min(1, dt * 8);
+    } else { targetX = null; }
+  }
+  if (targetX === null) { walkAmount += (0 - walkAmount) * Math.min(1, dt * 6); facing += (0 - facing) * Math.min(1, dt * 5); }
+  walkPhase += dt * 11 * walkAmount;
+
+  const breathe = Math.sin(time * 2.2);
+  if (a === 'idle') {
+    nextLook -= dt;
+    if (nextLook < 0) { nextLook = rand(1.5, 4); lookTarget = { x: rand(-0.8, 0.8), y: rand(-0.3, 0.4) }; }
+    pose.hy = lookTarget.x * 0.35; pose.hp = -lookTarget.y * 0.2; pose.hr = Math.sin(time * 0.7) * 0.05;
+    if (S.food < 20 || S.love < 20) { tears = 1; pose.hp = 0.25; }
+    else if (S.love > 80) blush = 0.6;
+    if (S.energy < 20) open = 0.55;
+  } else if (a === 'hop') {
+    const k = Math.min(1, t / act.dur);
+    pose.y = Math.abs(Math.sin(k * Math.PI * 2)) * 0.22; pose.crouch = pose.y < 0.03 ? 0.05 : 0;
+    pose.rR = pose.rL = 2; pose.flap = 1; happy = 1; blush = 1;
+  } else if (a === 'wave') {
+    pose.rR = 2.2; pose.sR = 0.4 + Math.sin(t * 12) * 0.25; pose.hr = 0.12; happy = 1;
+  } else if (a === 'eat') {
+    pose.hp = 0.28 + Math.sin(t * 14) * 0.18; happy = 1; blush = 0.8; pose.sR = pose.sL = 0.4;
+  } else if (a === 'dance') {
+    pose.roll = Math.sin(t * 7) * 0.18; pose.y = Math.abs(Math.sin(t * 7)) * 0.08;
+    pose.rR = 1.5 + Math.sin(t * 7) * 0.8; pose.rL = 1.5 - Math.sin(t * 7) * 0.8; happy = 1; blush = 1;
+  } else if (a === 'sad') {
+    pose.hp = 0.35; tears = 1; pose.sR = pose.sL = -0.2;
+  } else if (a === 'think') {
+    pose.hr = 0.25; pose.hy = 0.3; pose.hp = -0.15; pose.rR = 1.2; pose.sR = 0.9; lookTarget = { x: 0.6, y: 0.6 };
+  } else if (a === 'kick') {
+    pose.y = Math.sin(Math.min(1, t / act.dur) * Math.PI) * 0.1; pose.rR = pose.rL = 1.5; pose.flap = 1; happy = 1;
+  } else if (a === 'surprised') {
+    pose.y = Math.sin(Math.min(1, t / 0.4) * Math.PI) * 0.12; pose.rR = pose.rL = 1.8; pose.hp = -0.15;
+  } else if (a === 'sleep') {
+    open = 0; pose.hp = 0.38 + breathe * 0.03; pose.crouch = 0.05; pose.hr = 0.12;
+  }
+  if (a !== 'sleep' && a !== 'think') face.look.x += ((a === 'idle' ? lookTarget.x : 0) - face.look.x) * Math.min(1, dt * 10);
+  if (a === 'think') face.look.x += (0.6 - face.look.x) * Math.min(1, dt * 10);
+  face.look.y += ((a === 'idle' || a === 'think' ? lookTarget.y : 0) - face.look.y) * Math.min(1, dt * 10);
+
+  // blink
+  nextBlink -= dt;
+  if (nextBlink < 0) { nextBlink = rand(2, 5); face.blinkT = 0.14; }
+  if (face.blinkT > 0) { face.blinkT -= dt; face.blink = 0.05; } else face.blink = 1;
+
+  face.happy += (happy - face.happy) * Math.min(1, dt * 12);
+  face.open += (open - face.open) * Math.min(1, dt * 8);
+  face.tears = tears; face.blush += (blush - face.blush) * Math.min(1, dt * 5);
+
+  // body
+  const step = Math.abs(Math.sin(walkPhase)) * 0.03 * walkAmount;
+  hips.position.y = HOVER + pose.y + step - pose.crouch * 0.4;
+  const squash = 1 - pose.crouch * 1.4;
+  torso.scale.set(1 / Math.sqrt(squash) + breathe * 0.004, squash + breathe * 0.008, 1 / Math.sqrt(squash));
+  torso.rotation.set(pose.pitch, 0, pose.roll + Math.sin(walkPhase) * 0.07 * walkAmount);
+  spin *= Math.pow(0.04, dt);
+  spinAngle += spin * dt;
+  if (Math.abs(spin) < 1.5) { const home = Math.round(spinAngle / (Math.PI * 2)) * Math.PI * 2; spinAngle += (home - spinAngle) * Math.min(1, dt * 4); }
+  root.rotation.y = facing + spinAngle;
+  if (!P.loaded) return;
+  const k = 1 - Math.exp(-9 * dt);
+  const h = P.head.rotation;
+  h.x += (pose.hp * 0.6 - h.x) * k; h.y += (pose.hy * 0.7 - h.y) * k; h.z += (pose.hr * 0.6 - h.z) * k;
+  const flap = Math.sin(time * 24) * 0.4 * pose.flap;
+  const arm = (raise, swing) => [-swing * 0.8 - Math.min(1, raise * 0.5) * 0.45, 0, 0.06 + Math.min(1.1, raise * 0.5) + flap];
+  const walkSwing = Math.sin(walkPhase) * 0.3 * walkAmount;
+  const [rx, , rz] = arm(pose.rR, pose.sR + walkSwing);
+  const [lx, , lz] = arm(pose.rL, pose.sL - walkSwing);
+  const ar = P.arms[0].rotation, al = P.arms[1].rotation;
+  ar.x += (rx - ar.x) * k * 1.5; ar.z += (rz - ar.z) * k * 1.5;
+  al.x += (lx - al.x) * k * 1.5; al.z += (-lz - al.z) * k * 1.5;
+  const stride = Math.sin(walkPhase) * 0.45 * walkAmount;
+  P.legs[0].rotation.x = stride; P.legs[1].rotation.x = -stride;
+
+  // eyes
+  const squint = face.happy;
+  for (const [i, e] of P.eyes.entries()) {
+    const o = clamp(face.open * face.blink, 0, 1.2);
+    const showHappy = squint > 0.5 && o > 0.2;
+    const showClosed = !showHappy && o < 0.22;
+    e.happy.visible = showHappy; e.closed.visible = showClosed; e.open.visible = !showHappy && !showClosed;
+    e.open.scale.set(1, Math.max(0.25, o), 1);
+    e.open.position.set(face.look.x * 0.036 * 0.35, face.look.y * 0.036 * 0.3, 0);
+    e.tear.visible = face.tears > 0.4;
+    if (e.tear.visible) { const q = (time * 0.8 + i * 0.4) % 1; e.tear.position.set(e.side * 0.022, -0.036 * (0.9 + q * 2.2), 0.007); e.tear.material.opacity = 0.9 * (1 - q); }
+  }
+  for (const b of P.blush) b.material.opacity = clamp(0.25 + face.blush * 0.5, 0, 0.8);
+}
+
+/* ---------------- screen helpers ---------------- */
+const _v = new THREE.Vector3();
+function toScreen(x, y, z) {
+  _v.set(x, y, z).project(camera);
+  const r = stage.getBoundingClientRect();
+  return { x: (_v.x * 0.5 + 0.5) * r.width, y: (-_v.y * 0.5 + 0.5) * r.height };
+}
+const headTop = () => toScreen(root.position.x, 1.38 + hips.position.y - HOVER, 0);
+const beak = () => toScreen(root.position.x, 0.62, 0.3);
+function popAt(x, y, emoji, n = 1) {
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('div');
+    s.className = 'pop'; s.textContent = Array.isArray(emoji) ? pick(emoji) : emoji;
+    s.style.left = x + rand(-24, 24) + 'px'; s.style.top = y + rand(-12, 12) + 'px';
+    s.style.setProperty('--dx', rand(-40, 40) + 'px'); s.style.animationDelay = i * 0.08 + 's';
+    $('fx').appendChild(s); setTimeout(() => s.remove(), 1600 + i * 80);
+  }
+}
+
+/* speech bubble */
+const bubble = $('bubble');
+let bubbleUntil = 0;
+function say(text, secs = 3.5) { bubble.textContent = text; bubble.classList.add('on'); bubbleUntil = clock() + secs * 1000; }
+function placeBubble() {
+  const p = headTop();
+  const r = stage.getBoundingClientRect();
+  const half = Math.min(bubble.offsetWidth / 2, r.width / 2 - 8);
+  bubble.style.left = clamp(p.x, half + 8, r.width - half - 8) + 'px';
+  bubble.style.top = Math.max(p.y - 6, bubble.offsetHeight + (RENDER ? 10 : 90)) + 'px';
+  if (clock() > bubbleUntil) bubble.classList.remove('on');
+}
+
+/* ---------------- interactions ---------------- */
+function petHit(x, y) {
+  const top = headTop(), feet = toScreen(root.position.x, 0, 0);
+  const w = Math.abs(toScreen(root.position.x + 0.45, 0.5, 0).x - feet.x);
+  return y > top.y && y < feet.y + 10 && Math.abs(x - feet.x) < w;
+}
+let down = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!down) return;
+  const r = stage.getBoundingClientRect();
+  const dx = e.clientX - down.x, dt = (performance.now() - down.t) / 1000;
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (Math.abs(dx) > 40 && dt < 0.6 && petHit(down.x - r.left, down.y - r.top)) {
+    spin = clamp(dx / dt / 40, -30, 30);
+    say(pick(['Wheee! 🌀', 'So dizzy~ 😵‍💫', 'Again! Again!']), 2);
+    bump('love', 2);
+  } else if (petHit(x, y)) tapPet(x, y);
+  down = null;
+});
+let taps = 0, tapTimer = 0;
+function tapPet(x, y) {
+  if (S.asleep) { wake(); return; }
+  taps++; clearTimeout(tapTimer); tapTimer = setTimeout(() => (taps = 0), 1500);
+  popAt(x, y, ['💗', '💛', '✨', '💕'], 2);
+  bump('love', 3);
+  if (busy()) return;
+  if (taps >= 6) { play('surprised', 0.6); say(pick(['Hehe that tickles!! 🤭', 'Okay okay! 😆'])); taps = 0; return; }
+  if (Math.random() < 0.3) { play('wave', 1.2); say(pick(['Hi hi! 👋', 'Bbok bbok! 🐥', 'You came back! 💛'])); }
+  else { play('hop', 0.9); if (Math.random() < 0.5) say(pick(['Hehe 💛', 'Bbok! 🐣', 'I love you! 💕', 'Yay!'])); }
+}
+
+const FOODS = [['🍓', 'Strawberry! My favourite 🍓'], ['🍪', 'Cookie crunch! 🍪'], ['🍉', 'So juicy! 🍉'], ['🍙', 'Rice ball power! 🍙'], ['🍦', 'Brain freeze~ 🍦'], ['🌽', 'Corn! Bbok bbok! 🌽']];
+function feed() {
+  if (S.asleep) { say('Zzz… 💤 (tap me to wake me up)'); return; }
+  if (busy()) return;
+  if (S.food > 95) { play('sad', 1.2); say("I'm sooo full… 🫃"); return; }
+  const [emoji, line] = pick(FOODS);
+  const btn = $('bFeed').getBoundingClientRect(), r = stage.getBoundingClientRect();
+  const f = document.createElement('div'); f.className = 'fly'; f.textContent = emoji;
+  f.style.left = btn.left + btn.width / 2 - r.left + 'px'; f.style.top = btn.top - r.top + 'px';
+  $('fx').appendChild(f);
+  requestAnimationFrame(() => requestAnimationFrame(() => { const b = beak(); f.style.left = b.x + 'px'; f.style.top = b.y + 'px'; f.style.transform = 'translate(-50%,-50%) scale(.6)'; }));
+  play('think', 0.6, () => {
+    f.remove(); play('eat', 1.6, () => { play('hop', 0.8); }); say(line, 3);
+    const b = beak(); popAt(b.x, b.y, ['✨', '😋'], 2);
+    bump('food', 22); bump('love', 2);
+  });
+}
+
+/* ball: a DOM emoji bouncing in world space in front of the pet */
+const ballEl = $('ball');
+const B = { on: false, x: 0, y: 0, vx: 0, vy: 0, kicks: 0 };
+function playBall() {
+  if (S.asleep) { say('Zzz… 💤 (tap me to wake me up)'); return; }
+  if (busy() || B.on) return;
+  if (S.energy < 12) { play('sad', 1.2); say('Too sleepy to play… 😪 Let me nap?'); return; }
+  Object.assign(B, { on: true, x: rand(-0.6, 0.6) * viewW / 2, y: 2, vx: 0, vy: 0, kicks: 0 });
+  ballEl.style.display = 'block';
+  say("Ball!! I'll get it! ⚽", 2);
+}
+function updateBall(dt) {
+  if (!B.on) return;
+  const lim = viewW / 2 - 0.15;
+  B.vy -= 9 * dt; B.x += B.vx * dt; B.y += B.vy * dt;
+  if (B.y < 0.12) { B.y = 0.12; B.vy = Math.abs(B.vy) * 0.55; if (B.vy < 0.4) B.vy = 0; B.vx *= 0.8; }
+  if (Math.abs(B.x) > lim) { B.x = Math.sign(B.x) * lim; B.vx *= -0.7; }
+  B.vx *= Math.pow(0.6, dt);
+  const near = Math.abs(B.x - root.position.x);
+  if (act.name !== 'kick' && act.name !== 'hop') targetX = clamp(B.x - Math.sign(B.x - root.position.x || 1) * 0.28, -lim, lim);
+  if (near < 0.34 && B.y < 0.5 && act.name !== 'kick') {
+    B.kicks++;
+    const dir = Math.abs(root.position.x) > lim * 0.5 ? -Math.sign(root.position.x) : pick([-1, 1]);
+    B.vx = dir * rand(1.6, 2.6); B.vy = rand(3, 4.5); B.x = root.position.x + dir * 0.3;
+    play('kick', 0.5);
+    bump('energy', -2); bump('love', 2);
+    if (B.kicks >= 5) {
+      setTimeout(() => {
+        B.on = false; ballEl.style.display = 'none'; targetX = 0;
+        play('dance', 1.6); say('That was fun!! +1 ⭐', 3); addStars(1);
+      }, 900);
+    }
+  }
+  const p = toScreen(B.x, B.y, 0.25);
+  ballEl.style.left = p.x + 'px'; ballEl.style.top = p.y + 'px';
+  ballEl.style.transform = `translate(-50%,-50%) rotate(${B.x * 400}deg)`;
+}
+
+/* sleep */
+function setSleep(on) {
+  S.asleep = on; save();
+  document.body.classList.toggle('asleep', on);
+  $('bSleep').innerHTML = on ? '<span>☀️</span>Wake' : '<span>💤</span>Sleep';
+  if (on) { B.on = false; ballEl.style.display = 'none'; targetX = 0; play('sleep', Infinity); say('Good night… 🌙', 2.5); }
+  else { play('surprised', 0.6); }
+}
+function wake() { setSleep(false); say(S.energy > 60 ? 'Good morning!! ☀️' : 'Five more minutes… 😪'); }
+let zzz = 0;
+
+/* sheets */
+let openSheet = null;
+function showSheet(id) { closeSheet(); openSheet = $(id); openSheet.classList.add('on'); $('scrim').classList.add('on'); }
+function closeSheet() { openSheet?.classList.remove('on'); $('scrim').classList.remove('on'); openSheet = null; stopGame(); }
+$('scrim').onclick = closeSheet;
+document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeSheet));
+
+/* outfits */
+function renderOutfits() {
+  const g = $('outfits'); g.innerHTML = '';
+  for (const [id, emoji, label, cost] of OUTFITS) {
+    const owned = S.owned.includes(id);
+    const b = document.createElement('button');
+    b.className = 'chip' + (S.outfit === id ? ' sel' : '') + (owned ? '' : ' locked');
+    b.innerHTML = `<span>${emoji}</span>${label}<small>${owned ? (S.outfit === id ? 'Wearing' : 'Owned') : '⭐ ' + cost}</small>`;
+    b.onclick = () => {
+      if (!owned) {
+        if (S.stars < cost) { b.querySelector('small').textContent = `Need ${cost - S.stars} more ⭐`; return; }
+        S.stars -= cost; S.owned.push(id); renderStats();
+      }
+      S.outfit = id; save(); wear(id); renderOutfits();
+      if (!S.asleep) { play('hop', 0.9); say(id === 'none' ? 'Just me! 🐥' : pick(['Do I look cute? 🥰', 'So stylish! ✨', 'Fashion chick! 💅'])); }
+    };
+    g.appendChild(b);
+  }
+}
+
+/* ---------------- games ---------------- */
+let gameTimer = null, gameRaf = 0;
+function stopGame() { clearInterval(gameTimer); cancelAnimationFrame(gameRaf); gameTimer = null; }
+function setGame(title, html) { $('gameTitle').firstChild.textContent = title + ' '; $('gameBody').innerHTML = html; }
+function win(n, line) { addStars(n); setTimeout(() => { if (!S.asleep) { play('dance', 1.6); say(line, 3); } }, 200); }
+
+function gameMenu() {
+  stopGame();
+  setGame('🎮 Games', `<div class="grid">
+    <button class="chip" id="gT"><span>⭕</span>Tic-tac-toe<small>Win: +3 ⭐</small></button>
+    <button class="chip" id="gR"><span>✊</span>Rock paper scissors<small>Win: +1 ⭐</small></button>
+    <button class="chip" id="gB"><span>🫧</span>Bubble pop<small>Up to +5 ⭐</small></button></div>
+    <p class="muted">Games use a little energy ⚡ — let Bbokari sleep if it gets tired.</p>`);
+  $('gT').onclick = ticTacToe; $('gR').onclick = rps; $('gB').onclick = bubbles;
+}
+function tired() {
+  if (S.energy >= 8) return false;
+  setGame('😪 Too sleepy', `<p>Bbokari is too tired to play. Put Bbokari to sleep for a bit 💤</p><div class="row"><button class="btn ghost" id="back">Back</button></div>`);
+  $('back').onclick = gameMenu; return true;
+}
+
+function ticTacToe() {
+  if (tired()) return;
+  const b = Array(9).fill(''); let over = false;
+  setGame('⭕ Tic-tac-toe', `<p class="score" id="tMsg">You are ❌ — your turn!</p><div class="ttt" id="tB"></div><div class="row"><button class="btn ghost" id="back">Back</button><button class="btn" id="again">New game</button></div>`);
+  const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const winner = () => { for (const [a, c, d] of L) if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a]; return b.every(Boolean) ? 'draw' : null; };
+  const cells = [];
+  for (let i = 0; i < 9; i++) { const c = document.createElement('button'); c.onclick = () => move(i); $('tB').appendChild(c); cells.push(c); }
+  const draw = () => cells.forEach((c, i) => (c.textContent = b[i] === 'X' ? '❌' : b[i] === 'O' ? '🐥' : ''));
+  const finish = (w) => { over = true; bump('energy', -3);
+    if (w === 'X') { $('tMsg').textContent = 'You win! +3 ⭐'; win(3, 'You beat me!! Good game 🥹'); }
+    else if (w === 'O') { $('tMsg').textContent = 'Bbokari wins! 🐥'; play('hop', 0.9); say('I win! Bbok bbok! 😎'); }
+    else { $('tMsg').textContent = "It's a draw! +1 ⭐"; win(1, 'A tie! We are both geniuses 🤝'); } };
+  const ai = () => {
+    const tryLine = (who) => { for (const l of L) { const v = l.map((i) => b[i]); if (v.filter((x) => x === who).length === 2 && v.includes('')) return l[v.indexOf('')]; } return -1; };
+    let m = tryLine('O'); if (m < 0 && Math.random() < 0.85) m = tryLine('X');
+    if (m < 0 && !b[4]) m = 4;
+    if (m < 0) m = pick(b.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0));
+    return m;
+  };
+  function move(i) {
+    if (over || b[i]) return;
+    b[i] = 'X'; draw(); let w = winner(); if (w) return finish(w);
+    $('tMsg').textContent = 'Bbokari is thinking… 🤔'; over = true; play('think', 0.7);
+    setTimeout(() => { over = false; b[ai()] = 'O'; draw(); w = winner(); if (w) finish(w); else $('tMsg').textContent = 'Your turn!'; }, 650);
+  }
+  $('back').onclick = gameMenu; $('again').onclick = ticTacToe;
+}
+
+function rps() {
+  if (tired()) return;
+  let you = 0, me = 0;
+  const H = { rock: '✊', paper: '✋', scissors: '✌️' };
+  setGame('✊ Rock paper scissors', `<div class="vs" id="rV">❔ vs ❔</div><p class="score" id="rS">You 0 – 0 Bbokari</p>
+    <div class="rps"><button data-h="rock">✊</button><button data-h="paper">✋</button><button data-h="scissors">✌️</button></div>
+    <div class="row"><button class="btn ghost" id="back">Back</button></div>`);
+  document.querySelectorAll('.rps button').forEach((btn) => (btn.onclick = () => {
+    const h = btn.dataset.h, b = pick(Object.keys(H));
+    const beats = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+    $('rV').textContent = `${H[h]} vs ${H[b]}`;
+    bump('energy', -1);
+    if (h === b) say(pick(['Same! Jinx! 🤭', 'Great minds~']), 2);
+    else if (beats[h] === b) { you++; win(1, pick(['Nooo! You got me 😵', 'Lucky! +1 ⭐'])); }
+    else { me++; play('hop', 0.8); say(pick(['Hehe I win! 😎', 'Bbok yeah! 🐥']), 2); }
+    $('rS').textContent = `You ${you} – ${me} Bbokari`;
+  }));
+  $('back').onclick = gameMenu;
+}
+
+function bubbles() {
+  if (tired()) return;
+  let score = 0, left = 20;
+  setGame('🫧 Bubble pop', `<p class="score" id="bS">Pop as many as you can! ⏱ 20</p><div id="bubblesArea"></div><div class="row"><button class="btn ghost" id="back">Back</button></div>`);
+  const area = $('bubblesArea'); const list = [];
+  const spawn = () => {
+    const el = document.createElement('div'); el.className = 'bub';
+    const size = rand(40, 70); const golden = Math.random() < 0.12;
+    if (golden) el.textContent = '⭐';
+    Object.assign(el.style, { width: size + 'px', height: size + 'px' });
+    const o = { el, x: rand(0, area.clientWidth - size), y: area.clientHeight + 10, v: rand(50, 110), w: rand(0, 6), golden };
+    el.onpointerdown = (e) => { e.preventDefault(); if (o.dead) return; o.dead = true; score += golden ? 3 : 1;
+      const r = area.getBoundingClientRect(), s = stage.getBoundingClientRect();
+      popAt(r.left - s.left + o.x + size / 2, r.top - s.top + o.y + size / 2, golden ? '🌟' : '💦');
+      el.remove(); $('bS').textContent = `Score ${score} · ⏱ ${left}`; };
+    area.appendChild(el); list.push(o);
+  };
+  let last = performance.now(), acc = 0;
+  const loop = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
+    if (acc > 0.45) { acc = 0; spawn(); }
+    for (const o of list) { if (o.dead) continue; o.y -= o.v * dt; o.el.style.transform = `translate(${o.x + Math.sin(now / 400 + o.w) * 10}px,${o.y}px)`; if (o.y < -80) { o.dead = true; o.el.remove(); } }
+    gameRaf = requestAnimationFrame(loop);
+  };
+  gameRaf = requestAnimationFrame(loop);
+  gameTimer = setInterval(() => {
+    left--; $('bS').textContent = `Score ${score} · ⏱ ${left}`;
+    if (left <= 0) { stopGame(); bump('energy', -3);
+      const stars = clamp(Math.floor(score / 5), 0, 5);
+      $('gameBody').innerHTML = `<p class="score" style="font-size:22px">🫧 ${score} bubbles!</p><p style="text-align:center">${stars ? `+${stars} ⭐` : 'Try again for stars!'}</p><div class="row"><button class="btn ghost" id="back">Back</button><button class="btn" id="again">Play again</button></div>`;
+      $('back').onclick = gameMenu; $('again').onclick = bubbles;
+      if (stars) win(stars, `${score} bubbles! You're so fast! 🫧`); }
+  }, 1000);
+  $('back').onclick = gameMenu;
+}
+
+/* ---------------- chat (only when this page can ask Claude) ---------------- */
+let sample = null, chatCtl = null;
+const turns = [];
+const RULES = `You are Bbokari, a tiny, cheerful, fluffy yellow chick who lives on the user's phone as a virtual pet. ` +
+  `Speak in first person as Bbokari: warm, playful, a bit silly, kind. Say "bbok" sometimes. ` +
+  `Keep every reply short: 1-2 sentences, at most 40 words, with an emoji or two. No markdown, no lists. ` +
+  `If asked to do something you can't do from a phone pet, say so cutely and suggest a game, a snack or a nap instead. ` +
+  `Right now you feel: love ${'{LOVE}'}/100, food {FOOD}/100, energy {ENERGY}/100 (mention hunger or sleepiness only if very low).`;
+function addMsg(text, who) { const m = document.createElement('div'); m.className = 'msg ' + who; m.textContent = text; $('chatLog').appendChild(m); $('chatLog').scrollTop = 1e9; return m; }
+$('chatForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $('chatInput').value.trim();
+  if (!text || chatCtl || !sample) return;
+  $('chatInput').value = '';
+  addMsg(text, 'me');
+  turns.push({ role: 'user', content: text });
+  const out = addMsg('…', 'pet');
+  if (!S.asleep) play('think', 30);
+  chatCtl = new AbortController();
+  const rules = RULES.replace('{LOVE}', Math.round(S.love)).replace('{FOOD}', Math.round(S.food)).replace('{ENERGY}', Math.round(S.energy));
+  const msgs = [{ role: 'user', content: rules + '\n\n(Conversation starts now.)' }, { role: 'assistant', content: 'Bbok! Okay! 🐥' }, ...turns.slice(-12)];
+  try {
+    const r = await sample(msgs, { cache: false, modelTier: 'quick', signal: chatCtl.signal, onText: ({ text }) => { out.textContent = text; $('chatLog').scrollTop = 1e9; } });
+    out.textContent = r.text.trim() || 'Bbok? 🐥';
+    turns.push({ role: 'assistant', content: out.textContent });
+    say(out.textContent, 6); bump('love', 2);
+    if (!S.asleep) play('wave', 1);
+  } catch (err) {
+    turns.pop();
+    if (err?.code === 'not_granted' || err?.code === 'sampling_disabled') { out.textContent = 'Chat isn’t turned on here, but we can still play! 🐥'; $('bChat').hidden = true; }
+    else if (err?.code === 'rate_limited') out.textContent = 'Bbok… I need a little break from talking. Try again in a bit! 😮‍💨';
+    else if (err?.name !== 'AbortError') out.textContent = 'Oops, I got confused 😵 Try again?';
+    if (!S.asleep) play('idle', 0);
+  } finally { chatCtl = null; }
+};
+
+/* ---------------- buttons ---------------- */
+$('bFeed').onclick = feed;
+$('bBall').onclick = playBall;
+$('bGames').onclick = () => { gameMenu(); showSheet('sheetGames'); };
+$('bOutfit').onclick = () => { renderOutfits(); showSheet('sheetOutfit'); };
+$('bChat').onclick = () => { showSheet('sheetChat'); if (!$('chatLog').children.length) addMsg('Hi! Talk to me! 🐥💬', 'pet'); };
+/* floating window: a looping video of Bbokari, shown picture-in-picture so it stays above other apps */
+const fv = $('floatVideo');
+let fvReady = false;
+function prepFloat() {
+  if (fvReady) return;
+  const bin = Uint8Array.from(atob($('mp4').textContent.trim()), (c) => c.charCodeAt(0));
+  fv.src = URL.createObjectURL(new Blob([bin], { type: 'video/mp4' }));
+  fvReady = true;
+}
+// Inside the Bbokari iPhone app, Float and Focus are handled by the app itself (real picture-in-picture,
+// a Dynamic Island timer), and the app can make Bbokari talk.
+const native = window.webkit?.messageHandlers?.bbokari;
+window.pocketSay = (text) => { if (!S.asleep && !busy()) play('wave', 1.2); say(text, 4); };
+if (native) { $('bFocus').hidden = false; $('bFocus').onclick = () => native.postMessage({ cmd: 'focus' }); }
+$('bFloat').onclick = () => {
+  if (native) { native.postMessage({ cmd: 'float' }); return; } prepFloat(); $('floatMsg').textContent = ''; showSheet('sheetFloat'); };
+$('bFloatGo').onclick = async () => {
+  const msg = $('floatMsg');
+  try {
+    if (document.pictureInPictureElement === fv) { await document.exitPictureInPicture(); msg.textContent = 'Bbokari is back home 🏠'; return; }
+    await fv.play();
+    if (fv.requestPictureInPicture && document.pictureInPictureEnabled !== false) await fv.requestPictureInPicture();
+    else if (fv.webkitSupportsPresentationMode?.('picture-in-picture')) fv.webkitSetPresentationMode('picture-in-picture');
+    else throw new Error('unsupported');
+    msg.textContent = 'Bbokari is floating! Now go to any app 🐥';
+  } catch (err) {
+    msg.textContent = "This browser didn't let Bbokari float 😢 (" + (err?.name || err?.message || 'blocked') + ')';
+  }
+};
+fv.addEventListener('leavepictureinpicture', () => fv.pause());
+
+$('bSleep').onclick = () => (S.asleep ? wake() : setSleep(true));
+
+function greet() {
+  if (RENDER) return;
+  if (S.asleep) { document.body.classList.add('asleep'); $('bSleep').innerHTML = '<span>☀️</span>Wake'; play('sleep', Infinity); say('Zzz… 💤', 2); return; }
+  const h = new Date().getHours();
+  let line = h < 5 ? "It's so late! 🌙" : h < 12 ? 'Good morning! ☀️' : h < 18 ? 'Hi hi! 👋' : 'Good evening! 🌆';
+  if (S.food < 30) line += ' I’m hungry… 🍓';
+  else if (S.energy < 25) line += ' I’m sleepy… 💤';
+  else if (S.love < 30) line += ' I missed you! 🥺';
+  play('wave', 1.4); say(line, 4);
+}
+
+/* ---------------- main loop ---------------- */
+let last = performance.now(), statTick = 0, idleChat = 12;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  updatePet(dt); updateBall(dt);
+  statTick += dt;
+  if (statTick > 10) { // slow drift while open
+    statTick = 0;
+    if (S.asleep) bump('energy', 2);
+    else { bump('food', -0.5); bump('energy', -0.3); bump('love', -0.2); }
+  }
+  if (S.asleep) { zzz -= dt; if (zzz < 0) { zzz = 1.6; const p = headTop(); popAt(p.x + 30, p.y + 20, 'z'); } }
+  else if (P.loaded && !openSheet && act.name === 'idle' && !B.on) {
+    idleChat -= dt;
+    if (idleChat < 0) { idleChat = rand(15, 30);
+      if (S.food < 30) say('My tummy is rumbling… 🍓');
+      else if (S.energy < 20) say('*yawn* 😪');
+      else { const r = Math.random(); if (r < 0.4) { play('dance', 1.6); say(pick(['🎵 la la la~', 'Dance break! 💃'])); } else say(pick(['Play with me! ⚽', 'Tap me! 💛', 'Bbok bbok! 🐥', 'I like your phone 📱', 'Wanna play a game? 🎮'])); } }
+  }
+  placeBubble();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+if (RENDER) {
+  window.__step = (dt) => { vclock += dt; updatePet(dt); placeBubble(); renderer.render(scene, camera); };
+  window.__api = { play, say, get loaded() { return P.loaded; }, wear, popAt, headTop };
+} else requestAnimationFrame(frame);
+loadModel();
+addEventListener('pagehide', save);
+document.addEventListener('visibilitychange', () => document.hidden && save());
+
+window.claude?.use?.('sample').then((s) => { if (s) { sample = s; $('bChat').hidden = false; } }).catch(() => {});
+</script>

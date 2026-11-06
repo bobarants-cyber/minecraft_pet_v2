@@ -22,6 +22,14 @@ It appears in **Applications** as **Bbokari**. Drag it to your Dock if you like.
 `assets/icon/bbokari.png` (1024×1024). If you move the project folder, run `npm run make-app` again. If something
 goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
 
+## Bbokari on your iPhone 📱
+
+- **Pocket Bbokari** (`phone/`): a phone-sized Bbokari you can pet, feed, play ball with, dress up and play mini-games with.
+  Tap **🪟 Float** to pop him into a little window that stays on top of your other apps. Build it with `node phone/build.mjs`.
+- **The iPhone app** (`ios/`): Pocket Bbokari plus floating Bbokari that follows you when you swipe home, Home Screen
+  and Lock Screen widgets, and a 🍅 focus timer in the Dynamic Island. See [ios/README.md](ios/README.md) for how to put
+  it on your iPhone with Xcode, for free.
+
 ## Your assistant
 
 **Right-click the pet → 💬 Chat**, or click the menu-bar icon → **Chat with Bee…**.
