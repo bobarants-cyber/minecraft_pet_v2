@@ -30,6 +30,24 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
   and Lock Screen widgets, and a 🍅 focus timer in the Dynamic Island. See [ios/README.md](ios/README.md) for how to put
   it on your iPhone with Xcode, for free.
 
+## Bbokari does things for you 🪄
+
+Type it in the chat or say it with "Hey Bbokari":
+
+| Say | What happens |
+| --- | --- |
+| "open my math class" | Opens that class's link from 📅 Classes ("spanish" also finds "Español") |
+| "open my robot project" | Finds the folder on your Mac and opens it in VS Code (or Finder) |
+| "open my history project in Claude" | Opens your projects on claude.ai |
+| "open my volcano essay" / "open my downloads" | Finds the file or folder and opens it |
+| "make a doc about the solar system" | Writes it with the local AI, opens a new Google Doc and pastes it in |
+| "write a report on Egypt in Word" (or Pages) | Saves a Word file and opens it |
+| "make a presentation about volcanoes in Canva" | Makes the slides; drag the file onto Canva and it becomes a Canva design |
+| "…in Google Slides" / "…in Keynote" / "…in PowerPoint" | Same slides for those apps |
+
+Everything Bbokari writes is also saved in **Documents → Bbokari Docs**. Read it over and make it yours: the local AI
+can get facts wrong. Bbokari can only do the things in this list; it can't run other programs or delete anything.
+
 ## Your assistant
 
 **Right-click the pet → 💬 Chat**, or click the menu-bar icon → **Chat with Bee…**.

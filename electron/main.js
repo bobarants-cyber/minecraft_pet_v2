@@ -20,6 +20,7 @@ import { execFile, spawn } from 'node:child_process';
 const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet', 'google meet'], ['Zoom', 'zoom'], ['Notes', 'notes']];
 import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
+import * as actions from './actions.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
 const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
@@ -381,6 +382,10 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   if (/^(?:show\s+)?(?:my\s+)?(?:classes|class schedule|schedule|timetable|calendar)\??$/i.test(String(text).trim())) {
     return { ok: true, kind: 'classes', text: 'Here’s your class calendar! 📅' };
   }
+  // "Open my math class", "open my robot project", "make a presentation about volcanoes in Canva"…
+  let action = actions.parseAction(text);
+  if (!action && actions.mightBeAction(text)) action = await actions.classifyAction(text, settings.aiModel).catch(() => null);
+  if (action) return { ok: true, kind: 'action', text: await runAction(action) };
   const target = opener.parseOpen(text);
   if (target) {
     if (!selection.hasPermission(true)) return { ok: false, kind: 'open', text: selection.explain('not allowed') };
@@ -641,6 +646,125 @@ async function openThing(what) {
   } finally {
     send('typing', { on: false });
     opening = false;
+  }
+}
+
+// ---------- Doing things for you: classes, projects, files, documents and presentations ----------
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const osa = (script) =>
+  new Promise((resolve, reject) => execFile('osascript', ['-e', script], { timeout: 15_000 }, (err, out, errOut) => (err ? reject(new Error(errOut || err.message)) : resolve(String(out).trim()))));
+const hasApp = (name) => fs.existsSync(`/Applications/${name}.app`);
+let creating = false;
+
+/** Runs one action and returns what the pet says right away (long jobs report back later with 'say'). */
+async function runAction(a) {
+  if (process.platform !== 'darwin' && a.type !== 'create') return 'That only works on a Mac for now.';
+  switch (a.type) {
+    case 'open_class': {
+      const list = classes.list();
+      const c = actions.findClass(list, a.name);
+      if (!c) return list.length ? `I can’t find a class called “${a.name}”. Your classes are: ${list.map((x) => x.name).join(', ')} 📅` : 'You don’t have any classes yet! Add them in 📅 Classes (right-click me) and then I can open them for you.';
+      if (!c.link) return `${c.name} doesn’t have a link yet. Add one in 📅 Classes and I’ll open it next time! 🔗`;
+      openClass(c, { now: true });
+      return `Opening ${c.name}! 📚`;
+    }
+    case 'open_project': {
+      if (a.claude) {
+        await shell.openExternal('https://claude.ai/projects');
+        return a.name && !/^claude$/i.test(a.name) ? `Here are your Claude projects! Click “${a.name}” 🗂️` : 'Here are your Claude projects! 🗂️';
+      }
+      const dir = await actions.findFolder(a.name);
+      if (!dir) return `I couldn’t find a folder called “${a.name}” on your Mac 🤔 If it’s a Claude project, say “open my ${a.name} project in Claude”.`;
+      if (hasApp('Visual Studio Code')) execFile('open', ['-a', 'Visual Studio Code', dir]);
+      else shell.openPath(dir);
+      return `Opening ${path.basename(dir)}${hasApp('Visual Studio Code') ? ' in VS Code' : ''}! 💻`;
+    }
+    case 'open_folder':
+      shell.openPath(actions.standardFolder(a.name));
+      return `Opening your ${a.name}! 📁`;
+    case 'open_file': {
+      const found = a.folder ? await actions.findFolder(a.name) : (await actions.findFile(a.name)) ?? (await actions.findFolder(a.name));
+      if (!found) return `I couldn’t find anything called “${a.name}” on your Mac 🤔 Try another word from its name.`;
+      shell.openPath(found);
+      return `Opening ${path.basename(found)}! 📂`;
+    }
+    case 'create': {
+      if (!a.topic) return 'What should it be about? Say something like “make a presentation about volcanoes in Canva”.';
+      if (creating) return 'I’m still working on the last one! Give me a moment ✍️';
+      createThing(a);
+      const what = a.kind === 'slides' ? 'a presentation' : 'a doc';
+      return `Ooh, ${what} about ${a.topic}! Let me write it, give me a minute ✍️`;
+    }
+  }
+  return 'Hmm, I’m not sure how to do that yet.';
+}
+
+function brainError(err) {
+  const msg = String(err?.message ?? err);
+  if (/ECONNREFUSED|fetch failed|connect/i.test(msg)) return 'I can’t reach my brain! Open the Ollama app and ask me again.';
+  if (/not found|pull/i.test(msg)) return `I’m missing my brain file! In Terminal run:  ollama pull ${settings.aiModel}`;
+  if (err?.name === 'TimeoutError') return 'Writing took too long… try a smaller topic, or ask again!';
+  return `Oops, something went wrong while writing: ${msg.slice(0, 120)}`;
+}
+
+/** Waits until the front window's title matches (e.g. the new Google Doc has opened), then presses ⌘V. */
+async function pasteWhenReady(titlePattern, timeoutMs = 30_000) {
+  if (!selection.hasPermission(false)) return false;
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    await wait(1000);
+    const title = await osa('tell application "System Events" to tell (first process whose frontmost is true) to get name of front window').catch(() => '');
+    if (titlePattern.test(title) && !/sign in|log in/i.test(title)) {
+      await wait(2500); // let the editor finish loading
+      await osa('tell application "System Events" to keystroke "v" using command down');
+      return true;
+    }
+  }
+  return false;
+}
+
+async function createThing(a) {
+  creating = true;
+  send('typing', { on: true }); // Bbokari sits at the desk and types while the AI writes
+  try {
+    const content = await actions.writeContent(a, settings.aiModel);
+    if (a.kind === 'doc') {
+      if (a.place === 'gdocs') {
+        await actions.saveDoc(content);
+        clipboard.write({ html: actions.docHTML(content), text: actions.docText(content) });
+        await shell.openExternal('https://docs.new');
+        send('say', { text: `“${content.title}” is written! Opening a new Google Doc and pasting it in… 📄` });
+        const pasted = await pasteWhenReady(/Google Docs/i);
+        send('say', { text: pasted ? `Done! “${content.title}” is in Google Docs 🎉 Read it over and make it yours!` : 'Your doc is copied! Click inside the new Google Doc and press ⌘V to paste it 📋' });
+      } else {
+        const files = await actions.saveDoc(content, { docx: true });
+        if (a.place === 'pages' && hasApp('Pages')) execFile('open', ['-a', 'Pages', files.docx]);
+        else shell.openPath(files.docx);
+        send('say', { text: `Done! “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.)` });
+      }
+    } else {
+      const file = await actions.savePresentation(content);
+      const name = path.basename(file);
+      if (a.place === 'keynote' && hasApp('Keynote')) execFile('open', ['-a', 'Keynote', file]);
+      else if (a.place === 'powerpoint' && hasApp('Microsoft PowerPoint')) execFile('open', ['-a', 'Microsoft PowerPoint', file]);
+      else if (a.place === 'canva') {
+        shell.showItemInFolder(file);
+        await shell.openExternal('https://www.canva.com/');
+        send('say', { text: `Your slides are ready! 🎨 Drag “${name}” from the Finder window onto Canva, and it turns into a Canva design you can edit.` });
+        return;
+      } else if (a.place === 'gslides') {
+        shell.showItemInFolder(file);
+        await shell.openExternal('https://drive.google.com/drive/my-drive');
+        send('say', { text: `Your slides are ready! 📊 Drag “${name}” into Google Drive, then double-click it and choose “Open with Google Slides”.` });
+        return;
+      } else shell.openPath(file);
+      send('say', { text: `Done! “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.)` });
+    }
+  } catch (err) {
+    send('say', { text: brainError(err), error: true });
+  } finally {
+    creating = false;
+    send('typing', { on: false });
   }
 }
 
