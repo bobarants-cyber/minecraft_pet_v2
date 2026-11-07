@@ -1051,7 +1051,7 @@ ipcMain.handle('presenton:key', async (_e, key) => {
 /** Makes the .pptx with Presenton (Bbokari's slides and math, Presenton's design and photos). Returns { file, editUrl }. */
 async function presentonFile(content, a) {
   if (!(await presenton.isRunning(settings.presentonUrl))) throw new Error(`Presenton isn’t running at ${settings.presentonUrl} (start Docker and Presenton)`);
-  send('say', { text: 'Presenton is designing your slides… 🖼 This can take a few minutes.' });
+  send('say', { text: 'Presenton is designing your slides… 🖼 With the small AI this can take 5–15 minutes, so keep me open!' });
   const korean = content.theme === 'korean';
   return presenton.generate({
     url: settings.presentonUrl,
