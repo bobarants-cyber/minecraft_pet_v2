@@ -43,4 +43,11 @@ contextBridge.exposeInMainWorld('mobHost', {
   onProofreading: (fn) => ipcRenderer.on('proofreading', (_e, s) => fn(s)),
   checkWriting: () => ipcRenderer.send('proofread:now'),
   quit: () => ipcRenderer.send('app:quit'),
+  onInbox: (fn) => ipcRenderer.on('inbox', (_e, m) => fn(m)),
+  onInboxJunk: (fn) => ipcRenderer.on('inboxJunk', (_e, j) => fn(j)),
+  inboxDraft: (req) => ipcRenderer.invoke('inbox:draft', req),
+  inboxSend: (req) => ipcRenderer.invoke('inbox:send', req),
+  inboxOpen: (id) => ipcRenderer.send('inbox:open', id),
+  inboxCheck: () => ipcRenderer.send('inbox:check'),
+  inboxClean: (how) => ipcRenderer.invoke('inbox:clean', how),
 });

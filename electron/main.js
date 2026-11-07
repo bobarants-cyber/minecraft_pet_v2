@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, dialog, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
 import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText } from './ai.js';
@@ -21,6 +21,8 @@ const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet'
 import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 import * as actions from './actions.js';
+import { GoogleAuth } from './google.js';
+import * as inbox from './inbox.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
 const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
@@ -41,6 +43,11 @@ let expanded = false;
 let chatOpen = false;
 let reminders = null;
 let classes = null;
+let google = null;
+let inboxState = null;
+const inboxItems = new Map(); // id → message shown to you (with what's needed to reply)
+let checkingInbox = false;
+let junkIds = [];
 let notes = null;
 let skills = null;
 const proof = { last: 0, lastHash: '', busy: false };
@@ -163,6 +170,7 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
+    { label: '📬 Inbox', submenu: inboxMenu() },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
       label: '🎮 Games',
@@ -378,6 +386,21 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
     if (!notes) return { ok: true, kind: 'notes', text: 'I’m not taking notes right now. Say “take notes” to start.' };
     stopNotes();
     return { ok: true, kind: 'notes', text: 'Done! Give me a moment to write your notes ✍️' };
+  }
+  const said = String(text).trim();
+  if (/\b(?:clean|clear|tidy)\s*(?:up|out)?\s+(?:my\s+)?(?:inbox|e-?mails?|gmail|mail)\b|\b(?:delete|remove|get rid of|trash)\s+(?:all\s+)?(?:the\s+|my\s+)?(?:junk|spam|promotions?)\b/i.test(said)) {
+    if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
+    findJunk();
+    return { ok: true, kind: 'inbox', text: 'Let me look for junk in your inbox… 🧹' };
+  }
+  if (/\b(?:homework|assignments?|due|classroom)\b/i.test(said) && /\b(?:what|any|check|show|list|do i have|tell me)\b/i.test(said)) {
+    if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
+    return { ok: true, kind: 'inbox', text: await dueText() };
+  }
+  if (/\b(?:check|read|any|new|got|what'?s in|questions? in)\b.*\b(?:inbox|e-?mails?|gmail|messages?|google chat|chats?|mail)\b/i.test(said) && !/\bremind/i.test(said)) {
+    if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
+    checkInbox({ manual: true });
+    return { ok: true, kind: 'inbox', text: 'Checking your messages… 📬' };
   }
   if (/^(?:show\s+)?(?:my\s+)?(?:classes|class schedule|schedule|timetable|calendar)\??$/i.test(String(text).trim())) {
     return { ok: true, kind: 'classes', text: 'Here’s your class calendar! 📅' };
@@ -649,6 +672,174 @@ async function openThing(what) {
   }
 }
 
+// ---------- 📬 Inbox buddy: Gmail, Google Chat and Classroom ----------
+const gapi = (url, opts) => google.api(url, opts);
+
+function notConnectedText() {
+  return google?.hasClient
+    ? 'Connect your Google account first: menu bar → 📬 Inbox → Connect Google account.'
+    : 'I’m not connected to Google yet! Follow the “📬 Inbox” steps in the README to set me up.';
+}
+
+function inboxMenu() {
+  if (!google) return [{ label: 'Starting…', enabled: false }];
+  if (!google.hasClient) {
+    return [
+      { label: 'Step 1: make your Google key (README → 📬 Inbox)', click: () => shell.openExternal('https://console.cloud.google.com/') },
+      { label: 'Step 2: Choose Google key file…', click: chooseGoogleKey },
+    ];
+  }
+  if (!google.connected) {
+    return [
+      { label: 'Connect Google account…', click: connectGoogle },
+      { label: 'Choose a different key file…', click: chooseGoogleKey },
+    ];
+  }
+  const box = (label, key) => ({ label, type: 'checkbox', checked: !!settings[key], click: (i) => applySettings({ [key]: i.checked }) });
+  return [
+    { label: `Connected: ${google.email || 'Google'}`, enabled: false },
+    { label: 'Check now', click: () => checkInbox({ manual: true }) },
+    { label: '🧹 Clean up junk mail…', click: () => findJunk() },
+    { label: '📚 What’s due this week', click: async () => send('say', { text: await dueText() }) },
+    { type: 'separator' },
+    box('Tell me about new messages', 'inboxOn'),
+    box('Gmail', 'inboxGmail'),
+    box('Google Chat', 'inboxChat'),
+    box('Classroom', 'inboxClassroom'),
+    { type: 'separator' },
+    { label: 'Disconnect Google', click: () => { google.disconnect(); applySettings({ inboxOn: false }); } },
+  ];
+}
+
+async function chooseGoogleKey() {
+  app.focus({ steal: true });
+  const r = await dialog.showOpenDialog({ title: 'Choose your Google key file (client_secret_….json)', defaultPath: app.getPath('downloads'), properties: ['openFile'], filters: [{ name: 'Google key', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return;
+  try {
+    google.importClient(r.filePaths[0]);
+    send('say', { text: 'Got your Google key! 🔑 Now: menu bar → 📬 Inbox → Connect Google account.' });
+  } catch (err) {
+    send('say', { text: err.message, error: true });
+  }
+  buildTray();
+}
+
+async function connectGoogle() {
+  send('say', { text: 'Opening Google in your browser… Pick your account and press Allow 🔑' });
+  try {
+    const email = await google.connect();
+    applySettings({ inboxOn: true });
+    send('say', { text: `Connected${email ? ` to ${email}` : ''}! I’ll tell you about new messages and Classroom posts 📬` });
+    setTimeout(() => checkInbox({ manual: true }), 2000);
+  } catch (err) {
+    const msg = String(err.message);
+    send('say', { text: /admin|blocked|org_internal|disallowed/i.test(msg) ? 'Google blocked it. School accounts often don’t allow your own apps; try your personal Gmail account instead.' : `Google sign-in didn’t work: ${msg}`, error: true });
+  }
+  buildTray();
+}
+
+const inboxProblem = (name, err) =>
+  err?.status === 403 ? `${name} isn’t allowed. Turn on its API in Google Cloud (or your school blocks it).` : `${name}: ${String(err?.message ?? err).slice(0, 100)}`;
+
+/** Looks for new messages and posts, sums each one up, and shows them as cards. */
+async function checkInbox({ manual = false } = {}) {
+  if (!google?.connected) {
+    if (manual) send('say', { text: notConnectedText() });
+    return;
+  }
+  if ((!manual && !settings.inboxOn) || checkingInbox) return;
+  checkingInbox = true;
+  const found = [];
+  const problems = [];
+  const grab = async (on, name, fn) => {
+    if (!on) return;
+    try {
+      found.push(...(await fn(gapi, inboxState)));
+    } catch (err) {
+      problems.push(inboxProblem(name, err));
+    }
+  };
+  try {
+    await grab(settings.inboxGmail, 'Gmail', inbox.fetchGmail);
+    await grab(settings.inboxChat, 'Google Chat', inbox.fetchChat);
+    await grab(settings.inboxClassroom, 'Classroom', inbox.fetchClassroom);
+    const items = [];
+    for (const it of found.sort((a, b) => b.time - a.time).slice(0, 12)) {
+      const s = await inbox.summarize(it, settings.aiModel);
+      inboxState.markSeen(it.id);
+      inboxItems.set(it.id, s);
+      const { text: _t, references: _r, messageId: _m, ...shown } = s;
+      items.push(shown);
+    }
+    inboxState.save();
+    if (items.length) send('inbox', { items });
+    else if (manual) send('say', { text: problems.length ? `I couldn’t check everything 😕 ${problems.join(' ')}` : 'All caught up! Nothing new 📭✨' });
+  } finally {
+    checkingInbox = false;
+  }
+}
+
+async function dueText() {
+  try {
+    const work = await inbox.upcomingWork(gapi);
+    if (!work.length) return 'Nothing due in Classroom this week! 🎉';
+    return `Due this week 📚\n${work.slice(0, 8).map((w) => `• ${w.course}: ${w.title} (${inbox.formatDue(new Date(w.due))})`).join('\n')}`;
+  } catch (err) {
+    return `I couldn’t check Classroom: ${inboxProblem('Classroom', err)}`;
+  }
+}
+
+async function findJunk() {
+  try {
+    const j = await inbox.findJunk(gapi);
+    junkIds = j.ids;
+    if (!j.total) send('say', { text: 'Your inbox is already clean! ✨' });
+    else send('inboxJunk', { total: j.total, senders: j.senders });
+  } catch (err) {
+    send('say', { text: `I couldn’t look through Gmail: ${inboxProblem('Gmail', err)}`, error: true });
+  }
+}
+
+ipcMain.handle('inbox:draft', async (_e, { id, choice, own } = {}) => {
+  const item = inboxItems.get(id);
+  if (!item) return { ok: false, text: 'I lost that message, sorry! Open it instead.' };
+  try {
+    return { ok: true, text: await inbox.draftReply(item, choice, own, settings.aiModel) };
+  } catch (err) {
+    return { ok: false, text: `I couldn’t write it: ${err.message}` };
+  }
+});
+ipcMain.handle('inbox:send', async (_e, { id, text } = {}) => {
+  const item = inboxItems.get(id);
+  const body = String(text ?? '').trim();
+  if (!item || !body) return { ok: false, text: 'Nothing to send.' };
+  try {
+    if (item.source === 'gmail') await inbox.sendGmailReply(gapi, item, body);
+    else if (item.source === 'chat') await inbox.sendChatReply(gapi, item, body);
+    else return { ok: false, text: 'I can’t reply to Classroom posts. Open it instead!' };
+    inboxItems.delete(id);
+    return { ok: true, text: `Sent to ${item.from}! ✅` };
+  } catch (err) {
+    return { ok: false, text: `It didn’t send: ${inboxProblem(item.source === 'gmail' ? 'Gmail' : 'Google Chat', err)}` };
+  }
+});
+ipcMain.on('inbox:open', (_e, id) => {
+  const link = inboxItems.get(id)?.link;
+  if (link && /^https:\/\//.test(link)) shell.openExternal(link);
+});
+ipcMain.on('inbox:check', () => checkInbox({ manual: true }));
+ipcMain.handle('inbox:clean', async (_e, how) => {
+  const ids = junkIds;
+  junkIds = [];
+  if (!ids.length) return { ok: false, text: 'Nothing to clean.' };
+  try {
+    const n = await inbox.cleanJunk(gapi, ids, how === 'archive' ? 'archive' : 'trash');
+    return { ok: true, text: how === 'archive' ? `Archived ${n} junk emails! 📦 Your inbox is so clean ✨` : `Moved ${n} junk emails to the Trash! 🗑 (You can still get them back for 30 days.)` };
+  } catch (err) {
+    return { ok: false, text: `Cleaning stopped: ${inboxProblem('Gmail', err)}` };
+  }
+});
+
 // ---------- Doing things for you: classes, projects, files, documents and presentations ----------
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const osa = (script) =>
@@ -828,6 +1019,10 @@ app.whenReady().then(() => {
   // Start once the page can hear us, so reminders that came due while the app was closed still pop up.
   win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
   classes = new ClassSchedule({ file: path.join(app.getPath('userData'), 'classes.json') });
+  google = new GoogleAuth({ dir: app.getPath('userData') });
+  inboxState = new inbox.InboxState(path.join(app.getPath('userData'), 'inbox-state.json'));
+  setTimeout(() => checkInbox(), 20_000);
+  setInterval(() => checkInbox(), 3 * 60_000);
   skills = new Skills({
     dir: app.getPath('userData'),
     settings,

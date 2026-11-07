@@ -41,6 +41,11 @@ export const DEFAULTS = {
   normalOutput: '',
   checkWriting: true,
   hidden: false,
+  // 📬 Inbox buddy (Gmail, Google Chat, Classroom): off until you connect your Google account.
+  inboxOn: false,
+  inboxGmail: true,
+  inboxChat: true,
+  inboxClassroom: true,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

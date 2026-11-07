@@ -30,6 +30,35 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
   and Lock Screen widgets, and a 🍅 focus timer in the Dynamic Island. See [ios/README.md](ios/README.md) for how to put
   it on your iPhone with Xcode, for free.
 
+## 📬 Inbox buddy: Gmail, Google Chat and Classroom
+
+Bbokari watches your messages and pops up a card for each new one: who it's from, **the main idea**, and **the question
+they're asking you**. Tap **👍 Yes**, **👎 No** or **✏️ My reply** and he writes the answer. You always see it (and can
+change it) before you press **Send**. Classroom: new assignments, announcements and a ⏰ warning the day before
+something is due that you haven't turned in. Say **"check my messages"**, **"what homework do I have?"** or
+**"clean up my inbox"** (junk goes to the Trash only after you press the button; Gmail keeps it there for 30 days).
+
+### One-time setup (about 15 minutes)
+
+Google only lets apps read your mail after you make your own free "key":
+
+1. Go to **console.cloud.google.com** and sign in with the Google account you want Bbokari to read.
+   (School accounts are often blocked by the school. If so, use your personal Gmail.)
+2. Top left: **Select a project → New project** → name it **Bbokari** → **Create**, then select it.
+3. Search the top bar for each of these and press **Enable**: **Gmail API**, **Google Chat API**, **Google Classroom API**.
+4. Search **Google Auth Platform** → **Get started**: App name **Bbokari**, your email → **Audience: External** → finish.
+   Then **Audience → Test users → Add users** → add your own email.
+5. **Clients → Create client → Application type: Desktop app** → **Create** → **Download JSON**.
+6. Only for Google Chat: open **Google Chat API → Configuration**, type an app name (**Bbokari**), an avatar URL
+   (any picture link) and a description, turn **off** "Interactive features", and **Save**.
+7. In Bbokari: menu bar → **📬 Inbox → Choose Google key file…** → pick the file you downloaded
+   (`client_secret_….json` in Downloads).
+8. **📬 Inbox → Connect Google account…** → choose your account. Google says "Google hasn't verified this app":
+   that's normal because it's your own app. Click **Continue**, tick every box, then **Continue**.
+
+While the app is in "Testing", Google asks you to connect again every 7 days. To stop that: **Google Auth Platform →
+Audience → Publish app**.
+
 ## Bbokari does things for you 🪄
 
 Type it in the chat or say it with "Hey Bbokari":

@@ -113,6 +113,7 @@ export class Chat {
   }
 
   close() {
+    if (this.inboxShowing) this.#endInbox();
     if (this.mode === 'closed') return;
     clearTimeout(this.toastTimer);
     const wasOpen = this.isOpen;
@@ -266,6 +267,187 @@ export class Chat {
     }
     row.append(head, list);
     this.#toast(row, { opensChat: false, hideAfter: 15_000 });
+  }
+
+  // ---------- 📬 inbox cards: one message at a time, with Yes / No / My reply ----------
+
+  /** New messages from Gmail, Google Chat and Classroom. */
+  showInbox(items) {
+    this.inboxQueue = [...(this.inboxQueue ?? []), ...items];
+    if (!this.inboxShowing) this.#nextInbox();
+  }
+
+  #endInbox() {
+    this.inboxShowing = false;
+    this.inboxQueue = [];
+    if (this.inboxTyping) {
+      this.inboxTyping = false;
+      this.host?.setChatFocus(false);
+    }
+  }
+
+  #nextInbox() {
+    if (this.inboxTyping) {
+      this.inboxTyping = false;
+      this.host?.setChatFocus(false);
+    }
+    const item = this.inboxQueue?.shift();
+    if (!item) {
+      this.inboxShowing = false;
+      if (this.mode === 'toast') this.close();
+      return;
+    }
+    // Don't pop up over a conversation: wait until the chat is closed.
+    if (this.isOpen) {
+      this.inboxQueue.unshift(item);
+      this.inboxShowing = false;
+      clearTimeout(this.inboxWait);
+      this.inboxWait = setTimeout(() => !this.inboxShowing && this.#nextInbox(), 15_000);
+      return;
+    }
+    this.inboxShowing = true;
+    const c = this.character;
+    if (SLEEPING.has(c.stateName)) c.trigger('surprised', { then: 'wake' }, true);
+    c.emote(item.needsReply ? 'question' : 'note', 0.4);
+
+    const icon = { gmail: '📧', chat: '💬', classroom: '🏫' }[item.source] ?? '📬';
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet chat__inbox';
+    const head = document.createElement('b');
+    const more = this.inboxQueue.length;
+    head.textContent = `${icon} ${item.from}${more ? `  ·  ${more} more` : ''}`;
+    const sub = document.createElement('small');
+    if (item.source === 'classroom') {
+      const kind = { assignment: 'New assignment', announcement: 'New announcement', due: '⏰ Due soon' }[item.kind] ?? 'Classroom';
+      sub.textContent = `${kind}${item.kind !== 'announcement' ? `: ${item.subject}` : ''}${item.due ? ` · due ${new Date(item.due).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}`;
+    } else sub.textContent = item.source === 'gmail' ? item.subject : `in ${item.where}`;
+    const sum = document.createElement('div');
+    sum.className = 'chat__inbox-sum';
+    sum.textContent = item.summary;
+    row.append(head, sub, sum);
+    if (item.question) {
+      const q = document.createElement('div');
+      q.className = 'chat__inbox-q';
+      q.textContent = `❓ ${item.question}`;
+      row.append(q);
+    }
+    const acts = document.createElement('div');
+    acts.className = 'chat__inbox-acts';
+    row.append(acts);
+    this.#inboxButtons(item, acts);
+    this.#toast(row, { opensChat: false, hideAfter: 0 });
+  }
+
+  #button(label, onClick, primary = false) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `chat__act${primary ? ' chat__replace' : ''}`;
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  #inboxButtons(item, acts) {
+    acts.replaceChildren();
+    const last = !this.inboxQueue?.length;
+    if (item.needsReply && item.source !== 'classroom') {
+      acts.append(
+        this.#button('👍 Yes', () => this.#draft(item, acts, 'yes'), true),
+        this.#button('👎 No', () => this.#draft(item, acts, 'no')),
+        this.#button('✏️ My reply', () => this.#ownReply(item, acts)),
+      );
+    }
+    acts.append(
+      this.#button('Open', () => {
+        this.host?.inboxOpen(item.id);
+        this.#nextInbox();
+      }),
+      this.#button(last ? 'OK' : 'Next ▸', () => this.#nextInbox(), !item.needsReply),
+    );
+  }
+
+  #typingBox(acts, value, placeholder) {
+    const box = document.createElement('textarea');
+    box.className = 'chat__draft';
+    box.value = value;
+    box.placeholder = placeholder;
+    box.maxLength = 1500;
+    acts.replaceChildren(box);
+    this.inboxTyping = true;
+    this.host?.setChatFocus(true);
+    for (const ms of [30, 150, 400]) setTimeout(() => this.inboxTyping && box.focus(), ms);
+    return box;
+  }
+
+  #ownReply(item, acts) {
+    const box = this.#typingBox(acts, '', 'What do you want to say?');
+    const row = document.createElement('div');
+    row.className = 'chat__inbox-acts';
+    row.append(
+      this.#button('✨ Make it nice', () => box.value.trim() && this.#draft(item, acts, 'own', box.value), true),
+      this.#button('Send as is', () => box.value.trim() && this.#send(item, acts, box.value)),
+      this.#button('Back', () => this.#inboxButtons(item, acts)),
+    );
+    acts.append(row);
+  }
+
+  async #draft(item, acts, choice, own = '') {
+    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: 'Writing your reply… ✍️' }));
+    const res = await this.host?.inboxDraft({ id: item.id, choice, own });
+    if (!res?.ok) {
+      acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: res?.text ?? 'That didn’t work.' }));
+      setTimeout(() => this.inboxShowing && this.#inboxButtons(item, acts), 3500);
+      return;
+    }
+    // You always see (and can change) the reply before it goes out.
+    const box = this.#typingBox(acts, res.text, '');
+    const row = document.createElement('div');
+    row.className = 'chat__inbox-acts';
+    row.append(this.#button('Send ✉️', () => box.value.trim() && this.#send(item, acts, box.value), true), this.#button('Cancel', () => this.#inboxButtons(item, acts)));
+    acts.append(row);
+  }
+
+  async #send(item, acts, text) {
+    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: 'Sending… ✉️' }));
+    if (this.inboxTyping) {
+      this.inboxTyping = false;
+      this.host?.setChatFocus(false);
+    }
+    const res = await this.host?.inboxSend({ id: item.id, text });
+    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__inbox-q', textContent: res?.text ?? 'That didn’t work.' }));
+    if (res?.ok) {
+      this.character.emote('sparkle', 0.4);
+      setTimeout(() => this.inboxShowing && this.#nextInbox(), 1800);
+    } else setTimeout(() => this.inboxShowing && this.#inboxButtons(item, acts), 4000);
+  }
+
+  /** "Clean up my inbox": what junk was found, and Trash / Archive / Cancel. */
+  showJunk({ total, senders }) {
+    if (this.isOpen) this.close();
+    if (this.inboxShowing) this.#endInbox();
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet chat__inbox';
+    const head = document.createElement('b');
+    head.textContent = `🧹 I found ${total}${total >= 500 ? '+' : ''} junk emails`;
+    const sub = document.createElement('small');
+    sub.textContent = 'Ads, social media and newsletters (never starred or important ones). Mostly from:';
+    const list = document.createElement('div');
+    list.className = 'chat__inbox-sum';
+    list.textContent = senders.map((s) => `• ${s.name} (${s.count})`).join('\n');
+    const acts = document.createElement('div');
+    acts.className = 'chat__inbox-acts';
+    const go = async (how) => {
+      acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: 'Cleaning up… 🧹' }));
+      this.character.trigger('happy', { then: 'idle' }, true);
+      const res = await this.host?.inboxClean(how);
+      acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__inbox-q', textContent: res?.text ?? 'Done!' }));
+      if (res?.ok) this.character.emote('sparkle', 0.4);
+      clearTimeout(this.toastTimer);
+      this.toastTimer = setTimeout(() => this.mode === 'toast' && this.close(), 8000);
+    };
+    acts.append(this.#button('🗑 Move to Trash', () => go('trash'), true), this.#button('📦 Archive', () => go('archive')), this.#button('Cancel', () => this.close()));
+    row.append(head, sub, list, acts);
+    this.#toast(row, { opensChat: false, hideAfter: 0 });
   }
 
   /** A short note from the pet in a bubble (e.g. "I opened YouTube"), added to the chat if it's open. */
