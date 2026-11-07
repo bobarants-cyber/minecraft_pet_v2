@@ -229,3 +229,95 @@ export function autoRecipeCalcs(text) {
   if (!targets.size) [from * 2, from / 2].forEach((x) => targets.add(x));
   return [...targets].map((to) => scaleRecipe(`scale the recipe from ${from} to ${to}: ${items}`)).filter(Boolean).join('\n\n');
 }
+
+// ---------- a whole recipe, for building a project presentation ----------
+
+/** One ingredient written either way: "1 1/2 cups rice", "rice 1 1/2 cups", "Rice: 1 1/2 cups", "fried egg 1". */
+export function parseIngredient(segment) {
+  const seg = String(segment ?? '').trim().replace(/^[-•*·]\s*/, '').replace(/[.]$/, '');
+  if (!seg || seg.length > 60) return null;
+  const first = splitItem(seg);
+  if (first && /[a-z]/i.test(first.name || first.unit)) return first.name ? first : { ...first, name: first.unit, unit: '' };
+  const m = seg.match(new RegExp(`^([A-Za-z][A-Za-z ()'’-]{0,30}?)\\s*[:\\-–=]?\\s*(${QTY})\\s*([A-Za-z.]+)?\\s*$`));
+  if (!m) {
+    // "Korean bibimbap: 1 1/2 cups rice" (a heading before the first ingredient).
+    const colon = seg.indexOf(':');
+    return colon > 0 ? parseIngredient(seg.slice(colon + 1)) : null;
+  }
+  const qty = parseQty(m[2]);
+  return qty ? { qty, unit: (m[3] ?? '').replace(/\.$/, ''), name: m[1].trim() } : null;
+}
+
+const NOT_FOOD = /\b(double|doubled|half|halve|halved|triple|people|persons?|servings?|portions?|will|times|recipe|scale|cost|total|price|minutes?|hours?|degrees?|step|project|grade|page)\b/i;
+
+/**
+ * Reads a recipe out of free text: how many it serves, the ingredients, and which sizes to work out
+ * (doubled and halved unless other sizes are asked for). Returns { from, items, factors, money } — items empty if none.
+ */
+export function parseRecipe(text) {
+  const t = String(text ?? '');
+  // How many the recipe is for: "serves 4", or the first "for 4 people" that isn't "make it for 6 people".
+  const sizes = [...t.matchAll(/\b(serves|for|feeds|makes|to)\s+(\d+)\s*(servings?|people|persons?|portions?)?\b/gi)].filter((x) => x[1].toLowerCase() !== 'to' || x[3]).map((x) => ({
+    n: Number(x[2]),
+    serves: /serves|feeds|makes/i.test(x[1]),
+    target: x[1].toLowerCase() === 'to' || /\b(?:make|scale|change|turn|do|cook|resize)\s+(?:it|this|that|the recipe|them)?\s*$/i.test(t.slice(Math.max(0, x.index - 25), x.index)),
+    unit: !!x[3],
+  }));
+  const original = sizes.find((x) => x.serves) ?? sizes.find((x) => !x.target && (x.unit || sizes.length === 1));
+  const sv = original ? [null, original.n] : t.match(/\b(\d+)\s*(?:servings?|people|persons?|portions?)\b/i);
+  const from = sv ? Number(sv[1]) : null;
+  const body = t.replace(/\b(?:for|serves|feeds|makes)\s+\d+\s*(?:servings?|people|persons?|portions?)?\b/gi, ' ');
+  const items = body
+    .split(/\s*(?:,|;|\n|\.\s+|\band\b|\bplus\b)\s*/i)
+    .map(parseIngredient)
+    .filter((x) => x?.qty && x.name && x.name.length <= 30 && !NOT_FOOD.test(x.name) && !NOT_FOOD.test(x.unit));
+  const factors = [];
+  const add = (k, label) => {
+    if (!factors.some((f) => f.k.n === k.n && f.k.d === k.d)) factors.push({ k, label, serves: from ? from * k.value : null });
+  };
+  if (/\bdoubl|\btwice|×\s*2\b|\bx\s*2\b/i.test(t)) add(new Frac(2), 'Doubled (× 2)');
+  if (/\bhalf|\bhalve|×\s*1\/2|\bx\s*1\/2/i.test(t)) add(new Frac(1, 2), 'Halved (× 1/2)');
+  if (/\btripl|×\s*3\b|\bx\s*3\b/i.test(t)) add(new Frac(3), 'Tripled (× 3)');
+  if (from) {
+    for (const x of sizes.filter((y) => y !== original && !y.serves)) {
+      const to = x.n;
+      if (to && to !== from) add(new Frac(to, from), `For ${to} people (× ${short(new Frac(to, from))})`);
+    }
+  }
+  if (!factors.length) {
+    add(new Frac(2), 'Doubled (× 2)');
+    add(new Frac(1, 2), 'Halved (× 1/2)');
+  }
+  const money = t.match(/[$€£]\s*(\d+(?:\.\d+)?)/);
+  return { from, items, factors, money: money ? { symbol: money[0][0], total: Number(money[1]) } : null };
+}
+
+/** Text helpers for slides. */
+export const qtyText = (f) => short(f);
+export const improperText = (f) => (f.d === 1 ? String(f.n) : `${f.n}/${f.d}`);
+export const multiplySteps = (a, b) => mulSteps(a, b);
+export function mixedToImproper(f) {
+  if (f.d === 1 || Math.abs(f.n) < f.d) return null;
+  const whole = Math.trunc(f.n / f.d);
+  const rest = f.n % f.d;
+  return `${whole} ${rest}/${f.d} = (${whole} × ${f.d} + ${rest})/${f.d} = ${f.n}/${f.d}`;
+}
+
+/** "1 1/2 cups rice" → "≈ 278 g = 2.78 × 10² g" (or mL/L for liquids, kg for grams), or null if unknown. */
+export function metricLine(item) {
+  const unit = UNIT[String(item.unit).toLowerCase()];
+  const name = item.name.toLowerCase();
+  const amount = item.qty.value;
+  if (/^(g|grams?)$/i.test(item.unit)) return `${short(item.qty)} g ${item.name} = ${Number((amount / 1000).toPrecision(3))} kg = ${sci(amount / 1000)} kg`;
+  if (!unit) return null;
+  const key = Object.keys(GRAMS).sort((a, b) => b.length - a.length).find((k) => name.includes(k));
+  if (key) {
+    const g = amount * GRAMS[key][unit];
+    return `${short(item.qty)} ${item.unit} ${item.name} ≈ ${Number(g.toPrecision(3))} g = ${sci(Number(g.toPrecision(3)))} g`;
+  }
+  if (/milk|water|oil|sauce|soy|juice|vinegar|broth|stock|cream|syrup/.test(name)) {
+    const ml = amount * ML[unit];
+    return `${short(item.qty)} ${item.unit} ${item.name} ≈ ${Math.round(ml)} mL = ${Number((ml / 1000).toPrecision(3))} L = ${sci(ml / 1000)} L`;
+  }
+  return null;
+}

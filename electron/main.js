@@ -21,7 +21,7 @@ const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet'
 import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 import * as actions from './actions.js';
-import { autoRecipeCalcs, recipeMath } from './recipeMath.js';
+import { autoRecipeCalcs, parseRecipe, recipeMath } from './recipeMath.js';
 import { GoogleAuth } from './google.js';
 import { Canva, CANVA_REDIRECT } from './canva.js';
 import * as inbox from './inbox.js';
@@ -796,6 +796,15 @@ async function projectCommand(said) {
     return { ok: true, kind: 'project', text: await projectText(project) };
   }
 
+  // "Do the presentation with my calculations: bibimbap for 4 people: rice 2 cups, beef 1 cup…" (no "template" needed).
+  if (/\b(?:presentation|slides?|slideshow|canva|powerpoint|keynote)\b/i.test(said) && /\b(?:calculations?|recipe|details|ingredients|math|numbers)\b/i.test(said) && !/\btemplate\b/i.test(said)) {
+    const colon = said.indexOf(':');
+    const details = colon > 0 ? said.slice(colon + 1).trim() : said;
+    if (parseRecipe(details).items.length >= 2) {
+      const base = parseProjectTemplate(`make a template for this project ${said.slice(0, colon > 0 ? colon : said.length)}`) ?? { name: '', topic: '', doc: false, korean: false, canva: false, slides: false };
+      return { ok: true, kind: 'action', text: await runAction(projectAction({ ...base, fill: true, details }, said)) };
+    }
+  }
   const t = parseProjectTemplate(said);
   if (!t) return null;
   // A project named here that isn't the one we know: look it up in Classroom.
@@ -814,8 +823,10 @@ async function projectCommand(said) {
 
 /** The "make it" action for the project: a blank template, or one filled with your details (and the recipe math done). */
 function projectAction(t, said) {
-  const fromDetails = t.details?.match(/^\s*(.{2,40}?)\s+(?:for|serves|feeds)\s+\d/i)?.[1]?.trim();
-  const topic = t.topic || fromDetails || project?.title || 'my project';
+  const head = t.details?.match(/^\s*(.{2,40}?)\s+(?:for|serves|feeds)\s+\d/i)?.[1]?.trim();
+  const fromDetails = head && !/\d/.test(head) ? head : '';
+  const dish = `${said} ${t.details ?? ''}`.match(/\b(korean bibimbap|bibimbap|kimchi(?: fried rice| jjigae)?|bulgogi|japchae|kimbap|gimbap|tteokbokki|ramyeon|pancakes?|cookies?|brownies?|pizza|tacos?|cake|cupcakes?|muffins?|curry|pasta|lasagna|salad|soup|smoothies?|fried rice|sushi|dumplings?)\b/i)?.[1];
+  const topic = t.topic || fromDetails || dish || project?.title || 'my recipe';
   const place = t.doc ? 'gdocs' : t.slides ? 'gslides' : canva?.connected || t.canva ? 'canva' : 'gslides';
   const about = project
     ? `School project: "${project.title}"${project.course ? ` (${project.course})` : ''}. Project instructions: ${project.text.slice(0, 2500)}\n`
@@ -825,7 +836,20 @@ function projectAction(t, said) {
     const calcs = autoRecipeCalcs(t.details);
     request = `${about}The student's topic: ${topic}.\nThe student's own details:\n${t.details.slice(0, 3000)}${calcs ? `\nRecipe calculations (already worked out exactly; copy these numbers and steps):\n${calcs}` : ''}`;
   } else if (project) request = `A blank template. ${request}`;
-  return { type: 'create', kind: t.doc ? 'doc' : 'slides', template: !t.fill, filled: t.fill, topic, theme: t.korean || /korea|한국/i.test(t.details ?? '') ? 'korean' : null, place, request };
+  const recipeDeck = t.fill && !t.doc && parseRecipe(t.details).items.length >= 2;
+  return {
+    type: 'create',
+    kind: t.doc ? 'doc' : 'slides',
+    template: !t.fill,
+    filled: t.fill,
+    topic,
+    theme: t.korean || /korea|한국/i.test(t.details ?? '') ? 'korean' : null,
+    place,
+    request,
+    recipeDeck,
+    details: recipeDeck ? t.details : undefined,
+    projectTitle: project?.title ?? '',
+  };
 }
 
 /** "yes" (or "yes, I'm doing bibimbap") after Bbokari asked "Want me to make you a template?". */
@@ -1204,6 +1228,7 @@ async function runAction(a) {
       if (creating) return 'I’m still working on the last one! Give me a moment ✍️';
       createThing(a);
       const what = a.kind === 'slides' ? 'a presentation' : 'a doc';
+      if (a.recipeDeck) return `On it! I’m making a full ${a.topic} presentation with all your calculations (original recipe, scaling, steps, metric, photos…) ✍️ One moment.`;
       if (a.filled) return `On it! I’m putting your ${a.topic} details and calculations into ${a.kind === 'slides' ? 'a presentation' : 'a doc'} ✍️ Give me a minute or two.`;
       if (a.template) return `Ooh, a blank ${a.kind === 'slides' ? 'presentation' : 'doc'} template for ${a.topic}! I’ll set up the spaces and you fill them in. One moment ✍️`;
       return `Ooh, ${what} about ${a.topic}! Let me write it, give me a minute ✍️`;
@@ -1241,7 +1266,10 @@ async function createThing(a) {
   creating = true;
   send('typing', { on: true }); // Bbokari sits at the desk and types while the AI writes
   try {
-    const content = await actions.writeContent(a, settings.aiModel);
+    // Recipe projects are built by code (always complete, math always right); everything else is written by the AI.
+    const content = a.recipeDeck
+      ? await actions.buildRecipeDeck(a.details, { topic: a.topic, theme: a.theme, project: a.projectTitle, model: settings.aiModel })
+      : await actions.writeContent(a, settings.aiModel);
     lastWork = { action: a, content, at: Date.now() };
     saveLastWork();
     await deliver(a, content);

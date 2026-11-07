@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { OLLAMA_URL } from './ai.js';
+import { improperText, metricLine, mixedToImproper, multiplySteps, parseRecipe, qtyText } from './recipeMath.js';
 
 export const DOCS_DIR = path.join(os.homedir(), 'Documents', 'Bbokari Docs');
 
@@ -457,12 +458,34 @@ export async function savePresentation(deck) {
   for (const s of deck.slides) {
     const slide = pptx.addSlide();
     decorate(slide, t, name, false);
+    if (s.kind === 'big') {
+      // A big statement slide: "× 2", "감사합니다!".
+      slide.addShape('ellipse', { x: 4.4, y: 0.9, w: 4.5, h: 4.5, fill: { color: t.soft }, line: { color: t.soft } });
+      slide.addText(s.big ?? s.title, { x: 1, y: 1.3, w: 11.33, h: 3.0, fontFace: t.title, fontSize: String(s.big ?? s.title).length > 8 ? 64 : 110, bold: true, color: t.accent, align: 'center', valign: 'middle', fit: 'shrink' });
+      slide.addText(s.title, { x: 1, y: 4.55, w: 11.33, h: 0.8, fontFace: t.title, fontSize: 30, bold: true, color: t.ink, align: 'center' });
+      if (s.caption) slide.addText(s.caption, { x: 1.5, y: 5.35, w: 10.33, h: 1.0, fontFace: t.font, fontSize: 20, color: t.ink, align: 'center', valign: 'top' });
+      slide.addText(s.emoji, { x: 11.2, y: 0.4, w: 1.4, h: 1.1, fontSize: 48, align: 'center' });
+      if (s.notes) slide.addNotes(s.notes);
+      continue;
+    }
     const top = name === 'korean' ? 0.35 : 0.3;
     slide.addText(s.title, { x: 0.8, y: top, w: 10.2, h: 1, fontFace: t.title, fontSize: 32, bold: true, color: t.ink, valign: 'middle', fit: 'shrink' });
     box(slide, 0.8, top + 1.02, 1.2, 0.07, t.accent);
     slide.addText(s.emoji, { x: 11.4, y: top - 0.05, w: 1.3, h: 1.1, fontSize: 48, align: 'center', valign: 'middle' });
 
     // Content on a soft card, picture (or photo spot) on the right.
+    if (s.kind === 'photos') {
+      // A page of photo spots with labels (2 × 2).
+      const labels = (s.labels ?? ['Ingredients', 'Measuring', 'Cooking', 'Final dish']).slice(0, 4);
+      labels.forEach((label, i) => {
+        const x = 0.75 + (i % 2) * 6.05;
+        const y = 1.8 + Math.floor(i / 2) * 2.7;
+        slide.addShape('roundRect', { x, y, w: 5.8, h: 2.45, rectRadius: 0.2, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
+        slide.addText(`📷  ${label}`, { x, y, w: 5.8, h: 2.45, fontFace: t.font, fontSize: 22, color: t.accent, align: 'center', valign: 'middle' });
+      });
+      if (s.notes) slide.addNotes(s.notes);
+      continue;
+    }
     if (s.table?.columns.length) {
       // Numbers slide: a table with the column headers and empty cells to fill in, and a photo spot.
       const head = s.table.columns.map((c) => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: t.accent }, align: 'center' } }));
@@ -481,12 +504,29 @@ export async function savePresentation(deck) {
     }
     slide.addShape('roundRect', { x: 0.6, y: 1.75, w: 8.3, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.soft, width: 1.5 } });
     if (deck.filled) {
+      // Steps slides get numbered cards across the full width; others keep a photo spot on the right.
+      if (s.steps) {
+        const rows = s.bullets.slice(0, 8);
+        const colW = rows.length > 4 ? 5.8 : 11.7;
+        rows.forEach((b, i) => {
+          const col = rows.length > 4 ? Math.floor(i / 4) : 0;
+          const row = rows.length > 4 ? i % 4 : i;
+          const x = 0.75 + col * 6.05;
+          const y = 1.8 + row * 1.25;
+          slide.addShape('roundRect', { x, y, w: colW, h: 1.05, rectRadius: 0.15, fill: { color: t.card }, line: { color: t.soft, width: 1.5 } });
+          slide.addShape('ellipse', { x: x + 0.18, y: y + 0.22, w: 0.6, h: 0.6, fill: { color: t.accent }, line: { color: t.accent } });
+          slide.addText(String(i + 1), { x: x + 0.18, y: y + 0.22, w: 0.6, h: 0.6, fontFace: t.title, fontSize: 16, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle' });
+          slide.addText(b, { x: x + 0.95, y, w: colW - 1.1, h: 1.05, fontFace: t.font, fontSize: rows.length > 4 ? 16 : 20, color: t.ink, valign: 'middle', fit: 'shrink' });
+        });
+        if (s.notes) slide.addNotes(s.notes);
+        continue;
+      }
       slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
       slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, fontFace: t.font, fontSize: 20, color: t.accent, align: 'center', valign: 'middle' });
       const size = s.bullets.join(' ').length > 260 ? 18 : s.bullets.join(' ').length > 160 ? 21 : 24;
       slide.addText(
-        s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 28 }, paraSpaceAfter: 14 } })),
-        { x: 1.0, y: 2.05, w: 7.6, h: 4.7, fontFace: t.font, fontSize: size, color: t.ink, valign: 'top' },
+        s.bullets.map((b) => ({ text: s.placeholder ? `${b}  ____________` : b, options: { bullet: { indent: 28 }, paraSpaceAfter: 14 } })),
+        { x: 1.0, y: 2.05, w: 7.6, h: 4.7, fontFace: t.font, fontSize: size, color: s.placeholder ? '8A8A8A' : t.ink, valign: 'top' },
       );
     } else if (deck.template) {
       slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
@@ -516,34 +556,223 @@ export async function savePresentation(deck) {
 }
 
 
+const cap1 = (x) => String(x).replace(/^\p{L}/u, (c) => c.toUpperCase());
+/** "cup" or "cups" to match the amount (1/2 cup, 2 cups); other units as written. */
+function unitFor(qty, unit) {
+  if (!unit) return '';
+  const one = qty.value <= 1;
+  const base = unit.replace(/s$/i, '');
+  if (/^(cup|tablespoon|teaspoon|clove|slice|piece|can|stick|pinch|ounce|pound|gram|liter|litre|kilogram|milliliter)$/i.test(base)) return one ? base : `${base}${/pinch/i.test(base) ? 'es' : 's'}`;
+  return unit;
+}
+const amountText = (qty, item) => `${qtyText(qty)}${item.unit ? ` ${unitFor(qty, item.unit)}` : ''}`;
+
 /**
- * Applies a change you ask for ("add a slide about fun facts", "change the title to …", "make it for 6 people") to
- * something Bbokari already made, and returns the updated content (same shape, same look unless you ask otherwise).
- * `calcs` are exact recipe calculations worked out beforehand, so the AI never does the math.
+ * A full project presentation built from your recipe by code (so it's always complete and the math is always right):
+ * cover, about the dish, original recipe, mixed numbers → improper fractions, then for each size (doubled, halved…)
+ * a scale-factor slide, a table and the steps; metric & scientific notation, cost per serving, photos, what I learned,
+ * thank you. The AI only writes a subtitle and three short facts about the dish.
+ */
+export async function buildRecipeDeck(details, { topic = '', theme = null, project = '', model } = {}) {
+  const r = parseRecipe(details);
+  if (r.items.length < 2) throw new Error('I couldn’t find the recipe. Write it like “bibimbap for 2 people: 1 1/2 cups rice, 1/2 cup spinach, 200 g beef”.');
+  const dish = cap1(topic || 'My recipe');
+  const lookTheme = theme && THEMES[theme] ? theme : pickTheme(`${topic} ${details}`, 'food');
+  const korean = lookTheme === 'korean';
+  let intro = {};
+  try {
+    intro = await ollamaJSON(
+      [
+        { role: 'system', content: 'Reply with JSON only: {"subtitle": "a short catchy subtitle for a school math project about this dish", "hangul": "the dish name in Korean Hangul if it is Korean, else empty", "facts": ["3 short, well-known, true facts about the dish (where it comes from, what is in it, when people eat it), under 15 words each"]}. If unsure of a fact, keep it general.' },
+        { role: 'user', content: `Dish: ${dish}` },
+      ],
+      model,
+      { timeout: 60_000, temperature: 0.3 },
+    );
+  } catch {}
+  const facts = (Array.isArray(intro.facts) ? intro.facts : []).map((f) => clean(f).slice(0, 120)).filter(Boolean).slice(0, 3);
+  const L = (en, ko) => (korean && ko ? `${en} · ${ko}` : en);
+  const slides = [];
+
+  slides.push({ title: L(`About ${dish}`, '소개'), emoji: korean ? '🍚' : '🍽️', bullets: facts.length ? [...facts, 'Why I chose it: (your answer)'] : ['Where it comes from: (your answer)', 'What is in it: (your answer)', 'Why I chose it: (your answer)'] });
+  slides.push({
+    title: L(`Original recipe${r.from ? ` (serves ${r.from})` : ''}`, '재료'),
+    emoji: '🥕',
+    table: { columns: ['Ingredient', 'Amount', 'As a fraction'], rows: r.items.length, cells: r.items.map((i) => [cap1(i.name), amountText(i.qty, i), improperText(i.qty)]) },
+  });
+  const mixed = r.items.map((i) => (mixedToImproper(i.qty) ? `${cap1(i.name)}: ${mixedToImproper(i.qty)}${i.unit ? ` ${unitFor(i.qty, i.unit)}` : ''}` : null)).filter(Boolean);
+  if (mixed.length) slides.push({ title: L('Mixed numbers → fractions', '분수'), emoji: '🔢', steps: true, bullets: mixed });
+
+  for (const f of r.factors.slice(0, 3)) {
+    const k = f.k;
+    const kText = improperText(k);
+    slides.push({ kind: 'big', title: f.label, big: `× ${kText}`, emoji: k.value > 1 ? '⬆️' : '⬇️', caption: r.from ? `Scale factor = ${f.serves} ÷ ${r.from} = ${kText} · now it serves ${f.serves}` : `Every amount × ${kText}` });
+    slides.push({
+      title: L(`${f.label}${f.serves ? `: serves ${f.serves}` : ''}`, k.value > 1 ? '두 배' : '반'),
+      emoji: k.value > 1 ? '✖️' : '➗',
+      table: { columns: ['Ingredient', 'Original', `× ${kText}`], rows: r.items.length, cells: r.items.map((i) => [cap1(i.name), amountText(i.qty, i), amountText(i.qty.mul(k), i)]) },
+    });
+    slides.push({ title: `How I worked it out (× ${kText})`, emoji: '📝', steps: true, bullets: r.items.map((i) => `${cap1(i.name)}: ${multiplySteps(i.qty, k)}${i.unit ? ` ${unitFor(i.qty.mul(k), i.unit)}` : ''}`) });
+  }
+
+  const metric = r.items.map(metricLine).filter(Boolean).slice(0, 4);
+  slides.push({
+    title: L('Metric & scientific notation', '과학적 표기법'),
+    emoji: '🔬',
+    bullets: metric.length ? [...metric, 'Tip: big numbers get positive exponents, tiny ones negative'] : ['Measurement 1: (convert to g or mL, then write as a × 10ⁿ)', 'Measurement 2:', 'Measurement 3:'],
+    placeholder: !metric.length,
+  });
+  const servings = r.from ?? 1;
+  slides.push({
+    title: L('Cost per serving', '가격'),
+    emoji: '💰',
+    table: r.money
+      ? { columns: ['Total cost', 'Servings', 'Cost per serving'], rows: 1, cells: [[`${r.money.symbol}${r.money.total.toFixed(2)}`, String(servings), `${r.money.symbol}${r.money.total.toFixed(2)} ÷ ${servings} = ${r.money.symbol}${(r.money.total / servings).toFixed(2)}`]] }
+      : { columns: ['Ingredient', 'Price', 'Amount used', 'Cost'], rows: Math.min(6, r.items.length), cells: null },
+  });
+  slides.push({ kind: 'photos', title: L('My cooking photos', '사진'), emoji: '📸', labels: ['Ingredients', 'Measuring', 'Cooking', 'Final dish'] });
+  slides.push({ title: L('What I learned', '배운 점'), emoji: '💡', placeholder: true, bullets: ['One thing I learned about fractions:', 'What was hardest:', 'How I would use this at home:'] });
+  slides.push({ kind: 'big', title: 'Thank you!', big: korean ? '감사합니다!' : 'Thank you!', emoji: korean ? '🇰🇷' : '🎉', caption: `${dish} · Math in my kitchen` });
+
+  return {
+    title: project && !/project$/i.test(project) ? `${dish}: ${project}` : `${dish}: Math in My Kitchen`,
+    subtitle: clean(intro.subtitle).slice(0, 90) || 'Scaling a recipe with fractions',
+    slides,
+    theme: lookTheme,
+    hangul: korean ? (/[가-힣]/.test(intro.hangul ?? '') ? clean(intro.hangul).slice(0, 20) : '') : '',
+    filled: true,
+    template: false,
+    recipeDeck: true,
+    details,
+    topic,
+  };
+}
+
+/** New slides about something ("add a slide about where it comes from", "more slides"), written by the AI. */
+async function newSlides(content, instruction, count, model) {
+  const out = await ollamaJSON(
+    [
+      {
+        role: 'system',
+        content:
+          `You write ${count} NEW slide${count === 1 ? '' : 's'} to add to a student's presentation. Reply with JSON only: {"slides": [{"title": "...", "bullets": ["..."], "emoji": "🍚"}]}. ` +
+          'Each slide: a short title, 3 or 4 bullets under 14 words, one emoji. Do not repeat slides that already exist. Only well-known, true facts; no made-up numbers.',
+      },
+      { role: 'user', content: `Presentation: ${content.title}\nExisting slides: ${content.slides.map((x) => x.title).join(' | ')}\nThe student asked: ${instruction}` },
+    ],
+    model,
+    { temperature: 0.4 },
+  );
+  return tidyContent('slides', out, content.title).slides.slice(0, count).map((x) => ({ ...x, added: true }));
+}
+
+const insertBeforeEnd = (slides, extra) => {
+  const end = slides.length && slides[slides.length - 1].kind === 'big' && /thank|감사/i.test(`${slides[slides.length - 1].title}${slides[slides.length - 1].big}`) ? slides.length - 1 : slides.length;
+  return [...slides.slice(0, end), ...extra, ...slides.slice(end)];
+};
+
+/**
+ * Applies a change you ask for to what Bbokari made. Simple changes are done by code (title, remove a slide, theme,
+ * recipe amounts or sizes → everything recalculated); "add a slide…" only adds; anything else goes to the AI, but the
+ * result is checked so slides, tables and calculations can never get lost.
  */
 export async function editContent(kind, content, instruction, model, calcs = '') {
-  const { template, filled, theme, hangul, ...shape } = content;
+  const ins = String(instruction);
+  let next = JSON.parse(JSON.stringify(content));
+  const asked = Object.keys(THEMES).find((name) => new RegExp(`\\b${name}\\b`, 'i').test(ins));
+  const theme = /\bkorea/i.test(ins) ? 'korean' : asked;
+
+  // Recipe presentations: new sizes or amounts → rebuild with the math redone, keeping slides you added.
+  if (content.recipeDeck) {
+    let details = content.details;
+    let changed = false;
+    const amt = ins.match(/(?:change|make|set|use|put)\s+(?:the\s+)?([a-z][a-z ]{1,25}?)\s+(?:to|into|=|as)\s+(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*([a-z.]*)/i);
+    if (amt) {
+      const name = amt[1].trim();
+      const re = new RegExp(`(\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?)\\s*([a-z.]*\\s*)(${name})|(${name})\\s*[:\\-–=]?\\s*(\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?)\\s*([a-z.]*)`, 'i');
+      if (re.test(details)) {
+        details = details.replace(re, `${amt[2]} ${amt[3] || ''} ${name}`.replace(/\s+/g, ' '));
+        changed = true;
+      }
+    }
+    const size = ins.match(/\b(?:for|to)\s+(\d+)\s*(?:people|servings?|persons?|portions?)\b/i);
+    if (size) {
+      details += ` Make it for ${size[1]} people.`;
+      changed = true;
+    }
+    if (/\btripl/i.test(ins)) {
+      details += ' Triple it.';
+      changed = true;
+    }
+    if (changed) {
+      const rebuilt = await buildRecipeDeck(details, { topic: content.topic, theme: theme ?? content.theme, model });
+      rebuilt.title = content.title;
+      rebuilt.slides = insertBeforeEnd(rebuilt.slides, content.slides.filter((x) => x.added));
+      return rebuilt;
+    }
+  }
+
+  const title = ins.match(/(?:change|rename|set|make)\s+(?:the\s+)?(?:title|name)\s+(?:to|as|into)\s+["“']?(.+?)["”']?\s*[.!]?$/i);
+  if (title) {
+    next.title = title[1].trim();
+    return next;
+  }
+  const remove = ins.match(/(?:remove|delete|take out|get rid of)\s+(?:the\s+)?(.+?)\s+slides?\b/i);
+  if (remove && kind === 'slides') {
+    const words = remove[1].toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const keep = next.slides.filter((x) => !words.every((w) => `${x.title} ${x.big ?? ''}`.toLowerCase().includes(w)));
+    if (keep.length < next.slides.length) {
+      next.slides = keep;
+      return next;
+    }
+  }
+  if (theme && /\b(?:theme|style|look|colou?rs?|make it)\b/i.test(ins) && !/\b(?:add|slide about)\b/i.test(ins)) {
+    next.theme = theme;
+    return next;
+  }
+  if (kind === 'slides' && /\b(?:add|more|another|extra|include|put in|longer|detail)\b/i.test(ins)) {
+    const count = /\b(?:more slides|more detail|longer|a lot)\b/i.test(ins) ? 3 : Math.min(4, Number(ins.match(/\b(\d)\s+(?:more\s+|new\s+)?slides?\b/i)?.[1] ?? 1));
+    next.slides = insertBeforeEnd(next.slides, await newSlides(content, ins, count, model));
+    if (theme) next.theme = theme;
+    return next;
+  }
+
+  // Anything else: the AI edits, then we make sure nothing was lost.
+  const { template, filled, hangul, details, recipeDeck, topic, theme: oldTheme, ...shape } = content;
   const out = await ollamaJSON(
     [
       {
         role: 'system',
         content:
           'You edit a student\'s ' + (kind === 'slides' ? 'presentation' : 'document') + '. You get the current version as JSON and the change they want. ' +
-          'Reply with the FULL updated JSON in exactly the same format. Change only what they ask; keep everything else the same (same slides, same order, same wording). ' +
-          'Do not invent facts or numbers. If exact calculations are given, use those numbers and steps exactly.' +
-          (template ? ' This is a blank template: keep placeholders empty for the student.' : ''),
+          'Reply with the FULL updated JSON in exactly the same format. Change only what they ask; keep everything else the same. Do not invent facts or numbers.' +
+          (calcs ? ' Use these exact calculations: ' + calcs : ''),
       },
-      { role: 'user', content: `Current version:\n${JSON.stringify(shape).slice(0, 12000)}\n\nThe change: ${String(instruction).slice(0, 1500)}${calcs ? `\n\nExact calculations to use:\n${calcs}` : ''}` },
+      { role: 'user', content: `Current version:\n${JSON.stringify(shape).slice(0, 12000)}\n\nThe change: ${ins.slice(0, 1500)}` },
     ],
     model,
     { temperature: 0.2 },
   );
-  const next = { ...tidyContent(kind, out, content.title), template, filled, theme, hangul };
-  // "make it space themed" / "Korean style": switch the look.
-  const asked = Object.keys(THEMES).find((name) => new RegExp(`\\b${name}\\b`, 'i').test(instruction));
-  if (asked) next.theme = asked;
-  if (/\bkorea/i.test(instruction)) next.theme = 'korean';
-  if (next.theme === 'korean' && !next.hangul && hangul) next.hangul = hangul;
+  let edited;
+  try {
+    edited = tidyContent(kind, out, content.title);
+  } catch {
+    return next; // the AI gave nothing usable: keep it as it was
+  }
+  if (kind === 'slides') {
+    // Same slides in the same places; a slide keeps its table, steps and layout if the AI dropped them.
+    next.slides = content.slides.map((orig, i) => {
+      const e = edited.slides[i];
+      if (!e || orig.kind) return orig;
+      return { ...orig, title: e.title || orig.title, bullets: orig.table || orig.steps ? orig.bullets : e.bullets.length ? e.bullets : orig.bullets, emoji: e.emoji || orig.emoji };
+    });
+    next.slides = insertBeforeEnd(next.slides, edited.slides.slice(content.slides.length).map((x) => ({ ...x, added: true })));
+    next.title = edited.title || next.title;
+  } else if (edited.sections.length >= content.sections.length) {
+    next.sections = edited.sections;
+    next.title = edited.title || next.title;
+  }
+  if (theme) next.theme = theme;
   return next;
 }
 

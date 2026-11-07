@@ -37,6 +37,7 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
 | "check my math project" | Finds it in Google Classroom and explains what it's about, what you need to do and a tip |
 | "my math project is: …" (paste the instructions) | Same, without Classroom |
 | "yes" (after Bbokari explains a project and asks "Want me to make you a template?") | Makes the template right away (say "yes, I'm doing bibimbap" to give the topic) |
+| "do the presentation with my calculations: bibimbap for 4 people: rice 2 cups, beef 1 cup, fried egg 1" | A full presentation built from your recipe (about 15 slides): original recipe, mixed numbers → fractions, doubled and halved (or any size) with tables and steps, metric & scientific notation, cost per serving, photo page, what I learned, thank you |
 | "make me a template for my math project and fill it in with these details: bibimbap for 2 people: 1 1/2 cups rice, … I will double it and halve it" | A presentation with your details in it; the recipe math (doubled, halved, or "for 6 people") is worked out exactly and put in the tables |
 | "make me a template for this project, I'm doing bibimbap, with Korean style" | A blank template built from the project's instructions (tables for the math, photo spots). Opens in Canva if it's connected |
 | "add a slide about fun facts", "change the title to …", "make it for 6 people", "make it space themed" | Updates the last thing Bbokari made and opens the new version (Canva keeps the old one too) |
