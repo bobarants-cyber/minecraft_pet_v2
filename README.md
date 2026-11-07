@@ -30,6 +30,25 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
   and Lock Screen widgets, and a 🍅 focus timer in the Dynamic Island. See [ios/README.md](ios/README.md) for how to put
   it on your iPhone with Xcode, for free.
 
+## 🎨 Canva: designs open right in Canva
+
+When Canva is connected, "make a presentation about … in Canva" opens the finished design **in the Canva editor**
+(no downloading or dragging). Korean topics get a Korean look: hanji colors, 색동 stripes and the title in Hangul.
+Other topics get their own theme (food, nature, space, ocean, school, party). Once it's open, use **Elements** on the
+left in Canva to add stickers and photos (Canva doesn't let apps add its library elements).
+
+### One-time setup (about 5 minutes)
+
+1. Go to **canva.com/developers/integrations** (sign in with your Canva account) → **Create an integration**.
+2. Give it a name (**Bbokari**) and accept the terms.
+3. **Scopes**: turn on **design:content → Write** and **design:meta → Read**.
+4. **Authentication → Add Authentication** → Redirect URL: `http://127.0.0.1:4519/canva` → save.
+5. **Configuration**: copy the **Client ID**, press **Generate secret** and copy the **Client secret**.
+6. In Bbokari: menu bar → **🎨 Canva → Enter Canva keys…** → paste both → **Save & connect** → press **Allow** on Canva's page.
+
+Classroom work gets a **📝 Make a template** button too: Bbokari builds a blank template for the assignment (slides if
+it sounds like a presentation, otherwise a Google Doc) for you to fill in.
+
 ## 📬 Inbox buddy: Gmail, Google Chat and Classroom
 
 Bbokari watches your messages and pops up a card for each new one: who it's from, **the main idea**, and **the question

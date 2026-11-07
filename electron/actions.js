@@ -224,6 +224,10 @@ export const standardFolder = (name) => (FOLDERS[name]?.startsWith('/') ? FOLDER
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fileSafe = (s) => String(s ?? 'Bbokari').replace(/[/\\:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70) || 'Bbokari';
 
+const STYLE_RULE =
+  ' Also add "theme": one of "korean", "food", "nature", "space", "ocean", "school", "party", "classic" (pick "korean" for anything about Korea), ' +
+  'and "hangul": the title in Korean (Hangul) if the theme is "korean", otherwise "".';
+
 function templateRules(kind) {
   const common =
     'The student wants an EMPTY TEMPLATE to fill in themselves: do NOT write the real content (no facts, no recipe steps, no answers). ' +
@@ -234,7 +238,8 @@ function templateRules(kind) {
       '{"title": "...", "subtitle": "Add a subtitle", "slides": [{"title": "Ingredients", "bullets": ["Ingredient 1", "Ingredient 2", "Ingredient 3"], "emoji": "🥕"}]}. ' +
       'Make 3 to 6 slides, one per section the student asked for (e.g. Ingredients, Recipe steps), plus anything clearly useful. ' +
       'Bullets are placeholder labels like "Ingredient 1", "Step 1", "Fun fact", 3 to 6 per slide. ' +
-      common
+      common +
+      STYLE_RULE
     );
   }
   return (
@@ -255,7 +260,8 @@ function writerRules(kind) {
       '{"title": "...", "subtitle": "...", "slides": [{"title": "...", "bullets": ["...", "..."], "emoji": "🌋", "notes": "..."}]}. ' +
       'Make 6 to 8 slides (not counting the title), each with 3 or 4 short bullets (under 12 words each), one fitting emoji, ' +
       'and 1-2 sentences of speaker notes. End with a "Summary" or "Fun facts" slide. ' +
-      common
+      common +
+      STYLE_RULE
     );
   }
   return (
@@ -275,7 +281,20 @@ export async function writeContent({ kind, topic, request, template = false }, m
     model,
     { temperature: 0.6 },
   );
-  return { ...tidyContent(kind, out, topic), template };
+  const content = { ...tidyContent(kind, out, topic), template };
+  if (kind === 'slides') {
+    content.theme = pickTheme(`${topic} ${request ?? ''}`, out?.theme);
+    const hangul = clean(out?.hangul);
+    content.hangul = content.theme === 'korean' && /[\uAC00-\uD7A3]/.test(hangul) ? hangul.slice(0, 30) : '';
+  }
+  return content;
+}
+
+const KOREAN = /\b(?:korea|korean|hangul|hanbok|seoul|busan|k-?pop|k-?drama|kimchi|bibimbap|bulgogi|tteok\w*|japchae|kimbap|gimbap|ramyeon|soju|chuseok|seollal|hanok|taekwondo|skz|stray kids)\b|[\uAC00-\uD7A3]/i;
+/** The look for a presentation: Korean topics always get the Korean theme; otherwise what the AI picked. */
+export function pickTheme(text, aiTheme) {
+  if (KOREAN.test(text)) return 'korean';
+  return THEMES[aiTheme] ? aiTheme : 'classic';
 }
 
 export function tidyContent(kind, out, topic) {
@@ -323,56 +342,103 @@ export async function saveDoc(doc, { docx = false } = {}) {
   return { html: `${base}.html`, docx: `${base}.docx` };
 }
 
-const THEMES = [
-  { bg: 'FFF8E1', accent: 'FFB21E', ink: '2B2140', soft: 'FFE7A3' },
-  { bg: 'EAF6FF', accent: '4DABF7', ink: '1E2A44', soft: 'CFE8FF' },
-  { bg: 'F3F0FF', accent: '9775FA', ink: '2B2140', soft: 'E0D8FF' },
-  { bg: 'EBFBEE', accent: '40C057', ink: '1F3326', soft: 'C9F2D2' },
-];
+const THEMES = {
+  korean: { bg: 'F7F0E1', card: 'FFFDF7', ink: '1F2A44', accent: 'C8102E', accent2: '0F3A7A', soft: 'EADBC0', font: 'Noto Sans KR', title: 'Noto Serif KR' },
+  food: { bg: 'FFF4E6', card: 'FFFFFF', ink: '3A2414', accent: 'E8590C', accent2: '2F9E44', soft: 'FFD8A8', font: 'Poppins', title: 'Poppins' },
+  nature: { bg: 'EEF7EE', card: 'FFFFFF', ink: '1F3326', accent: '2F9E44', accent2: 'F59F00', soft: 'C9F2D2', font: 'Nunito', title: 'Nunito' },
+  space: { bg: '0E1236', card: '1B2155', ink: 'F1F3FF', accent: '9775FA', accent2: 'FFD43B', soft: '2A3170', font: 'Montserrat', title: 'Montserrat' },
+  ocean: { bg: 'E7F5FF', card: 'FFFFFF', ink: '0B2545', accent: '1C7ED6', accent2: '12B886', soft: 'C5E5FB', font: 'Nunito', title: 'Nunito' },
+  school: { bg: 'FFF9DB', card: 'FFFFFF', ink: '2B2140', accent: 'F08C00', accent2: '4263EB', soft: 'FFEC99', font: 'Poppins', title: 'Poppins' },
+  party: { bg: 'FFF0F6', card: 'FFFFFF', ink: '3B1F2B', accent: 'E64980', accent2: '7950F2', soft: 'FFDEEB', font: 'Poppins', title: 'Poppins' },
+  classic: { bg: 'F4F6FB', card: 'FFFFFF', ink: '1E2A44', accent: '4C6EF5', accent2: 'F59F00', soft: 'DBE4FF', font: 'Avenir Next', title: 'Avenir Next' },
+};
+/** 색동 (saekdong): the rainbow stripes of traditional Korean hanbok sleeves. */
+const SAEKDONG = ['D7263D', 'F4B400', '1D4ED8', '16A34A', 'EC4899', 'FFFFFF', 'D7263D'];
 
-/** Builds a .pptx (opens in Keynote and PowerPoint, and imports into Google Slides and Canva). Returns its path. */
+const box = (slide, x, y, w, h, color, extra = {}) => slide.addShape('rect', { x, y, w, h, fill: { color }, line: { color, width: 0 }, ...extra });
+const dot = (slide, x, y, d, color, transparency = 0) => slide.addShape('ellipse', { x, y, w: d, h: d, fill: { color, transparency }, line: { color, width: 0, transparency } });
+
+function stripes(slide, y, h) {
+  const each = 13.33 / SAEKDONG.length;
+  SAEKDONG.forEach((c, i) => box(slide, i * each, y, each + 0.01, h, c));
+}
+
+/** The background and decorations for a theme, drawn as shapes (so they stay editable in Canva and Keynote). */
+function decorate(slide, t, name, cover) {
+  slide.background = { color: t.bg };
+  if (name === 'korean') {
+    stripes(slide, 0, cover ? 0.22 : 0.14);
+    stripes(slide, 7.5 - (cover ? 0.22 : 0.14), cover ? 0.22 : 0.14);
+    if (cover) {
+      dot(slide, 8.2, 0.9, 5.4, t.soft); // a round "moon" like on a folding screen
+      dot(slide, 11.2, 5.0, 1.0, t.accent, 10);
+      dot(slide, 12.0, 4.5, 0.55, t.accent2, 10);
+      // Simple clouds (구름) from overlapping circles.
+      for (const [x, y] of [[0.5, 5.6], [1.2, 5.4], [1.9, 5.65]]) dot(slide, x, y, 1.0, 'FFFFFF', 0);
+      for (const [x, y] of [[9.9, 1.0], [10.5, 0.8], [11.1, 1.05]]) dot(slide, x, y, 0.8, 'FFFFFF', 0);
+    }
+  } else if (name === 'space') {
+    for (let i = 0; i < (cover ? 40 : 18); i++) dot(slide, Math.random() * 13.2, Math.random() * 7.4, 0.04 + Math.random() * 0.06, 'FFFFFF', 30);
+    if (cover) dot(slide, 9.3, 1.0, 3.6, t.accent, 40);
+  } else if (name === 'ocean') {
+    for (let i = 0; i < 3; i++) slide.addShape('ellipse', { x: -2 + i * 5.2, y: 6.7, w: 6, h: 1.8, fill: { color: i % 2 ? t.accent : t.soft, transparency: 20 }, line: { color: t.soft, width: 0 } });
+  } else if (name === 'food' || name === 'party' || name === 'school' || name === 'nature') {
+    const n = cover ? 9 : 4;
+    for (let i = 0; i < n; i++) dot(slide, Math.random() * 13, Math.random() < 0.5 ? Math.random() * 0.8 : 6.6 + Math.random() * 0.6, 0.2 + Math.random() * 0.35, i % 2 ? t.accent : t.accent2, 35);
+    if (cover) dot(slide, 8.8, -1.4, 6.0, t.soft);
+  } else if (cover) {
+    dot(slide, 8.8, -1.4, 6.0, t.soft);
+  }
+}
+
+/** Builds a .pptx (opens in Keynote and PowerPoint, and becomes a real design in Google Slides and Canva). Returns its path. */
 export async function savePresentation(deck) {
   const { default: PptxGenJS } = await import('pptxgenjs');
-  const t = THEMES[Math.floor(Math.random() * THEMES.length)];
+  const name = THEMES[deck.theme] ? deck.theme : 'classic';
+  const t = THEMES[name];
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 in
   pptx.title = deck.title;
-  const font = 'Avenir Next';
 
   const cover = pptx.addSlide();
-  cover.background = { color: t.bg };
-  cover.addShape('ellipse', { x: 8.6, y: -1.6, w: 6.5, h: 6.5, fill: { color: t.soft }, line: { color: t.soft } });
-  cover.addShape('ellipse', { x: -1.5, y: 5.2, w: 4, h: 4, fill: { color: t.soft }, line: { color: t.soft } });
-  cover.addText(deck.slides[0]?.emoji ?? '✨', { x: 9.6, y: 1.2, w: 3, h: 2.6, fontSize: 120, align: 'center' });
-  cover.addText(deck.title, { x: 0.8, y: 2.2, w: 8.6, h: 1.8, fontFace: font, fontSize: 48, bold: true, color: t.ink, valign: 'bottom', fit: 'shrink' });
-  if (deck.subtitle) cover.addText(deck.subtitle, { x: 0.8, y: 4.1, w: 8.6, h: 0.9, fontFace: font, fontSize: 22, color: t.ink, valign: 'top' });
-  cover.addShape('rect', { x: 0.8, y: 4.05, w: 1.6, h: 0.08, fill: { color: t.accent }, line: { color: t.accent } });
+  decorate(cover, t, name, true);
+  if (deck.hangul) {
+    cover.addText(deck.hangul, { x: 8.4, y: 1.6, w: 5, h: 2.6, fontFace: t.title, fontSize: deck.hangul.length > 5 ? 54 : 80, bold: true, color: t.accent, align: 'center', valign: 'middle', fit: 'shrink' });
+    cover.addText(deck.slides[0]?.emoji ?? '✨', { x: 9.9, y: 4.1, w: 2, h: 1.6, fontSize: 64, align: 'center' });
+  } else {
+    cover.addText(deck.slides[0]?.emoji ?? '✨', { x: 9.6, y: 1.2, w: 3, h: 2.6, fontSize: 120, align: 'center' });
+  }
+  cover.addText(deck.title, { x: 0.8, y: 2.1, w: 7.6, h: 1.9, fontFace: t.title, fontSize: 50, bold: true, color: t.ink, valign: 'bottom', fit: 'shrink' });
+  box(cover, 0.8, 4.12, 1.6, 0.09, t.accent);
+  if (deck.subtitle) cover.addText(deck.subtitle, { x: 0.8, y: 4.3, w: 7.6, h: 0.9, fontFace: t.font, fontSize: 22, color: t.ink, valign: 'top' });
 
   for (const s of deck.slides) {
     const slide = pptx.addSlide();
-    slide.background = { color: 'FFFFFF' };
-    slide.addShape('rect', { x: 0, y: 0, w: 13.33, h: 1.35, fill: { color: t.bg }, line: { color: t.bg } });
-    slide.addShape('rect', { x: 0, y: 1.35, w: 13.33, h: 0.07, fill: { color: t.accent }, line: { color: t.accent } });
-    slide.addText(s.title, { x: 0.7, y: 0.2, w: 10.4, h: 1, fontFace: font, fontSize: 32, bold: true, color: t.ink, valign: 'middle', fit: 'shrink' });
+    decorate(slide, t, name, false);
+    const top = name === 'korean' ? 0.35 : 0.3;
+    slide.addText(s.title, { x: 0.8, y: top, w: 10.2, h: 1, fontFace: t.title, fontSize: 32, bold: true, color: t.ink, valign: 'middle', fit: 'shrink' });
+    box(slide, 0.8, top + 1.02, 1.2, 0.07, t.accent);
+    slide.addText(s.emoji, { x: 11.4, y: top - 0.05, w: 1.3, h: 1.1, fontSize: 48, align: 'center', valign: 'middle' });
+
+    // Content on a soft card, picture (or photo spot) on the right.
+    slide.addShape('roundRect', { x: 0.6, y: 1.75, w: 8.3, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.soft, width: 1.5 } });
     if (deck.template) {
-      // Empty template: the emoji in the header, a box for a photo, and grey placeholder lines to type over.
-      slide.addText(s.emoji, { x: 11.3, y: 0.12, w: 1.4, h: 1.15, fontSize: 50, align: 'center', valign: 'middle' });
-      slide.addShape('roundRect', { x: 9.3, y: 1.9, w: 3.5, h: 4.6, rectRadius: 0.2, fill: { color: 'FAFAFA' }, line: { color: 'BBBBBB', width: 2, dashType: 'dash' } });
-      slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.9, w: 3.5, h: 4.6, fontFace: font, fontSize: 20, color: '9A9A9A', align: 'center', valign: 'middle' });
+      slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
+      slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, fontFace: t.font, fontSize: 20, color: t.accent, align: 'center', valign: 'middle' });
       slide.addText(
         s.bullets.map((b) => ({ text: `${b}:  ____________________`, options: { bullet: { indent: 28 }, paraSpaceAfter: 20 } })),
-        { x: 0.9, y: 1.9, w: 8.1, h: 5.1, fontFace: font, fontSize: 24, color: '9A9A9A', valign: 'top' },
+        { x: 1.0, y: 2.05, w: 7.6, h: 4.7, fontFace: t.font, fontSize: 22, color: name === 'space' ? 'B8BEE8' : '8A8A8A', valign: 'top' },
       );
-      continue;
-    }
-    slide.addShape('ellipse', { x: 9.4, y: 2.4, w: 3.4, h: 3.4, fill: { color: t.bg }, line: { color: t.bg } });
-    slide.addText(s.emoji, { x: 9.4, y: 2.4, w: 3.4, h: 3.4, fontSize: 130, align: 'center', valign: 'middle' });
-    if (s.bullets.length) {
-      const size = s.bullets.join(' ').length > 220 ? 24 : 28;
-      slide.addText(
-        s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 28 }, paraSpaceAfter: 18 } })),
-        { x: 0.9, y: 1.9, w: 8.2, h: 5.1, fontFace: font, fontSize: size, color: t.ink, valign: 'top' },
-      );
+    } else {
+      dot(slide, 9.35, 2.55, 3.4, t.soft);
+      slide.addText(s.emoji, { x: 9.35, y: 2.55, w: 3.4, h: 3.4, fontSize: 120, align: 'center', valign: 'middle' });
+      if (s.bullets.length) {
+        const size = s.bullets.join(' ').length > 220 ? 22 : 26;
+        slide.addText(
+          s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 28 }, paraSpaceAfter: 18 } })),
+          { x: 1.0, y: 2.05, w: 7.6, h: 4.7, fontFace: t.font, fontSize: size, color: t.ink, valign: 'top' },
+        );
+      }
     }
     if (s.notes) slide.addNotes(s.notes);
   }

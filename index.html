@@ -1056,6 +1056,18 @@
         padding: 7px 8px;
         font-size: 13px;
       }
+      .chat__todo {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #eadfc4;
+      }
+      .chat__todo .chat__inbox-acts {
+        margin-top: 6px;
+      }
+      .chat.toast .chat__note:has(.chat__todo) {
+        max-height: 330px;
+        overflow-y: auto;
+      }
       .chat__draft {
         width: 100%;
         box-sizing: border-box;

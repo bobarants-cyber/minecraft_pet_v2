@@ -50,4 +50,7 @@ contextBridge.exposeInMainWorld('mobHost', {
   inboxOpen: (id) => ipcRenderer.send('inbox:open', id),
   inboxCheck: () => ipcRenderer.send('inbox:check'),
   inboxClean: (how) => ipcRenderer.invoke('inbox:clean', how),
+  inboxTemplate: (id) => ipcRenderer.invoke('inbox:template', id),
+  onInboxTodo: (fn) => ipcRenderer.on('inboxTodo', (_e, t) => fn(t)),
+  canvaKeys: (keys) => ipcRenderer.invoke('canva:keys', keys),
 });

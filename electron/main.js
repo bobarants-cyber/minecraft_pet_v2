@@ -22,6 +22,7 @@ import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 import * as actions from './actions.js';
 import { GoogleAuth } from './google.js';
+import { Canva, CANVA_REDIRECT } from './canva.js';
 import * as inbox from './inbox.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
@@ -44,6 +45,8 @@ let chatOpen = false;
 let reminders = null;
 let classes = null;
 let google = null;
+let canva = null;
+let keysWin = null;
 let inboxState = null;
 const inboxItems = new Map(); // id → message shown to you (with what's needed to reply)
 let checkingInbox = false;
@@ -171,6 +174,7 @@ function buildTray() {
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: '📬 Inbox', submenu: inboxMenu() },
+    { label: '🎨 Canva', submenu: canvaMenu() },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
       label: '🎮 Games',
@@ -395,7 +399,7 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   }
   if (/\b(?:homework|assignments?|due|classroom)\b/i.test(said) && /\b(?:what|any|check|show|list|do i have|tell me)\b/i.test(said)) {
     if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
-    return { ok: true, kind: 'inbox', text: await dueText() };
+    return { ok: true, kind: 'inbox', text: await showTodo() };
   }
   if (/\b(?:check|read|any|new|got|what'?s in|questions? in)\b.*\b(?:inbox|e-?mails?|gmail|messages?|google chat|chats?|mail)\b/i.test(said) && !/\bremind/i.test(said)) {
     if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
@@ -700,7 +704,7 @@ function inboxMenu() {
     { label: `Connected: ${google.email || 'Google'}`, enabled: false },
     { label: 'Check now', click: () => checkInbox({ manual: true }) },
     { label: '🧹 Clean up junk mail…', click: () => findJunk() },
-    { label: '📚 What’s due this week', click: async () => send('say', { text: await dueText() }) },
+    { label: '📚 What’s due this week', click: async () => { const t = await showTodo(); if (t) send('say', { text: t }); } },
     { type: 'separator' },
     box('Tell me about new messages', 'inboxOn'),
     box('Gmail', 'inboxGmail'),
@@ -738,6 +742,55 @@ async function connectGoogle() {
   buildTray();
 }
 
+function canvaMenu() {
+  if (!canva) return [{ label: 'Starting…', enabled: false }];
+  if (!canva.hasKeys) {
+    return [
+      { label: 'Step 1: make your Canva keys (README → 🎨 Canva)', click: () => shell.openExternal('https://www.canva.com/developers/integrations') },
+      { label: 'Step 2: Enter Canva keys…', click: openKeysWindow },
+    ];
+  }
+  if (!canva.connected) return [{ label: 'Connect Canva…', click: connectCanva }, { label: 'Change keys…', click: openKeysWindow }];
+  return [{ label: 'Connected ✓ (designs open in Canva)', enabled: false }, { label: 'Disconnect Canva', click: () => { canva.disconnect(); buildTray(); } }];
+}
+
+function openKeysWindow() {
+  if (keysWin && !keysWin.isDestroyed()) return keysWin.focus();
+  keysWin = new BrowserWindow({ width: 480, height: 400, title: 'Canva keys', resizable: false, alwaysOnTop: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true } });
+  const html = `<!doctype html><meta charset="utf-8"><title>Canva keys</title>
+  <body style="font:15px -apple-system,system-ui;padding:22px;background:#fffaf0;color:#3b2f14">
+  <h2 style="margin:0 0 8px">🎨 Your Canva keys</h2>
+  <p style="margin:0 0 14px;color:#7a6a42">From your integration on canva.com/developers. Redirect URL to add there:<br><b>${CANVA_REDIRECT}</b></p>
+  <label>Client ID<br><input id="id" style="width:100%;padding:8px;margin:4px 0 12px;font:inherit"></label>
+  <label>Client secret<br><input id="secret" type="password" style="width:100%;padding:8px;margin:4px 0 14px;font:inherit"></label>
+  <button id="save" style="padding:10px 18px;font:700 15px system-ui;background:#ffd23f;border:2px solid #3b2f14;border-radius:12px">Save & connect</button>
+  <p id="msg" style="color:#c92a2a"></p>
+  <script>document.getElementById('save').onclick=async()=>{const r=await window.mobHost.canvaKeys({id:document.getElementById('id').value,secret:document.getElementById('secret').value});if(r.ok)window.close();else document.getElementById('msg').textContent=r.text;};</script></body>`;
+  keysWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
+ipcMain.handle('canva:keys', async (_e, { id, secret } = {}) => {
+  try {
+    canva.saveKeys(id, secret);
+    setTimeout(connectCanva, 300);
+    buildTray();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, text: err.message };
+  }
+});
+
+async function connectCanva() {
+  send('say', { text: 'Opening Canva in your browser… press Allow 🎨' });
+  try {
+    await canva.connect();
+    send('say', { text: 'Connected to Canva! 🎨 Now presentations I make open right in Canva.' });
+  } catch (err) {
+    send('say', { text: `Canva didn’t connect: ${err.message}`, error: true });
+  }
+  buildTray();
+}
+
 const inboxProblem = (name, err) =>
   err?.status === 403 ? `${name} isn’t allowed. Turn on its API in Google Cloud (or your school blocks it).` : `${name}: ${String(err?.message ?? err).slice(0, 100)}`;
 
@@ -771,6 +824,12 @@ async function checkInbox({ manual = false } = {}) {
       const { text: _t, references: _r, messageId: _m, ...shown } = s;
       items.push(shown);
     }
+    // Once a day (from 7am): what's due this week.
+    const today = new Date().toDateString();
+    if (settings.inboxClassroom && new Date().getHours() >= 7 && inboxState.data.todoDay !== today) {
+      inboxState.data.todoDay = today;
+      setTimeout(() => showTodo({ daily: true }), items.length ? 60_000 : 3000);
+    }
     inboxState.save();
     if (items.length) send('inbox', { items });
     else if (manual) send('say', { text: problems.length ? `I couldn’t check everything 😕 ${problems.join(' ')}` : 'All caught up! Nothing new 📭✨' });
@@ -778,6 +837,43 @@ async function checkInbox({ manual = false } = {}) {
     checkingInbox = false;
   }
 }
+
+/** Puts Classroom work due this week in a card, each with “📝 Template” and “Open”. Returns what to say (or ''). */
+async function showTodo({ daily = false } = {}) {
+  try {
+    const work = await inbox.upcomingWork(gapi);
+    if (!work.length) return daily ? '' : 'Nothing due in Classroom this week! 🎉';
+    const items = work.slice(0, 6).map((w) => {
+      const id = `todo:${w.id}`;
+      inboxItems.set(id, { ...w, id, source: 'classroom', kind: 'todo', from: w.course, subject: w.title });
+      return { id, course: w.course, title: w.title, due: w.due };
+    });
+    send('inboxTodo', { items, daily });
+    return daily ? '' : `You have ${work.length} thing${work.length === 1 ? '' : 's'} due this week 📚 Want me to make a template for any of them?`;
+  } catch (err) {
+    return `I couldn’t check Classroom: ${inboxProblem('Classroom', err)}`;
+  }
+}
+
+/** A blank template to work on, for a Classroom assignment (slides if it sounds like a presentation, otherwise a doc). */
+function templateFor(work) {
+  const text = `${work.subject ?? work.title} ${work.text ?? ''}`;
+  const slides = /present|slide|poster|canva|deck|keynote|powerpoint|infographic/i.test(text);
+  return {
+    type: 'create',
+    kind: slides ? 'slides' : 'doc',
+    template: true,
+    topic: String(work.subject ?? work.title).slice(0, 100),
+    place: slides ? (canva?.connected ? 'canva' : 'gslides') : 'gdocs',
+    request: `Make a blank template the student can fill in themselves for this school assignment from ${work.course ?? work.from}: "${work.subject ?? work.title}". Assignment instructions: ${String(work.text ?? '').slice(0, 600)}`,
+  };
+}
+
+ipcMain.handle('inbox:template', async (_e, id) => {
+  const work = inboxItems.get(id);
+  if (!work) return { ok: false, text: 'I lost that assignment, sorry! Ask me “what homework do I have?” again.' };
+  return { ok: true, text: await runAction(templateFor(work)) };
+});
 
 async function dueText() {
   try {
@@ -940,10 +1036,23 @@ async function createThing(a) {
       const name = path.basename(file);
       if (a.place === 'keynote' && hasApp('Keynote')) execFile('open', ['-a', 'Keynote', file]);
       else if (a.place === 'powerpoint' && hasApp('Microsoft PowerPoint')) execFile('open', ['-a', 'Microsoft PowerPoint', file]);
-      else if (a.place === 'canva') {
+      else if (a.place === 'canva' && canva?.connected) {
+        send('say', { text: 'Putting it in Canva for you… 🎨' });
+        try {
+          const design = await canva.importPresentation(file, content.title);
+          await shell.openExternal(design.editUrl);
+          send('say', { text: `Done! “${content.title}” is open in Canva 🎉 Tip: click Elements on the left to add stickers and photos.` });
+          return;
+        } catch (err) {
+          send('say', { text: `Canva didn’t take it (${err.message}), so here’s the file to drag in instead.`, error: true });
+          shell.showItemInFolder(file);
+          await shell.openExternal('https://www.canva.com/');
+          return;
+        }
+      } else if (a.place === 'canva') {
         shell.showItemInFolder(file);
         await shell.openExternal('https://www.canva.com/');
-        send('say', { text: `Your slides are ready! 🎨 Drag “${name}” from the Finder window onto Canva, and it turns into a Canva design you can edit.` });
+        send('say', { text: `Your slides are ready! 🎨 Drag “${name}” from the Finder window onto Canva. (Connect Canva in the menu bar → 🎨 Canva and I’ll open it there myself next time!)` });
         return;
       } else if (a.place === 'gslides') {
         shell.showItemInFolder(file);
@@ -1022,6 +1131,7 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
   classes = new ClassSchedule({ file: path.join(app.getPath('userData'), 'classes.json') });
   google = new GoogleAuth({ dir: app.getPath('userData') });
+  canva = new Canva({ dir: app.getPath('userData') });
   inboxState = new inbox.InboxState(path.join(app.getPath('userData'), 'inbox-state.json'));
   setTimeout(() => checkInbox(), 20_000);
   setInterval(() => checkInbox(), 3 * 60_000);

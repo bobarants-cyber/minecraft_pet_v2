@@ -325,10 +325,11 @@ export class Chat {
     sum.className = 'chat__inbox-sum';
     sum.textContent = item.summary;
     row.append(head, sub, sum);
-    if (item.question) {
+    const canTemplate = item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due');
+    if (item.question || canTemplate) {
       const q = document.createElement('div');
       q.className = 'chat__inbox-q';
-      q.textContent = `❓ ${item.question}`;
+      q.textContent = item.question ? `❓ ${item.question}` : '📝 Want me to make you a template to work on?';
       row.append(q);
     }
     const acts = document.createElement('div');
@@ -357,12 +358,15 @@ export class Chat {
         this.#button('✏️ My reply', () => this.#ownReply(item, acts)),
       );
     }
+    if (item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due')) {
+      acts.append(this.#button('📝 Make a template', () => this.#template(item.id, acts, () => this.#nextInbox()), true));
+    }
     acts.append(
       this.#button('Open', () => {
         this.host?.inboxOpen(item.id);
         this.#nextInbox();
       }),
-      this.#button(last ? 'OK' : 'Next ▸', () => this.#nextInbox(), !item.needsReply),
+      this.#button(last ? 'OK' : 'Next ▸', () => this.#nextInbox(), !item.needsReply && !(item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due'))),
     );
   }
 
@@ -419,6 +423,55 @@ export class Chat {
       this.character.emote('sparkle', 0.4);
       setTimeout(() => this.inboxShowing && this.#nextInbox(), 1800);
     } else setTimeout(() => this.inboxShowing && this.#inboxButtons(item, acts), 4000);
+  }
+
+  /** Asks for a blank template for a Classroom assignment; Bbokari then writes it and opens it. */
+  async #template(id, acts, then) {
+    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: 'On it! ✍️' }));
+    const res = await this.host?.inboxTemplate(id);
+    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__inbox-q', textContent: res?.text ?? 'That didn’t work.' }));
+    setTimeout(() => then?.(), 2500);
+  }
+
+  /** Classroom work due this week, each with “📝 Template” and “Open”. */
+  showTodo({ items, daily = false }) {
+    if (this.isOpen) return;
+    if (this.inboxShowing) {
+      // Show it after the message cards.
+      clearTimeout(this.todoWait);
+      this.todoWait = setTimeout(() => this.showTodo({ items, daily }), 20_000);
+      return;
+    }
+    const c = this.character;
+    if (SLEEPING.has(c.stateName)) c.trigger('surprised', { then: 'wake' }, true);
+    c.emote('note', 0.4);
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet chat__inbox';
+    const head = document.createElement('b');
+    head.textContent = `📚 ${daily ? 'Good morning! ' : ''}You have ${items.length} thing${items.length === 1 ? '' : 's'} to do this week`;
+    const sub = document.createElement('small');
+    sub.textContent = 'Want me to make a template for any of them?';
+    row.append(head, sub);
+    for (const it of items) {
+      const line = document.createElement('div');
+      line.className = 'chat__todo';
+      const label = document.createElement('div');
+      label.className = 'chat__todo-label';
+      label.textContent = `${it.course}: ${it.title} · ${new Date(it.due).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;
+      const btns = document.createElement('div');
+      btns.className = 'chat__inbox-acts';
+      btns.append(
+        this.#button('📝 Template', () => this.#template(it.id, btns, null), true),
+        this.#button('Open', () => this.host?.inboxOpen(it.id)),
+      );
+      line.append(label, btns);
+      row.append(line);
+    }
+    const end = document.createElement('div');
+    end.className = 'chat__inbox-acts';
+    end.append(this.#button('OK', () => this.close()));
+    row.append(end);
+    this.#toast(row, { opensChat: false, hideAfter: 0 });
   }
 
   /** "Clean up my inbox": what junk was found, and Trash / Archive / Cancel. */

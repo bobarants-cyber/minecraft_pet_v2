@@ -231,7 +231,7 @@ export async function upcomingWork(api) {
     const work = (await api(`${CLASSROOM}/courses/${c.id}/courseWork?orderBy=dueDate%20asc&pageSize=20`).catch(() => ({}))).courseWork ?? [];
     for (const w of work) {
       const due = dueDate(w);
-      if (due && due > now && due - now < 7 * 864e5) out.push({ course: c.name, title: w.title, due: due.getTime(), link: w.alternateLink });
+      if (due && due > now && due - now < 7 * 864e5) out.push({ id: w.id, course: c.name, title: w.title, text: clip(w.description ?? '', 800), due: due.getTime(), link: w.alternateLink });
     }
   }
   return out.sort((a, b) => a.due - b.due);
