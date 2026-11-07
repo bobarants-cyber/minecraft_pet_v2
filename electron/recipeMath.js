@@ -234,7 +234,7 @@ export function autoRecipeCalcs(text) {
 
 /** One ingredient written either way: "1 1/2 cups rice", "rice 1 1/2 cups", "Rice: 1 1/2 cups", "fried egg 1". */
 export function parseIngredient(segment) {
-  const seg = String(segment ?? '').trim().replace(/^[-•*·]\s*/, '').replace(/[.]$/, '');
+  const seg = String(segment ?? '').trim().replace(/^[-•*·:;,\s]+/, '').replace(/[.]$/, '');
   if (!seg || seg.length > 60) return null;
   const first = splitItem(seg);
   if (first && /[a-z]/i.test(first.name || first.unit)) return first.name ? first : { ...first, name: first.unit, unit: '' };
@@ -331,4 +331,27 @@ export function ratioText(a, b) {
   const raw = `${a.d === 1 ? a.n : `${a.n}/${a.d}`} : ${b.d === 1 ? b.n : `${b.n}/${b.d}`}`;
   const simple = `${left / g} : ${right / g}`;
   return raw === simple ? raw : `${raw} = ${simple}`;
+}
+
+/** The same conversion as metricLine, in parts for a card: { from: "1 1/2 cups rice", value: "278 g", sci: "2.78 × 10²", unit: "g" }. */
+export function metricParts(item) {
+  const unit = UNIT[String(item.unit).toLowerCase()];
+  const name = item.name.toLowerCase();
+  const amount = item.qty.value;
+  const from = `${short(item.qty)}${item.unit ? ` ${item.unit}` : ''} ${item.name}`;
+  if (/^(g|grams?)$/i.test(item.unit)) {
+    const kg = amount / 1000;
+    return { from, value: `${Number(kg.toPrecision(3))} kg`, sci: sci(kg), unit: 'kg', how: `${short(item.qty)} ÷ 1000` };
+  }
+  if (!unit) return null;
+  const key = Object.keys(GRAMS).sort((a, b) => b.length - a.length).find((k) => name.includes(k));
+  if (key) {
+    const g = Number((amount * GRAMS[key][unit]).toPrecision(3));
+    return { from, value: `${g} g`, sci: sci(g), unit: 'g', how: `${short(item.qty)} × ${GRAMS[key][unit]} g` };
+  }
+  if (/milk|water|oil|sauce|soy|juice|vinegar|broth|stock|cream|syrup/.test(name)) {
+    const l = (amount * ML[unit]) / 1000;
+    return { from, value: `${Number(l.toPrecision(3))} L`, sci: sci(l), unit: 'L', how: `${short(item.qty)} × ${ML[unit]} mL` };
+  }
+  return null;
 }

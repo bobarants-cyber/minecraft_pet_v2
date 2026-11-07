@@ -7,7 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { OLLAMA_URL } from './ai.js';
-import { improperText, metricLine, mixedToImproper, multiplySteps, parseRecipe, qtyText, ratioText } from './recipeMath.js';
+import { improperText, metricParts, multiplySteps, parseRecipe, qtyText, ratioText } from './recipeMath.js';
+import { iconFor, renderRecipeDeck } from './deckDesign.js';
 
 export const DOCS_DIR = path.join(os.homedir(), 'Documents', 'Bbokari Docs');
 
@@ -442,6 +443,13 @@ export async function savePresentation(deck) {
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 in
   pptx.title = deck.title;
+  if (deck.recipeDeck) {
+    renderRecipeDeck(pptx, deck, name, t);
+    fs.mkdirSync(DOCS_DIR, { recursive: true });
+    const designed = path.join(DOCS_DIR, `${fileSafe(deck.title)} ${new Date().toISOString().slice(0, 10)}.pptx`);
+    await pptx.writeFile({ fileName: designed });
+    return designed;
+  }
 
   const cover = pptx.addSlide();
   decorate(cover, t, name, true);
@@ -568,10 +576,9 @@ function unitFor(qty, unit) {
 const amountText = (qty, item) => `${qtyText(qty)}${item.unit ? ` ${unitFor(qty, item.unit)}` : ''}`;
 
 /**
- * A full project presentation built from your recipe by code (so it's always complete and the math is always right):
- * cover, about the dish, original recipe, mixed numbers → improper fractions, then for each size (doubled, halved…)
- * a scale-factor slide, a table and the steps; metric & scientific notation, cost per serving, photos, what I learned,
- * thank you. The AI only writes a subtitle and three short facts about the dish.
+ * A full project presentation built from your recipe by code (so it's always complete and the math is always right).
+ * Each slide carries its own data; deckDesign.js draws it (illustrations, fraction bars, chart, ratio blocks…).
+ * The AI only writes a subtitle and a few short facts about the dish.
  */
 export async function buildRecipeDeck(details, { topic = '', theme = null, project = '', model } = {}) {
   const r = parseRecipe(details);
@@ -583,75 +590,114 @@ export async function buildRecipeDeck(details, { topic = '', theme = null, proje
   try {
     intro = await ollamaJSON(
       [
-        { role: 'system', content: 'Reply with JSON only: {"subtitle": "a short catchy subtitle for a school math project about this dish", "hangul": "the dish name in Korean Hangul if it is Korean, else empty", "facts": ["3 short, well-known, true facts about the dish (where it comes from, what is in it, when people eat it), under 15 words each"]}. If unsure of a fact, keep it general.' },
+        { role: 'system', content: 'Reply with JSON only: {"subtitle": "a short catchy subtitle for a school math project about this dish (under 8 words)", "hangul": "the dish name in Korean Hangul if it is Korean, else empty", "facts": ["4 short, well-known, true facts about the dish (where it comes from, what is in it, how it is eaten, what its name means), under 14 words each"]}. If unsure of a fact, keep it general.' },
         { role: 'user', content: `Dish: ${dish}` },
       ],
       model,
       { timeout: 60_000, temperature: 0.3 },
     );
   } catch {}
-  const facts = (Array.isArray(intro.facts) ? intro.facts : []).map((f) => clean(f).slice(0, 120)).filter(Boolean).slice(0, 3);
+  const facts = (Array.isArray(intro.facts) ? intro.facts : []).map((f) => clean(f).slice(0, 110)).filter(Boolean).slice(0, 4);
   const L = (en, ko) => (korean && ko ? `${en} · ${ko}` : en);
+  const items = r.items.map((i) => ({ ...i, label: cap1(i.name), icon: iconFor(i.name) }));
   const slides = [];
 
-  slides.push({ title: L(`About ${dish}`, '소개'), emoji: korean ? '🍚' : '🍽️', bullets: facts.length ? [...facts, 'Why I chose it: (your answer)'] : ['Where it comes from: (your answer)', 'What is in it: (your answer)', 'Why I chose it: (your answer)'] });
-  slides.push({
-    title: L(`Original recipe${r.from ? ` (serves ${r.from})` : ''}`, '재료'),
-    emoji: '🥕',
-    table: { columns: ['Ingredient', 'Amount', 'As a fraction'], rows: r.items.length, cells: r.items.map((i) => [cap1(i.name), amountText(i.qty, i), improperText(i.qty)]) },
-  });
-  const mixed = r.items.map((i) => (mixedToImproper(i.qty) ? `${cap1(i.name)}: ${mixedToImproper(i.qty)}${i.unit ? ` ${unitFor(i.qty, i.unit)}` : ''}` : null)).filter(Boolean);
-  if (mixed.length) slides.push({ title: L('Mixed numbers → fractions', '분수'), emoji: '🔢', steps: true, bullets: mixed });
+  slides.push({ kind: 'about', title: `About ${dish}`, facts: facts.length ? [...facts.slice(0, 3), 'Why I chose it: ____________'] : ['Where it comes from: ____________', 'What is in it: ____________', 'How people eat it: ____________', 'Why I chose it: ____________'] });
+  slides.push({ kind: 'ingredients', title: L('The original recipe', '재료'), serves: r.from, rows: items.map((i) => ({ icon: i.icon, name: i.label, amount: amountText(i.qty, i), frac: improperText(i.qty) })) });
+  const mixed = items.filter((i) => i.qty.d !== 1 && Math.abs(i.qty.n) > i.qty.d);
+  if (mixed.length) {
+    slides.push({
+      kind: 'fractions',
+      title: 'Mixed numbers → improper fractions',
+      rows: mixed.map((i) => {
+        const whole = Math.trunc(i.qty.n / i.qty.d);
+        const rest = i.qty.n % i.qty.d;
+        return { icon: i.icon, name: i.label, n: i.qty.n, d: i.qty.d, expr: `${whole} ${rest}/${i.qty.d} = (${whole} × ${i.qty.d} + ${rest}) / ${i.qty.d}`, result: `${i.qty.n}/${i.qty.d}` };
+      }),
+    });
+  }
 
-  for (const f of r.factors.slice(0, 3)) {
+  const SECTION = { 2: ['Doubling', '두 배'], 0.5: ['Halving', '반'], 1.5: ['One and a half', '1.5배'], 3: ['Tripling', '세 배'] };
+  r.factors.slice(0, 4).forEach((f, fi) => {
     const k = f.k;
     const kText = improperText(k);
-    slides.push({ kind: 'big', title: f.label, big: `× ${kText}`, emoji: k.value > 1 ? '⬆️' : '⬇️', caption: r.from ? `Scale factor = ${f.serves} ÷ ${r.from} = ${kText} · now it serves ${f.serves}` : `Every amount × ${kText}` });
+    const [word, ko] = SECTION[k.value] ?? [f.label, ''];
+    const no = String(fi + 4).padStart(2, '0');
+    slides.push({ kind: 'divider', label: `${no} · ${word}${korean && ko ? ` · ${ko}` : ''}`, title: f.label, big: `× ${kText}`, serves: f.serves, caption: r.from ? `Scale factor = ${f.serves} ÷ ${r.from} = ${kText}. Every amount gets multiplied by ${kText}.` : `Every amount gets multiplied by ${kText}.` });
     slides.push({
-      title: L(`${f.label}${f.serves ? `: serves ${f.serves}` : ''}`, { 2: '두 배', 0.5: '반', 1.5: '1.5배', 3: '세 배' }[k.value] ?? ''),
-      emoji: k.value > 1 ? '✖️' : '➗',
-      table: { columns: ['Ingredient', 'Original', `× ${kText}`], rows: r.items.length, cells: r.items.map((i) => [cap1(i.name), amountText(i.qty, i), amountText(i.qty.mul(k), i)]) },
+      kind: 'scaled',
+      label: `${no} · ${word}`,
+      title: f.serves ? `${cap1(word)}: serves ${f.serves}` : cap1(word),
+      factor: `× ${kText}`,
+      big: `× ${kText}`,
+      rows: items.map((i) => ({ icon: i.icon, name: i.label, from: amountText(i.qty, i), to: amountText(i.qty.mul(k), i) })),
     });
-    slides.push({ title: `How I worked it out (× ${kText})`, emoji: '📝', steps: true, bullets: r.items.map((i) => `${cap1(i.name)}: ${multiplySteps(i.qty, k)}${i.unit ? ` ${unitFor(i.qty.mul(k), i.unit)}` : ''}`) });
+    slides.push({
+      kind: 'steps',
+      label: `${no} · ${word} · How I worked it out`,
+      title: `Showing my work (× ${kText})`,
+      rows: items.map((i) => {
+        const full = multiplySteps(i.qty, k);
+        const parts = full.split(' = ');
+        const result = `${parts.pop()}${i.unit ? ` ${unitFor(i.qty.mul(k), i.unit)}` : ''}`;
+        return { icon: i.icon, name: i.label, expr: parts.join(' = '), result };
+      }),
+    });
+  });
+
+  // Compare: the most common unit (cups…), original next to every size.
+  const family = (u) => (/^(cups?|c)$/i.test(u) ? 'cups' : /^(tbsp|tablespoons?|tbs)$/i.test(u) ? 'tbsp' : /^(tsp|teaspoons?)$/i.test(u) ? 'tsp' : /^(g|grams?)$/i.test(u) ? 'g' : u ? u.toLowerCase() : 'pieces');
+  const groups = {};
+  for (const i of items) (groups[family(i.unit)] ??= []).push(i);
+  const [unit, same] = Object.entries(groups).sort((a, b) => b[1].length - a[1].length)[0];
+  const sizes = r.factors.slice(0, 4);
+  if (same.length >= 2) {
+    slides.push({
+      kind: 'chart',
+      title: 'Original vs. scaled amounts',
+      unit,
+      series: ['Original', ...sizes.map((f) => `× ${improperText(f.k)}`)],
+      rows: same.slice(0, 6).map((i) => ({ icon: i.icon, name: i.label, values: [i.qty.value, ...sizes.map((f) => i.qty.mul(f.k).value)], labels: [qtyText(i.qty), ...sizes.map((f) => qtyText(i.qty.mul(f.k)))] })),
+    });
   }
 
-  // Ratios between ingredients measured the same way (cups with cups…), and per person.
-  const family = (u) => (/^(cups?|c)$/i.test(u) ? 'cup' : /^(tbsp|tablespoons?|tbs)$/i.test(u) ? 'tbsp' : /^(tsp|teaspoons?)$/i.test(u) ? 'tsp' : /^(g|grams?)$/i.test(u) ? 'g' : u ? u.toLowerCase() : 'count');
-  const groups = {};
-  for (const i of r.items) (groups[family(i.unit)] ??= []).push(i);
+  // Ratios between ingredients measured the same way, and eggs (or pieces) per person.
   const ratios = [];
   for (const list of Object.values(groups)) {
-    for (let j = 1; j < list.length && ratios.length < 5; j++) ratios.push(`${cap1(list[0].name)} : ${list[j].name} = ${ratioText(list[0].qty, list[j].qty)}`);
+    for (let j = 1; j < list.length && ratios.length < 5; j++) {
+      const text = ratioText(list[0].qty, list[j].qty);
+      const [left, right] = text.split(' = ').pop().split(' : ').map(Number);
+      ratios.push({ a: list[0].label, b: list[j].label, iconA: list[0].icon, iconB: list[j].icon, text: text.split(' = ').pop(), left, right });
+    }
   }
-  const counted = r.items.find((i) => !i.unit);
-  if (counted && r.from) ratios.push(`${cap1(counted.name)} per person = ${ratioText(counted.qty, { n: r.from, d: 1 })}`);
-  if (ratios.length) slides.push({ title: L('Ingredient ratios', '비율'), emoji: '⚖️', steps: true, bullets: ratios.slice(0, 6) });
+  const counted = items.find((i) => !i.unit);
+  if (counted && r.from && ratios.length < 5) {
+    const text = ratioText(counted.qty, { n: r.from, d: 1 }).split(' = ').pop();
+    const [left, right] = text.split(' : ').map(Number);
+    ratios.push({ a: counted.label, b: 'people', iconA: counted.icon, iconB: '🧑', text, left, right });
+  }
+  if (ratios.length) slides.push({ kind: 'ratios', title: L('Ingredient ratios', '비율'), rows: ratios });
 
-  const metric = r.items.map(metricLine).filter(Boolean).slice(0, 4);
-  slides.push({
-    title: L('Metric & scientific notation', '과학적 표기법'),
-    emoji: '🔬',
-    bullets: metric.length ? [...metric, 'Tip: big numbers get positive exponents, tiny ones negative'] : ['Measurement 1: (convert to g or mL, then write as a × 10ⁿ)', 'Measurement 2:', 'Measurement 3:'],
-    placeholder: !metric.length,
-  });
+  const metric = items.map(metricParts).filter(Boolean).slice(0, 4);
+  slides.push({ kind: 'metric', title: L('Metric & scientific notation', '과학적 표기법'), rows: metric.length ? metric : [{ from: 'Your measurement', value: '___ g', sci: '_ × 10ⁿ', unit: 'g', how: 'convert, then write as a × 10ⁿ' }] });
   const servings = r.from ?? 1;
-  slides.push({
-    title: L('Cost per serving', '가격'),
-    emoji: '💰',
-    table: r.money
-      ? { columns: ['Total cost', 'Servings', 'Cost per serving'], rows: 1, cells: [[`${r.money.symbol}${r.money.total.toFixed(2)}`, String(servings), `${r.money.symbol}${r.money.total.toFixed(2)} ÷ ${servings} = ${r.money.symbol}${(r.money.total / servings).toFixed(2)}`]] }
-      : { columns: ['Ingredient', 'Price', 'Amount used', 'Cost'], rows: Math.min(6, r.items.length), cells: null },
-  });
-  slides.push({ kind: 'photos', title: L('My cooking photos', '사진'), emoji: '📸', labels: ['Ingredients', 'Measuring', 'Cooking', 'Final dish'] });
-  slides.push({ title: L('What I learned', '배운 점'), emoji: '💡', placeholder: true, bullets: ['One thing I learned about fractions:', 'What was hardest:', 'How I would use this at home:'] });
-  slides.push({ kind: 'big', title: 'Thank you!', big: korean ? '감사합니다!' : 'Thank you!', emoji: korean ? '🇰🇷' : '🎉', caption: `${dish} · Math in my kitchen` });
+  slides.push(
+    r.money
+      ? { kind: 'cost', title: L('Cost per serving', '가격'), total: `${r.money.symbol}${r.money.total.toFixed(2)}`, servings, per: `${r.money.symbol}${(r.money.total / servings).toFixed(2)}` }
+      : { kind: 'cost', title: L('Cost per serving', '가격'), per: '' },
+  );
+  slides.push({ kind: 'photos', title: L('Cooking it for real', '사진'), labels: ['Ingredients', 'Measuring', 'Cooking', 'Final dish'] });
+  slides.push({ kind: 'learned', title: L('What I learned', '배운 점'), prompts: ['One thing I learned about fractions', 'The hardest part', 'How I’ll use this at home'] });
+  slides.push({ kind: 'thanks', title: 'Thank you!', big: korean ? '감사합니다!' : 'Thank you!', caption: `${dish} · Math in my kitchen` });
 
   return {
-    title: project && !/project$/i.test(project) ? `${dish}: ${project}` : `${dish}: Math in My Kitchen`,
-    subtitle: clean(intro.subtitle).slice(0, 90) || 'Scaling a recipe with fractions',
+    title: project && !/^(project|my project)$/i.test(project) ? `${dish}: ${project}` : `${dish}: Math in My Kitchen`,
+    dish,
+    subtitle: clean(intro.subtitle).slice(0, 70) || 'Scaling a recipe with fractions',
     slides,
+    recipe: { from: r.from, items: items.map((i) => ({ name: i.name })) },
     theme: lookTheme,
-    hangul: korean ? (/[가-힣]/.test(intro.hangul ?? '') ? clean(intro.hangul).slice(0, 20) : '') : '',
+    hangul: korean ? (/[가-힣]/.test(intro.hangul ?? '') ? clean(intro.hangul).slice(0, 12) : /bibimbap/i.test(dish) ? '비빔밥' : '') : '',
     filled: true,
     template: false,
     recipeDeck: true,
@@ -662,6 +708,16 @@ export async function buildRecipeDeck(details, { topic = '', theme = null, proje
 
 /** New slides about something ("add a slide about where it comes from", "more slides"), written by the AI. */
 async function newSlides(content, instruction, count, model) {
+  try {
+    return await writeNewSlides(content, instruction, count, model);
+  } catch {
+    // The AI couldn't do it: still add the slide, with space for you to fill in.
+    const about = String(instruction).match(/\babout\s+(.{3,60}?)\s*[.!]?$/i)?.[1];
+    return [{ title: about ? cap1(about) : 'More about my recipe', bullets: ['Your notes here', 'Your notes here', 'Your notes here'], emoji: '✨', added: true }];
+  }
+}
+
+async function writeNewSlides(content, instruction, count, model) {
   const out = await ollamaJSON(
     [
       {
@@ -679,7 +735,8 @@ async function newSlides(content, instruction, count, model) {
 }
 
 const insertBeforeEnd = (slides, extra) => {
-  const end = slides.length && slides[slides.length - 1].kind === 'big' && /thank|감사/i.test(`${slides[slides.length - 1].title}${slides[slides.length - 1].big}`) ? slides.length - 1 : slides.length;
+  const last = slides[slides.length - 1];
+  const end = last && (last.kind === 'thanks' || (last.kind === 'big' && /thank|감사/i.test(`${last.title}${last.big}`))) ? slides.length - 1 : slides.length;
   return [...slides.slice(0, end), ...extra, ...slides.slice(end)];
 };
 
