@@ -608,7 +608,7 @@ export async function buildRecipeDeck(details, { topic = '', theme = null, proje
     const kText = improperText(k);
     slides.push({ kind: 'big', title: f.label, big: `× ${kText}`, emoji: k.value > 1 ? '⬆️' : '⬇️', caption: r.from ? `Scale factor = ${f.serves} ÷ ${r.from} = ${kText} · now it serves ${f.serves}` : `Every amount × ${kText}` });
     slides.push({
-      title: L(`${f.label}${f.serves ? `: serves ${f.serves}` : ''}`, k.value > 1 ? '두 배' : '반'),
+      title: L(`${f.label}${f.serves ? `: serves ${f.serves}` : ''}`, { 2: '두 배', 0.5: '반', 1.5: '1.5배', 3: '세 배' }[k.value] ?? ''),
       emoji: k.value > 1 ? '✖️' : '➗',
       table: { columns: ['Ingredient', 'Original', `× ${kText}`], rows: r.items.length, cells: r.items.map((i) => [cap1(i.name), amountText(i.qty, i), amountText(i.qty.mul(k), i)]) },
     });
