@@ -39,6 +39,7 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
 | "make me a template for this project, I'm doing bibimbap, with Korean style" | A blank template built from the project's instructions (tables for the math, photo spots). Opens in Canva if it's connected |
 | "scale the recipe from 2 to 6 servings: 1/2 cup rice, 3 tbsp gochujang" | Exact answers with every step |
 | "2/3 cup times 4", "3/4 + 2/3", "$12 for 4 servings" | Fractions and cost per serving, with steps |
+| "190 g in scientific notation", "convert 1 1/4 cups milk to liters", "convert 1/4 tsp salt to kg" | Scientific notation and kitchen conversions (approximate weights for flour, sugar, salt, butter, rice…) |
 
 ## 🎨 Canva: designs open right in Canva
 

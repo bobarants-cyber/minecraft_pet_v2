@@ -46,7 +46,7 @@ export function parseQty(s) {
   return null;
 }
 
-const QTY = String.raw`\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?|\d*\s*[½⅓⅔¼¾⅛]`;
+const QTY = String.raw`\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d*\s*[½⅓⅔¼¾⅛]|\d+(?:\.\d+)?`;
 
 /** A friendly way to write a fraction: 8/3 → "8/3 = 2 2/3", 3 → "3", 0.125 kept as fraction. */
 export function fmt(f) {
@@ -59,11 +59,29 @@ export function fmt(f) {
 }
 const short = (f) => (f.d === 1 ? String(f.n) : Math.abs(f.n) > f.d ? `${Math.trunc(f.n / f.d)} ${Math.abs(f.n % f.d)}/${f.d}` : `${f.n}/${f.d}`);
 const money = (x) => (Math.round(x * 100) / 100).toFixed(2);
+const asFrac = (f) => (f.d === 1 ? String(f.n) : `${f.n}/${f.d}`);
 
-/** One ingredient line: "1/2 cup rice" → { qty, rest }. */
+/** "3/2 × 2 = 6/2 = 3": multiply as improper fractions, show the unsimplified answer, then the simple one. */
+function mulSteps(a, b) {
+  const rawN = a.n * b.n;
+  const rawD = a.d * b.d;
+  const r = a.mul(b);
+  const raw = rawD === 1 ? String(rawN) : `${rawN}/${rawD}`;
+  const parts = [`${asFrac(a)} × ${asFrac(b)}`, raw];
+  if (raw !== asFrac(r)) parts.push(asFrac(r));
+  if (r.d !== 1 && Math.abs(r.n) > r.d) parts.push(short(r));
+  return parts.join(' = ');
+}
+
+const UNITS = /^(cups?|c\b|tablespoons?|tbsp|tbs|teaspoons?|tsp|grams?|g\b|kilograms?|kg|ml|milliliters?|millilitres?|liters?|litres?|l\b|oz|ounces?|pounds?|lbs?|pinch(?:es)?|cloves?|slices?|pieces?|cans?|sticks?)\s*(?:of\s+)?/i;
+
+/** One ingredient line: "1/2 cup rice" → { qty, unit: 'cup', name: 'rice' }. */
 function splitItem(item) {
   const m = String(item).trim().match(new RegExp(`^(${QTY})\\s*(.*)$`));
-  return m ? { qty: parseQty(m[1]), rest: m[2].trim() } : null;
+  if (!m) return null;
+  const rest = m[2].trim();
+  const u = rest.match(UNITS);
+  return { qty: parseQty(m[1]), unit: u ? u[1] : '', name: u ? rest.slice(u[0].length).trim() : rest };
 }
 
 function scaleRecipe(text) {
@@ -75,12 +93,13 @@ function scaleRecipe(text) {
   const k = new Frac(to, from);
   const items = m[3].split(/\s*(?:,|;|\n|\band\b)\s*/).map(splitItem).filter(Boolean);
   if (!items.length) return null;
-  const lines = [`🧮 Scale factor = ${to} ÷ ${from} = ${fmt(k)}`];
-  for (const { qty, rest } of items) {
-    const r = qty.mul(k);
-    lines.push(`• ${short(qty)} ${rest} × ${short(k)} = ${fmt(r)} ${rest}`);
+  const lines = [`🧮 Scale factor = ${to} ÷ ${from} = ${fmt(k)}${k.d !== 1 || k.n !== to ? '' : ''}`];
+  const mixed = items.some(({ qty }) => qty.d !== 1 && Math.abs(qty.n) > qty.d);
+  if (mixed) lines.push('Tip: mixed numbers become improper fractions first (1 1/2 = 3/2).');
+  for (const { qty, unit, name } of items) {
+    lines.push(`• ${name || unit}: ${mulSteps(qty, k)}${unit && name ? ` ${unit}` : ''}`);
   }
-  lines.push(`So for ${to} servings you need: ${items.map(({ qty, rest }) => `${short(qty.mul(k))} ${rest}`).join(', ')}.`);
+  lines.push(`So for ${to} servings you need: ${items.map(({ qty, unit, name }) => `${short(qty.mul(k))} ${[unit, name].filter(Boolean).join(' ')}`).join(', ')}.`);
   return lines.join('\n');
 }
 
@@ -90,8 +109,7 @@ function scaleOne(text) {
   const a = parseQty(m[1]);
   const b = parseQty(m[3]);
   if (!a || !b) return null;
-  const r = a.mul(b);
-  return `🧮 ${short(a)} ${m[2]} × ${short(b)} = (${a.n} × ${b.n}) / (${a.d} × ${b.d}) = ${fmt(r)} ${m[2]}`;
+  return `🧮 ${mulSteps(a, b)} ${m[2]}`;
 }
 
 function fractionOp(text) {
@@ -112,7 +130,7 @@ function fractionOp(text) {
     return `🧮 Common denominator ${d}: ${an}/${d} ${plus ? '+' : '−'} ${bn}/${d} = ${raw === `${r.n}/${r.d}` ? '' : `${raw} = `}${fmt(r)}`;
   }
   if (['×', 'x', '*', 'times'].includes(op)) {
-    return `🧮 Multiply tops and bottoms: (${a.n} × ${b.n}) / (${a.d} × ${b.d}) = ${fmt(a.mul(b))}`;
+    return `🧮 Multiply tops and bottoms: ${mulSteps(a, b)}`;
   }
   if (b.n === 0) return 'You can’t divide by zero! 🙃';
   return `🧮 Flip the second and multiply: ${a.n}/${a.d} × ${b.d}/${b.n} = ${fmt(a.div(b))}`;
@@ -128,11 +146,65 @@ function perServing(text) {
   return `🧮 Cost per ${m[3].replace(/s$/, '').replace(/^people$|^persons?$/, 'person')} = ${sym}${money(total)} ÷ ${n} = ${sym}${money(total / n)}`;
 }
 
+const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+const sup = (n) => String(n).split('').map((c) => SUP[c] ?? c).join('');
+
+/** 190 → "1.9 × 10²", 0.0015 → "1.5 × 10⁻³". */
+export function sci(x) {
+  if (!x) return '0';
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  const m = Number((x / 10 ** e).toPrecision(4));
+  return m === 10 ? `1 × 10${sup(e + 1)}` : `${m} × 10${sup(e)}`;
+}
+
+function sciNotation(text) {
+  const m = text.match(/^(?:what(?:'s| is)\s+|write\s+|convert\s+|put\s+)?(\d[\d,]*(?:\.\d+)?|\.\d+)\s*([a-zA-Zµ]+)?\s+(?:in(?:to)?|to|as)\s+scientific\s+notation\s*\??$/i);
+  if (!m) return null;
+  const x = Number(m[1].replace(/,/g, ''));
+  if (!Number.isFinite(x)) return null;
+  const e = x ? Math.floor(Math.log10(Math.abs(x))) : 0;
+  const how = e > 0 ? `move the decimal point ${e} place${e === 1 ? '' : 's'} left` : e < 0 ? `move the decimal point ${-e} place${e === -1 ? '' : 's'} right` : 'it’s already between 1 and 10';
+  return `🧮 ${m[1]}${m[2] ? ` ${m[2]}` : ''} = ${sci(x)}${m[2] ? ` ${m[2]}` : ''}  (${how}, so the exponent is ${e})`;
+}
+
+// Approximate kitchen weights: grams in 1 cup / 1 tbsp / 1 tsp.
+const GRAMS = {
+  flour: { cup: 125, tbsp: 8, tsp: 2.6 }, sugar: { cup: 200, tbsp: 12.5, tsp: 4.2 }, salt: { cup: 290, tbsp: 18, tsp: 6 },
+  'baking powder': { cup: 220, tbsp: 13.8, tsp: 4.6 }, butter: { cup: 227, tbsp: 14.2, tsp: 4.7 }, rice: { cup: 185, tbsp: 11.5, tsp: 3.9 },
+  'brown sugar': { cup: 220, tbsp: 13.8, tsp: 4.6 }, oats: { cup: 90, tbsp: 5.6, tsp: 1.9 }, cocoa: { cup: 85, tbsp: 5.3, tsp: 1.8 },
+};
+const ML = { cup: 240, tbsp: 15, tsp: 5 };
+const UNIT = { cup: 'cup', cups: 'cup', c: 'cup', tablespoon: 'tbsp', tablespoons: 'tbsp', tbsp: 'tbsp', tbs: 'tbsp', teaspoon: 'tsp', teaspoons: 'tsp', tsp: 'tsp' };
+
+function convert(text) {
+  const m = text.match(new RegExp(`^(?:convert\\s+|change\\s+|how (?:much|many)\\s+(?:is|are)\\s+)?(${QTY})\\s*(cups?|c|tablespoons?|tbsp|tbs|teaspoons?|tsp)\\s+(?:of\\s+)?([a-zA-Z ]{2,25}?)\\s+(?:in|to|into)\\s+(grams?|g|kilograms?|kg|ml|milliliters?|millilitres?|liters?|litres?|l)\\s*\\??$`, 'i'));
+  if (!m) return null;
+  const qty = parseQty(m[1]);
+  const unit = UNIT[m[2].toLowerCase()];
+  const food = m[3].trim().toLowerCase();
+  const target = m[4].toLowerCase();
+  if (!qty || !unit) return null;
+  const amount = qty.value;
+  if (/^(ml|milli|l$|lit)/.test(target)) {
+    const ml = amount * ML[unit];
+    const out = /^l|^lit/.test(target) ? `${Number((ml / 1000).toPrecision(3))} L` : `${Math.round(ml)} mL`;
+    const val = /^l|^lit/.test(target) ? ml / 1000 : ml;
+    return `🧮 ${short(qty)} ${unit} ${food} ≈ ${short(qty)} × ${ML[unit]} mL = ${out} = ${sci(val)} ${/^l|^lit/.test(target) ? 'L' : 'mL'} (about; 1 ${unit} ≈ ${ML[unit]} mL)`;
+  }
+  const key = Object.keys(GRAMS).sort((a, b) => b.length - a.length).find((k) => food.includes(k));
+  if (!key) return `I don’t know how heavy “${food}” is 🤔 I know: ${Object.keys(GRAMS).join(', ')}. For liquids (milk, water) ask for mL instead.`;
+  const g = amount * GRAMS[key][unit];
+  const kg = /^k/.test(target);
+  const val = kg ? g / 1000 : g;
+  const shown = kg ? `${Number(val.toPrecision(3))} kg` : `${Number(g.toPrecision(3))} g`;
+  return `🧮 ${short(qty)} ${unit} ${food} ≈ ${short(qty)} × ${GRAMS[key][unit]} g = ${shown} = ${sci(val)} ${kg ? 'kg' : 'g'} (about; 1 ${unit} of ${key} ≈ ${GRAMS[key][unit]} g)`;
+}
+
 /** Answers recipe/fraction math, or null if the message isn't that. */
 export function recipeMath(message) {
   const text = String(message ?? '').trim().replace(/^(?:hey|hi|ok)\s+\w+[,!.]?\s*/i, '').replace(/^(?:please|can you|could you)\s+/i, '');
   try {
-    return scaleRecipe(text) ?? perServing(text) ?? scaleOne(text) ?? fractionOp(text);
+    return scaleRecipe(text) ?? perServing(text) ?? sciNotation(text) ?? convert(text) ?? scaleOne(text) ?? fractionOp(text);
   } catch {
     return null;
   }
