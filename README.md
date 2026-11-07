@@ -45,6 +45,27 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
 | "2/3 cup times 4", "3/4 + 2/3", "$12 for 4 servings" | Fractions and cost per serving, with steps |
 | "190 g in scientific notation", "convert 1 1/4 cups milk to liters", "convert 1/4 tsp salt to kg" | Scientific notation and kitchen conversions (approximate weights for flour, sugar, salt, butter, rice…) |
 
+## 🖼 Presenton: open-source presentation design (optional)
+
+[Presenton](https://github.com/presenton/presenton) (Apache-2.0) is a free, open-source AI presentation maker that runs
+on your Mac with Ollama and adds real photos. With it switched on, Bbokari still does the content and the math, and
+Presenton designs the slides; the result opens in Canva (if connected) or in Presenton's editor. If Presenton isn't
+running, Bbokari uses his own design.
+
+1. Install **Docker Desktop** for Mac (docker.com) and open it.
+2. Get a free **Pexels API key** at pexels.com/api (for the photos).
+3. In Terminal: `ollama pull llama3.2:3b`, then (put your Pexels key in):
+
+   ```bash
+   docker run -d --name presenton -p 5001:80 -e LLM="ollama" -e OLLAMA_MODEL="llama3.2:3b" -e OLLAMA_URL="http://host.docker.internal:11434" -e IMAGE_PROVIDER="pexels" -e PEXELS_API_KEY="YOUR_PEXELS_KEY" -v "$HOME/presenton_data:/app_data" ghcr.io/presenton/presenton:latest
+   ```
+
+4. Open **http://localhost:5001**, finish its setup, and create an **API key** in its settings.
+5. Bbokari's menu bar icon → **🖼 Presentation maker → Enter Presenton API key…** → paste it. (That also switches
+   presentations to Presenton; switch back with **Bbokari's own design**.)
+
+Next time, just open Docker Desktop and start the `presenton` container (or run `docker start presenton`).
+
 ## 🎨 Canva: designs open right in Canva
 
 When Canva is connected, "make a presentation about … in Canva" opens the finished design **in the Canva editor**

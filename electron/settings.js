@@ -46,6 +46,10 @@ export const DEFAULTS = {
   inboxGmail: true,
   inboxChat: true,
   inboxClassroom: true,
+  // Presentations: Bbokari's own design, or Presenton (open source, github.com/presenton/presenton) running on this Mac.
+  presentationEngine: 'bbokari',
+  presentonUrl: 'http://localhost:5001',
+  presentonKey: '',
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

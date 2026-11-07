@@ -24,6 +24,7 @@ import * as actions from './actions.js';
 import { autoRecipeCalcs, parseRecipe, recipeMath } from './recipeMath.js';
 import { GoogleAuth } from './google.js';
 import { Canva, CANVA_REDIRECT } from './canva.js';
+import * as presenton from './presenton.js';
 import * as inbox from './inbox.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
@@ -199,6 +200,7 @@ function buildTray() {
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
     { label: '🎨 Canva', submenu: canvaMenu() },
+    { label: '🖼 Presentation maker', submenu: presentationMenu() },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
       label: '🎮 Games',
@@ -1011,6 +1013,57 @@ async function connectGoogle() {
   buildTray();
 }
 
+function presentationMenu() {
+  const engine = (value, label) => ({ label, type: 'radio', checked: settings.presentationEngine === value, click: () => applySettings({ presentationEngine: value }) });
+  return [
+    engine('bbokari', 'Bbokari’s own design (built in)'),
+    engine('presenton', 'Presenton (open source, with photos)'),
+    { type: 'separator' },
+    { label: `Presenton address: ${settings.presentonUrl}`, enabled: false },
+    { label: settings.presentonKey ? 'Change Presenton API key…' : 'Enter Presenton API key…', click: openPresentonKeyWindow },
+    { label: 'Open Presenton', click: () => shell.openExternal(settings.presentonUrl) },
+    { label: 'How to install Presenton', click: () => shell.openExternal('https://github.com/presenton/presenton') },
+  ];
+}
+
+let presentonWin = null;
+function openPresentonKeyWindow() {
+  if (presentonWin && !presentonWin.isDestroyed()) return presentonWin.focus();
+  presentonWin = new BrowserWindow({ width: 480, height: 330, title: 'Presenton key', resizable: false, alwaysOnTop: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true } });
+  const html = `<!doctype html><meta charset="utf-8"><title>Presenton</title>
+  <body style="font:15px -apple-system,system-ui;padding:22px;background:#fffaf0;color:#3b2f14">
+  <h2 style="margin:0 0 8px">🖼 Presenton</h2>
+  <p style="margin:0 0 14px;color:#7a6a42">In Presenton (${settings.presentonUrl}) open Settings → API keys, create a key, and paste it here.</p>
+  <label>API key<br><input id="key" type="password" placeholder="sk-presenton-…" style="width:100%;padding:8px;margin:4px 0 14px;font:inherit"></label>
+  <button id="save" style="padding:10px 18px;font:700 15px system-ui;background:#ffd23f;border:2px solid #3b2f14;border-radius:12px">Save</button>
+  <p id="msg" style="color:#c92a2a"></p>
+  <script>document.getElementById('save').onclick=async()=>{const r=await window.mobHost.presentonKey(document.getElementById('key').value);if(r.ok)window.close();else document.getElementById('msg').textContent=r.text;};</script></body>`;
+  presentonWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+ipcMain.handle('presenton:key', async (_e, key) => {
+  const k = String(key ?? '').trim();
+  if (k.length < 8) return { ok: false, text: 'That key looks too short.' };
+  applySettings({ presentonKey: k, presentationEngine: 'presenton' });
+  send('say', { text: 'Got your Presenton key! 🖼 Presentations will now be designed by Presenton.' });
+  return { ok: true };
+});
+
+/** Makes the .pptx with Presenton (Bbokari's slides and math, Presenton's design and photos). Returns { file, editUrl }. */
+async function presentonFile(content, a) {
+  if (!(await presenton.isRunning(settings.presentonUrl))) throw new Error(`Presenton isn’t running at ${settings.presentonUrl} (start Docker and Presenton)`);
+  send('say', { text: 'Presenton is designing your slides… 🖼 This can take a few minutes.' });
+  const korean = content.theme === 'korean';
+  return presenton.generate({
+    url: settings.presentonUrl,
+    key: settings.presentonKey,
+    slidesMarkdown: content.slides?.length ? actions.deckToMarkdown(content) : null,
+    content: content.slides?.length ? '' : a.request,
+    instructions: `A school ${a.kind === 'slides' ? 'presentation' : 'document'} for a student. Keep every number, fraction and calculation exactly as written. Use clear visuals and photos of the food.${korean ? ' Korean style: red, navy and gold colours, Korean food photos.' : ''}`,
+    saveDir: actions.DOCS_DIR,
+    name: content.title,
+  });
+}
+
 function canvaMenu() {
   if (!canva) return [{ label: 'Starting…', enabled: false }];
   if (!canva.hasKeys) {
@@ -1393,8 +1446,22 @@ async function deliver(a, content, { update = false } = {}) {
         send('say', { text: `${done} “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.)` });
       }
     } else {
-      const file = await actions.savePresentation(content);
+      let file;
+      let editUrl = null;
+      if (settings.presentationEngine === 'presenton') {
+        try {
+          ({ file, editUrl } = await presentonFile(content, a));
+        } catch (err) {
+          send('say', { text: `${err.message}, so I’ll use my own design this time.`, error: true });
+        }
+      }
+      file ??= await actions.savePresentation(content);
       const name = path.basename(file);
+      if (editUrl && !(a.place === 'canva' && canva?.connected)) {
+        await shell.openExternal(editUrl);
+        send('say', { text: `${done} “${content.title}” is open in Presenton 🖼 (The file is also in Documents → Bbokari Docs.) Want changes? Just tell me!` });
+        return;
+      }
       if (a.place === 'keynote' && hasApp('Keynote')) execFile('open', ['-a', 'Keynote', file]);
       else if (a.place === 'powerpoint' && hasApp('Microsoft PowerPoint')) execFile('open', ['-a', 'Microsoft PowerPoint', file]);
       else if (a.place === 'canva' && canva?.connected) {

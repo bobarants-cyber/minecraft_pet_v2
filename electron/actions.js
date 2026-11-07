@@ -853,3 +853,29 @@ export function looksLikeEdit(message) {
   if (/\b(?:to-?do|reminders?|timers?|alarm|calendar|class(?:es)? schedule)\b/i.test(t)) return false; // other skills
   return /^(?:change|update|edit|fix|add|remove|delete|take out|replace|rename|put|move|swap|switch|use|make (?:it|the|slide|that|this|them|everything|all)|turn (?:it|the)|translate (?:it|the)|redo|undo)\b/i.test(t);
 }
+
+/** The slides as Markdown, one string per slide (for Presenton), keeping every number and step exactly. */
+export function deckToMarkdown(deck) {
+  const table = (head, rows) => [`| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
+  const out = [`# ${deck.title}\n\n${deck.subtitle ?? ''}${deck.hangul ? `\n\n${deck.hangul}` : ''}`];
+  for (const s of deck.slides ?? []) {
+    const t = `# ${s.title ?? ''}`;
+    switch (s.kind) {
+      case 'about': out.push(`${t}\n\n${s.facts.map((f) => `- ${f}`).join('\n')}`); break;
+      case 'ingredients': out.push(`${t}${s.serves ? ` (serves ${s.serves})` : ''}\n\n${table(['Ingredient', 'Amount', 'As a fraction'], s.rows.map((r) => [`${r.icon} ${r.name}`, r.amount, r.frac]))}`); break;
+      case 'fractions': out.push(`${t}\n\n${s.rows.map((r) => `- ${r.name}: ${r.expr} = **${r.result}**`).join('\n')}`); break;
+      case 'divider': out.push(`# ${s.big} — ${s.title}\n\n${s.caption}`); break;
+      case 'scaled': out.push(`${t}\n\n${table(['Ingredient', 'Original', s.factor], s.rows.map((r) => [`${r.icon} ${r.name}`, r.from, `**${r.to}**`]))}`); break;
+      case 'steps': out.push(`${t}\n\n${s.rows.map((r) => `- ${r.name}: ${r.expr} = **${r.result}**`).join('\n')}`); break;
+      case 'chart': out.push(`${t} (${s.unit})\n\n${table(['Ingredient', ...s.series], s.rows.map((r) => [r.name, ...r.labels]))}`); break;
+      case 'ratios': out.push(`${t}\n\n${s.rows.map((r) => `- ${r.a} : ${r.b} = **${r.text}**`).join('\n')}`); break;
+      case 'metric': out.push(`${t}\n\n${s.rows.map((r) => `- ${r.from} ≈ ${r.value} = **${r.sci} ${r.unit}** (${r.how})`).join('\n')}`); break;
+      case 'cost': out.push(s.per ? `${t}\n\n- Total cost: ${s.total}\n- Servings: ${s.servings}\n- ${s.total} ÷ ${s.servings} = **${s.per} per serving**` : `${t}\n\n${table(['Ingredient', 'Price', 'Amount used', 'Cost'], [['', '', '', ''], ['', '', '', '']])}`); break;
+      case 'photos': out.push(`${t}\n\n${(s.labels ?? []).map((l) => `- Photo: ${l}`).join('\n')}`); break;
+      case 'learned': out.push(`${t}\n\n${s.prompts.map((p) => `- ${p}: ____`).join('\n')}`); break;
+      case 'thanks': out.push(`# ${s.big}\n\n${s.title} · ${s.caption}`); break;
+      default: out.push(`${t}\n\n${(s.bullets ?? []).map((b) => `- ${b}`).join('\n')}${s.table?.columns ? `\n\n${table(s.table.columns, s.table.cells ?? [])}` : ''}`);
+    }
+  }
+  return out;
+}
