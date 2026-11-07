@@ -50,6 +50,9 @@ export const DEFAULTS = {
   presentationEngine: 'bbokari',
   presentonUrl: 'http://localhost:5001',
   presentonKey: '',
+  // Real food photos in Bbokari's own design, from Pixabay (free key from pixabay.com/api/docs).
+  pixabayKey: '',
+  deckPhotos: true,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

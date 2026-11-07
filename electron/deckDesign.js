@@ -39,6 +39,24 @@ const round = (s, x, y, w, h, color, extra = {}) => s.addShape('roundRect', { x,
 const oval = (s, x, y, w, h, color, extra = {}) => s.addShape('ellipse', { x, y, w, h, fill: { color }, line: { color, width: 0 }, ...extra });
 const text = (s, value, opts) => s.addText(value, { margin: 0, ...opts });
 
+/** A real photo cropped to fill a box (a circle by default), with an optional coloured ring around it. */
+function photo(s, pic, x, y, w, h = w, { circle = true, ring = null, ringW = 0.12 } = {}) {
+  if (!pic?.data) return false;
+  if (ring) (circle ? oval : round)(s, x - ringW, y - ringW, w + ringW * 2, h + ringW * 2, ring);
+  const ar = pic.ar > 0 ? pic.ar : 4 / 3;
+  // PptxGenJS crops from the photo's own shape (w/h here) to the box (sizing).
+  const iw = ar > w / h ? h * ar : w;
+  const ih = ar > w / h ? h : w / ar;
+  s.addImage({ data: pic.data, x, y, w: iw, h: ih, sizing: { type: 'cover', w, h }, rounding: circle });
+  return true;
+}
+
+/** The deck's photos (from Pixabay), or nothing. `n` picks a different gallery photo for each slide. */
+const galleryPhoto = (deck, n = 0) => {
+  const g = deck.photos?.gallery ?? [];
+  return g.length ? g[n % g.length] : deck.photos?.hero ?? null;
+};
+
 /** The thin rainbow (색동) band down the left edge, or a plain accent bar for other themes. */
 function edgeBand(s, d, { dark = false } = {}) {
   if (d.korean) {
@@ -117,7 +135,8 @@ function cover(s, d, deck) {
     s.addShape('cloud', { x: 7.3, y: 0.7, w: 1.6, h: 0.85, fill: { color: 'FFFFFF' }, line: { color: d.soft, width: 1 } });
     s.addShape('cloud', { x: 11.2, y: 1.2, w: 1.2, h: 0.65, fill: { color: 'FFFFFF' }, line: { color: d.soft, width: 1 } });
   }
-  dishArt(s, d, 10.05, 3.75, 3.6, { dish: deck.topic, items: deck.recipe.items });
+  if (!photo(s, deck.photos?.hero, 7.95, 0.8, 4.2, 4.2, { ring: 'FFFFFF', ringW: 0.14 })) dishArt(s, d, 10.05, 3.75, 3.6, { dish: deck.topic, items: deck.recipe.items });
+  else if (deck.photos.credits?.length) text(s, `Photos: ${deck.photos.credits.join(', ')} · Pixabay`, { x: 7.4, y: 7.0, w: 5.6, h: 0.25, fontFace: d.body, fontSize: 9, color: d.muted, align: 'right' });
   if (deck.hangul) text(s, deck.hangul, { x: 7.4, y: 5.45, w: 5.3, h: 1.1, fontFace: d.head, fontSize: 48, bold: true, color: d.red, align: 'center', fit: 'shrink' });
   text(s, 'MATH IN MY KITCHEN', { x: 0.85, y: 1.45, w: 6, h: 0.4, fontFace: d.body, fontSize: 14, bold: true, color: d.red, charSpacing: 4 });
   text(s, deck.dish, { x: 0.85, y: 1.9, w: 6.3, h: 2.2, fontFace: d.head, fontSize: 58, bold: true, color: d.ink, valign: 'top', fit: 'shrink' });
@@ -136,7 +155,7 @@ function about(s, d, sl, deck, n) {
     text(s, f, { x: 1.65, y: y - 0.08, w: 5.9, h: 0.8, fontFace: d.body, fontSize: 19, color: d.ink, valign: 'middle', fit: 'shrink' });
   });
   oval(s, 8.05, 1.55, 4.6, 4.6, d.soft);
-  dishArt(s, d, 10.35, 3.95, 3.2, { dish: deck.topic, items: deck.recipe.items });
+  if (!photo(s, galleryPhoto(deck, 0), 8.35, 1.85, 4.0, 4.0, { ring: 'FFFFFF', ringW: 0.1 })) dishArt(s, d, 10.35, 3.95, 3.2, { dish: deck.topic, items: deck.recipe.items });
 }
 
 function ingredients(s, d, sl, deck, n) {
@@ -157,7 +176,17 @@ function ingredients(s, d, sl, deck, n) {
     round(s, x + 0.65 + cols[0] + cols[1], y + rh * 0.14, 1.1, rh * 0.62, d.soft, { rectRadius: 0.2 });
     text(s, r.frac, { x: x + 0.65 + cols[0] + cols[1], y: y + rh * 0.14, w: 1.1, h: rh * 0.62, fontFace: d.body, fontSize: 14, bold: true, color: d.red, align: 'center', valign: 'middle' });
   });
-  dishArt(s, d, 11.0, 3.6, 2.6, { dish: deck.topic, items: deck.recipe.items });
+  const ing = Object.entries(deck.photos?.ingredients ?? {}).slice(0, 3);
+  if (ing.length) {
+    // Up to three ingredient photos in a little cluster, each with its name on a tag.
+    const spots = [[9.6, 1.75, 1.7], [11.3, 2.3, 1.5], [10.1, 3.75, 1.3]];
+    ing.forEach(([name, pic], i) => {
+      const [x, y, w] = spots[i];
+      photo(s, pic, x, y, w, w, { ring: 'FFFFFF', ringW: 0.08 });
+      round(s, x + w / 2 - 0.7, y + w - 0.22, 1.4, 0.36, i % 2 ? d.navy : d.red, { rectRadius: 0.18 });
+      text(s, name, { x: x + w / 2 - 0.7, y: y + w - 0.22, w: 1.4, h: 0.36, fontFace: d.body, fontSize: 11, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', fit: 'shrink' });
+    });
+  } else if (!photo(s, galleryPhoto(deck, 1), 9.9, 2.2, 2.4, 2.4, { ring: 'FFFFFF', ringW: 0.1 })) dishArt(s, d, 11.0, 3.6, 2.6, { dish: deck.topic, items: deck.recipe.items });
   if (sl.serves) {
     round(s, 9.95, 5.35, 2.1, 0.62, d.navy, { rectRadius: 0.3 });
     text(s, `Serves ${sl.serves}`, { x: 9.95, y: 5.35, w: 2.1, h: 0.62, fontFace: d.body, fontSize: 16, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle' });
@@ -193,7 +222,7 @@ function divider(s, d, sl, deck, n) {
   text(s, sl.title, { x: 0.75, y: 4.6, w: 7.5, h: 0.8, fontFace: d.head, fontSize: 32, bold: true, color: 'FFFFFF' });
   text(s, sl.caption, { x: 0.75, y: 5.4, w: 7.5, h: 0.8, fontFace: d.body, fontSize: 18, color: 'D6DAE8', valign: 'top' });
   oval(s, 8.4, 1.25, 4.4, 4.4, d.gold, { fill: { color: d.gold, transparency: 85 } });
-  dishArt(s, d, 10.6, 3.6, 3.0, { dish: deck.topic, items: deck.recipe.items });
+  if (!photo(s, galleryPhoto(deck, (sl.photoIndex ?? 0) + 2), 8.75, 1.6, 3.7, 3.7, { ring: d.gold, ringW: 0.08 })) dishArt(s, d, 10.6, 3.6, 3.0, { dish: deck.topic, items: deck.recipe.items });
   if (sl.serves) {
     round(s, 9.55, 5.75, 2.1, 0.6, d.gold, { rectRadius: 0.3 });
     text(s, `Serves ${sl.serves}`, { x: 9.55, y: 5.75, w: 2.1, h: 0.6, fontFace: d.body, fontSize: 16, bold: true, color: d.navy, align: 'center', valign: 'middle' });
@@ -358,7 +387,7 @@ function thanks(s, d, sl, deck) {
   s.background = { color: d.navy };
   edgeBand(s, d, { dark: true });
   oval(s, 7.9, 0.9, 5.2, 5.2, d.gold, { fill: { color: d.gold, transparency: 85 } });
-  dishArt(s, d, 10.5, 3.6, 3.4, { dish: deck.topic, items: deck.recipe.items });
+  if (!photo(s, deck.photos?.hero ?? galleryPhoto(deck, 0), 8.3, 1.3, 4.4, 4.4, { ring: d.gold, ringW: 0.08 })) dishArt(s, d, 10.5, 3.6, 3.4, { dish: deck.topic, items: deck.recipe.items });
   text(s, sl.big, { x: 0.8, y: 1.6, w: 7.2, h: 2.2, fontFace: d.head, fontSize: sl.big.length > 8 ? 66 : 80, bold: true, color: d.gold, valign: 'middle', fit: 'shrink' });
   text(s, sl.title, { x: 0.85, y: 3.85, w: 7, h: 0.8, fontFace: d.head, fontSize: 32, bold: true, color: 'FFFFFF' });
   text(s, sl.caption, { x: 0.85, y: 4.65, w: 7, h: 0.6, fontFace: d.body, fontSize: 18, color: 'D6DAE8' });
@@ -374,7 +403,7 @@ function extra(s, d, sl, deck, n) {
     text(s, b, { x: 1.4, y, w: 6.9, h: 0.6, fontFace: d.body, fontSize: 19, color: d.ink, valign: 'middle', fit: 'shrink' });
   });
   oval(s, 8.9, 1.9, 3.6, 3.6, d.soft);
-  text(s, sl.emoji ?? '✨', { x: 8.9, y: 1.9, w: 3.6, h: 3.6, fontSize: 110, align: 'center', valign: 'middle' });
+  if (!photo(s, galleryPhoto(deck, (sl.photoIndex ?? 0) + 1), 9.1, 2.1, 3.2, 3.2, { ring: 'FFFFFF', ringW: 0.08 })) text(s, sl.emoji ?? '✨', { x: 8.9, y: 1.9, w: 3.6, h: 3.6, fontSize: 110, align: 'center', valign: 'middle' });
 }
 
 const DRAW = { about, ingredients, fractions, divider, scaled, steps, chart, ratios, metric, cost, photos, learned, thanks };
@@ -383,9 +412,12 @@ const DRAW = { about, ingredients, fractions, divider, scaled, steps, chart, rat
 export function renderRecipeDeck(pptx, deck, theme, t) {
   const d = palette(theme, t);
   cover(pptx.addSlide(), d, deck);
+  const seen = {};
   deck.slides.forEach((sl, i) => {
     const s = pptx.addSlide();
-    (DRAW[sl.kind] ?? extra)(s, d, sl, deck, i + 2);
+    // Each section slide gets a different photo.
+    const photoIndex = (seen[sl.kind] = (seen[sl.kind] ?? -1) + 1);
+    (DRAW[sl.kind] ?? extra)(s, d, { ...sl, photoIndex }, deck, i + 2);
     if (sl.notes) s.addNotes(sl.notes);
   });
 }

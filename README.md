@@ -45,6 +45,16 @@ goes wrong when starting, see `~/Library/Logs/Bbokari.log`.
 | "2/3 cup times 4", "3/4 + 2/3", "$12 for 4 servings" | Fractions and cost per serving, with steps |
 | "190 g in scientific notation", "convert 1 1/4 cups milk to liters", "convert 1/4 tsp salt to kg" | Scientific notation and kitchen conversions (approximate weights for flour, sugar, salt, butter, rice…) |
 
+## 📸 Real food photos in Bbokari's slides (fast, works on 8 GB)
+
+Bbokari's own presentation design can add real photos from [Pixabay](https://pixabay.com) (free to use): a big photo of your dish on the cover, photos of your ingredients, and food photos on the section slides. It only takes a few seconds and doesn't use the AI.
+
+1. Make a free account at pixabay.com, then open pixabay.com/api/docs and copy your key (under "Parameters", next to `key`).
+2. Menu bar → Bbokari → 🖼 Presentation maker → **Enter Pixabay key (for photos)…**, paste it, press Save.
+3. Make sure **Bbokari's own design** is ticked in the same menu.
+
+Keep the key private (don't screenshot or share it). Without a key, Bbokari draws the dish instead.
+
 ## 🖼 Presenton: open-source presentation design (optional)
 
 [Presenton](https://github.com/presenton/presenton) (Apache-2.0) is a free, open-source AI presentation maker that runs

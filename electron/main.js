@@ -25,6 +25,7 @@ import { autoRecipeCalcs, parseRecipe, recipeMath } from './recipeMath.js';
 import { GoogleAuth } from './google.js';
 import { Canva, CANVA_REDIRECT } from './canva.js';
 import * as presenton from './presenton.js';
+import { recipePhotos, testKey as testPixabayKey } from './photos.js';
 import * as inbox from './inbox.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
@@ -1019,6 +1020,9 @@ function presentationMenu() {
     engine('bbokari', 'Bbokari’s own design (built in)'),
     engine('presenton', 'Presenton (open source, with photos)'),
     { type: 'separator' },
+    { label: 'Real food photos (Pixabay)', type: 'checkbox', checked: settings.deckPhotos && !!settings.pixabayKey, enabled: !!settings.pixabayKey, click: (item) => applySettings({ deckPhotos: item.checked }) },
+    { label: settings.pixabayKey ? 'Change Pixabay key…' : 'Enter Pixabay key (for photos)…', click: openPixabayKeyWindow },
+    { type: 'separator' },
     { label: `Presenton address: ${settings.presentonUrl}`, enabled: false },
     { label: settings.presentonKey ? 'Change Presenton API key…' : 'Enter Presenton API key…', click: openPresentonKeyWindow },
     { label: 'Open Presenton', click: () => shell.openExternal(settings.presentonUrl) },
@@ -1047,6 +1051,49 @@ ipcMain.handle('presenton:key', async (_e, key) => {
   send('say', { text: 'Got your Presenton key! 🖼 Presentations will now be designed by Presenton.' });
   return { ok: true };
 });
+
+let pixabayWin = null;
+function openPixabayKeyWindow() {
+  if (pixabayWin && !pixabayWin.isDestroyed()) return pixabayWin.focus();
+  pixabayWin = new BrowserWindow({ width: 480, height: 340, title: 'Pixabay key', resizable: false, alwaysOnTop: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true } });
+  const html = `<!doctype html><meta charset="utf-8"><title>Pixabay</title>
+  <body style="font:15px -apple-system,system-ui;padding:22px;background:#fffaf0;color:#3b2f14">
+  <h2 style="margin:0 0 8px">📸 Real photos for your slides</h2>
+  <p style="margin:0 0 14px;color:#7a6a42">Sign in at pixabay.com/api/docs, scroll to “Parameters”, copy the key after <b>key</b>, and paste it here. (Don’t share it or screenshot it.)</p>
+  <label>Pixabay API key<br><input id="key" type="password" placeholder="12345678-abcdef…" style="width:100%;padding:8px;margin:4px 0 14px;font:inherit"></label>
+  <button id="save" style="padding:10px 18px;font:700 15px system-ui;background:#ffd23f;border:2px solid #3b2f14;border-radius:12px">Save</button>
+  <p id="msg" style="color:#c92a2a"></p>
+  <script>document.getElementById('save').onclick=async()=>{document.getElementById('msg').textContent='Checking…';const r=await window.mobHost.pixabayKey(document.getElementById('key').value);if(r.ok)window.close();else document.getElementById('msg').textContent=r.text;};</script></body>`;
+  pixabayWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+ipcMain.handle('pixabay:key', async (_e, key) => {
+  const k = String(key ?? '').trim();
+  if (!/^\d+-[0-9a-f]{20,}$/i.test(k)) return { ok: false, text: 'That doesn’t look like a Pixabay key (it looks like numbers, a dash, then letters and numbers).' };
+  try {
+    await testPixabayKey(k);
+  } catch (err) {
+    return { ok: false, text: `${err.message}. Check you copied the whole key.` };
+  }
+  applySettings({ pixabayKey: k, deckPhotos: true, presentationEngine: 'bbokari' });
+  send('say', { text: 'Got your Pixabay key! 📸 My presentations will have real food photos now.' });
+  return { ok: true };
+});
+
+/** Real photos for a recipe deck (kept in memory only, so last-work.json stays small). */
+const photoCache = new Map();
+async function deckPhotos(content) {
+  if (!content.recipeDeck || !settings.pixabayKey || !settings.deckPhotos) return null;
+  const names = (content.recipe?.items ?? []).map((i) => i.name).filter(Boolean);
+  const cacheKey = `${content.topic || content.dish}|${names.slice(0, 3).join(',')}`;
+  if (!photoCache.has(cacheKey)) {
+    send('say', { text: 'Finding real food photos for your slides… 📸' });
+    const found = await recipePhotos(settings.pixabayKey, { dish: content.topic || content.dish || 'food', ingredients: names, korean: content.theme === 'korean' });
+    if (!found) return null;
+    photoCache.clear();
+    photoCache.set(cacheKey, found);
+  }
+  return photoCache.get(cacheKey);
+}
 
 /** Makes the .pptx with Presenton (Bbokari's slides and math, Presenton's design and photos). Returns { file, editUrl }. */
 async function presentonFile(content, a) {
@@ -1455,7 +1502,7 @@ async function deliver(a, content, { update = false } = {}) {
           send('say', { text: `${err.message}, so I’ll use my own design this time.`, error: true });
         }
       }
-      file ??= await actions.savePresentation(content);
+      file ??= await actions.savePresentation(content.recipeDeck ? { ...content, photos: await deckPhotos(content) } : content);
       const name = path.basename(file);
       if (editUrl && !(a.place === 'canva' && canva?.connected)) {
         await shell.openExternal(editUrl);

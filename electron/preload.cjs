@@ -55,4 +55,5 @@ contextBridge.exposeInMainWorld('mobHost', {
   onInboxTodo: (fn) => ipcRenderer.on('inboxTodo', (_e, t) => fn(t)),
   canvaKeys: (keys) => ipcRenderer.invoke('canva:keys', keys),
   presentonKey: (key) => ipcRenderer.invoke('presenton:key', key),
+  pixabayKey: (key) => ipcRenderer.invoke('pixabay:key', key),
 });
