@@ -156,7 +156,7 @@ host?.onRewrite((r) => chat.showRewrite(r));
 
 host?.onTyping(({ on }) => (on ? character.startTyping('type') : character.stopTyping()));
 host?.onSay(({ text, error }) => chat.say(text, { error }));
-host?.onInbox?.(({ items }) => chat.showInbox(items));
+host?.onInbox?.(({ items, intro }) => chat.showInbox(items, intro));
 host?.onInboxJunk?.((j) => chat.showJunk(j));
 host?.onInboxTodo?.((t) => chat.showTodo(t));
 

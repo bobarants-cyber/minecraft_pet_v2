@@ -51,6 +51,25 @@ let keysWin = null;
 let inboxState = null;
 const inboxItems = new Map(); // id → message shown to you (with what's needed to reply)
 let checkingInbox = false;
+const recentInbox = []; // ids of recent messages and Classroom posts, newest first (shown in the menu bar)
+const handledInbox = new Set(); // ones you've answered, opened, made a template for, or clicked past
+function rememberInbox(id) {
+  const i = recentInbox.indexOf(id);
+  if (i >= 0) recentInbox.splice(i, 1);
+  recentInbox.unshift(id);
+  recentInbox.length = Math.min(recentInbox.length, 20);
+}
+function markHandled(id) {
+  if (!id || handledInbox.has(id)) return;
+  handledInbox.add(id);
+  buildTray();
+}
+const unhandledInbox = () => recentInbox.filter((id) => !handledInbox.has(id) && inboxItems.has(id));
+/** What the card needs (without the full message text). */
+function shownItem(item) {
+  const { text: _t, references: _r, messageId: _m, ...shown } = item;
+  return shown;
+}
 let junkIds = [];
 let project = null; // the school project you're working on: { title, course, text, due, link }
 let offer = null; // something Bbokari asked ("Want me to make you a template?") waiting for a yes: { kind, until }
@@ -176,7 +195,7 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
-    { label: '📬 Inbox', submenu: inboxMenu() },
+    { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
     { label: '🎨 Canva', submenu: canvaMenu() },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
@@ -417,6 +436,11 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   if (/\b(?:homework|assignments?|due|classroom)\b/i.test(said) && /\b(?:what|any|check|show|list|do i have|tell me)\b/i.test(said)) {
     if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
     return { ok: true, kind: 'inbox', text: await showTodo() };
+  }
+  if (/\b(?:catch me up|what did i miss|did i miss anything|what'?s new|any updates)\b/i.test(said)) {
+    if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
+    catchUp();
+    return { ok: true, kind: 'inbox', text: 'Let me see what you missed… 👀' };
   }
   if (/\b(?:check|read|any|new|got|what'?s in|questions? in)\b.*\b(?:inbox|e-?mails?|gmail|messages?|google chat|chats?|mail)\b/i.test(said) && !/\bremind/i.test(said)) {
     if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
@@ -844,7 +868,20 @@ function inboxMenu() {
     ];
   }
   const box = (label, key) => ({ label, type: 'checkbox', checked: !!settings[key], click: (i) => applySettings({ [key]: i.checked }) });
+  const short = (str, n) => (String(str ?? '').length > n ? `${String(str).slice(0, n - 1)}…` : String(str ?? ''));
+  const icon = { gmail: '📧', chat: '💬', classroom: '🏫' };
+  const recent = recentInbox.map((id) => inboxItems.get(id)).filter(Boolean).slice(0, 10);
+  const waiting = unhandledInbox().length;
   return [
+    { label: waiting ? `✨ Catch me up (${waiting} new)` : '✨ Catch me up', click: () => catchUp() },
+    { type: 'separator' },
+    ...(recent.length
+      ? recent.map((i) => ({
+          label: `${handledInbox.has(i.id) ? '    ' : '•  '}${icon[i.source] ?? '📬'} ${short(i.from, 18)}: ${short(i.question || i.summary || i.subject, 46)}`,
+          click: () => showInboxItem(i.id),
+        }))
+      : [{ label: 'No new messages yet', enabled: false }]),
+    { type: 'separator' },
     { label: `Connected: ${google.email || 'Google'}`, enabled: false },
     { label: 'Check now', click: () => checkInbox({ manual: true }) },
     { label: '🧹 Clean up junk mail…', click: () => findJunk() },
@@ -939,12 +976,12 @@ const inboxProblem = (name, err) =>
   err?.status === 403 ? `${name} isn’t allowed. Turn on its API in Google Cloud (or your school blocks it).` : `${name}: ${String(err?.message ?? err).slice(0, 100)}`;
 
 /** Looks for new messages and posts, sums each one up, and shows them as cards. */
-async function checkInbox({ manual = false } = {}) {
+async function checkInbox({ manual = false, show = true } = {}) {
   if (!google?.connected) {
     if (manual) send('say', { text: notConnectedText() });
-    return;
+    return [];
   }
-  if ((!manual && !settings.inboxOn) || checkingInbox) return;
+  if ((!manual && !settings.inboxOn) || checkingInbox) return [];
   checkingInbox = true;
   const found = [];
   const problems = [];
@@ -965,9 +1002,10 @@ async function checkInbox({ manual = false } = {}) {
       const s = await inbox.summarize(it, settings.aiModel);
       inboxState.markSeen(it.id);
       inboxItems.set(it.id, s);
-      const { text: _t, references: _r, messageId: _m, ...shown } = s;
-      items.push(shown);
+      rememberInbox(it.id);
+      items.push(shownItem(s));
     }
+    if (items.length) buildTray();
     // Once a day (from 7am): what's due this week.
     const today = new Date().toDateString();
     if (settings.inboxClassroom && new Date().getHours() >= 7 && inboxState.data.todoDay !== today) {
@@ -975,11 +1013,36 @@ async function checkInbox({ manual = false } = {}) {
       setTimeout(() => showTodo({ daily: true }), items.length ? 60_000 : 3000);
     }
     inboxState.save();
-    if (items.length) send('inbox', { items });
-    else if (manual) send('say', { text: problems.length ? `I couldn’t check everything 😕 ${problems.join(' ')}` : 'All caught up! Nothing new 📭✨' });
+    if (show && items.length) send('inbox', { items });
+    else if (show && manual) send('say', { text: problems.length ? `I couldn’t check everything 😕 ${problems.join(' ')}` : 'All caught up! Nothing new 📭✨' });
+    return items;
   } finally {
     checkingInbox = false;
   }
+}
+
+/** "✨ Catch me up": checks for anything new, then goes through everything you haven't dealt with yet. */
+async function catchUp({ auto = false } = {}) {
+  if (!google?.connected) {
+    if (!auto) send('say', { text: notConnectedText() });
+    return;
+  }
+  await checkInbox({ manual: true, show: false });
+  const ids = unhandledInbox();
+  if (!ids.length) {
+    if (!auto) send('say', { text: 'You’re all caught up! Nothing you missed ✨' });
+    return;
+  }
+  const items = ids.map((id) => shownItem(inboxItems.get(id))).reverse(); // oldest first
+  const asks = items.filter((i) => i.needsReply).length;
+  const work = items.filter((i) => i.source === 'classroom').length;
+  const bits = [asks ? `${asks} question${asks === 1 ? '' : 's'} for you` : '', work ? `${work} Classroom update${work === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+  send('inbox', { items, intro: `👀 Hey${auto ? ', welcome back' : ''}! You missed ${items.length} thing${items.length === 1 ? '' : 's'}${bits ? ` (${bits})` : ''}:` });
+}
+
+function showInboxItem(id) {
+  const item = inboxItems.get(id);
+  if (item) send('inbox', { items: [shownItem(item)] });
 }
 
 /** Puts Classroom work due this week in a card, each with “📝 Template” and “Open”. Returns what to say (or ''). */
@@ -1016,6 +1079,7 @@ function templateFor(work) {
 ipcMain.handle('inbox:template', async (_e, id) => {
   const work = inboxItems.get(id);
   if (!work) return { ok: false, text: 'I lost that assignment, sorry! Ask me “what homework do I have?” again.' };
+  markHandled(id);
   return { ok: true, text: await runAction(templateFor(work)) };
 });
 
@@ -1057,13 +1121,15 @@ ipcMain.handle('inbox:send', async (_e, { id, text } = {}) => {
     if (item.source === 'gmail') await inbox.sendGmailReply(gapi, item, body);
     else if (item.source === 'chat') await inbox.sendChatReply(gapi, item, body);
     else return { ok: false, text: 'I can’t reply to Classroom posts. Open it instead!' };
-    inboxItems.delete(id);
+    markHandled(id);
     return { ok: true, text: `Sent to ${item.from}! ✅` };
   } catch (err) {
     return { ok: false, text: `It didn’t send: ${inboxProblem(item.source === 'gmail' ? 'Gmail' : 'Google Chat', err)}` };
   }
 });
+ipcMain.on('inbox:done', (_e, id) => markHandled(id));
 ipcMain.on('inbox:open', (_e, id) => {
+  markHandled(id);
   const link = inboxItems.get(id)?.link;
   if (link && /^https:\/\//.test(link)) shell.openExternal(link);
 });
@@ -1345,6 +1411,10 @@ app.whenReady().then(() => {
   // After the Mac wakes up, check straight away (you might be in the middle of a class).
   powerMonitor.on('resume', () => setTimeout(checkClasses, 4000));
   powerMonitor.on('unlock-screen', () => setTimeout(checkClasses, 2000));
+  // Back at the Mac: catch you up on anything you missed (only if there is something).
+  const welcomeBack = () => setTimeout(() => settings.inboxOn && !settings.hidden && catchUp({ auto: true }), 6000);
+  powerMonitor.on('unlock-screen', welcomeBack);
+  powerMonitor.on('resume', welcomeBack);
   // The tray's "today" list changes at midnight.
   setInterval(buildTray, 10 * 60_000);
   setInterval(pollIdle, IDLE_POLL_MS);

@@ -71,6 +71,11 @@ change it) before you press **Send**. Classroom: new assignments, announcements 
 something is due that you haven't turned in. Say **"check my messages"**, **"what homework do I have?"** or
 **"clean up my inbox"** (junk goes to the Trash only after you press the button; Gmail keeps it there for 30 days).
 
+**In the menu bar** (Bbokari's icon → **📬 Inbox (3 new)**): your recent messages and Classroom posts are listed right
+there (click one to see it with its buttons), and **✨ Catch me up** goes through everything you haven't dealt with:
+"👀 Hey! You missed 3 things…". He also does that by himself when you come back to your Mac. In the chat you can say
+**"catch me up"** or **"what did I miss?"**.
+
 ### One-time setup (about 15 minutes)
 
 Google only lets apps read your mail after you make your own free "key":

@@ -272,8 +272,11 @@ export class Chat {
   // ---------- 📬 inbox cards: one message at a time, with Yes / No / My reply ----------
 
   /** New messages from Gmail, Google Chat and Classroom. */
-  showInbox(items) {
-    this.inboxQueue = [...(this.inboxQueue ?? []), ...items];
+  showInbox(items, intro = '') {
+    if (intro) this.inboxIntro = intro;
+    // Clicking the same message again (from the menu bar) shouldn't add it twice.
+    const queued = new Set((this.inboxQueue ?? []).map((i) => i.id));
+    this.inboxQueue = [...(this.inboxQueue ?? []), ...items.filter((i) => !queued.has(i.id) && i.id !== this.inboxCurrent?.id)];
     if (!this.inboxShowing) this.#nextInbox();
   }
 
@@ -287,6 +290,9 @@ export class Chat {
   }
 
   #nextInbox() {
+    // Moving on from a card counts as having seen it.
+    if (this.inboxCurrent) this.host?.inboxDone?.(this.inboxCurrent.id);
+    this.inboxCurrent = null;
     if (this.inboxTyping) {
       this.inboxTyping = false;
       this.host?.setChatFocus(false);
@@ -306,6 +312,7 @@ export class Chat {
       return;
     }
     this.inboxShowing = true;
+    this.inboxCurrent = item;
     const c = this.character;
     if (SLEEPING.has(c.stateName)) c.trigger('surprised', { then: 'wake' }, true);
     c.emote(item.needsReply ? 'question' : 'note', 0.4);
@@ -313,6 +320,13 @@ export class Chat {
     const icon = { gmail: '📧', chat: '💬', classroom: '🏫' }[item.source] ?? '📬';
     const row = document.createElement('div');
     row.className = 'chat__msg chat__msg--pet chat__inbox';
+    if (this.inboxIntro) {
+      const hi = document.createElement('div');
+      hi.className = 'chat__inbox-intro';
+      hi.textContent = this.inboxIntro;
+      row.append(hi);
+      this.inboxIntro = '';
+    }
     const head = document.createElement('b');
     const more = this.inboxQueue.length;
     head.textContent = `${icon} ${item.from}${more ? `  ·  ${more} more` : ''}`;
