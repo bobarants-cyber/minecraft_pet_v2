@@ -252,6 +252,28 @@ function templateRules(kind) {
   );
 }
 
+function filledRules(kind) {
+  const common =
+    'Use ONLY the details, numbers and calculations the student gives. Copy their numbers and calculation steps exactly. ' +
+    'Do not add facts, prices, amounts or results they did not give, and do not change their math. If something is missing, leave a short placeholder like "Add photo" or "Your answer". ' +
+    'Write in the same language as the request.';
+  if (kind === 'slides') {
+    return (
+      'You turn a student\'s own project details into presentation slides. Reply with JSON only: ' +
+      '{"title": "...", "subtitle": "...", "slides": [{"title": "...", "bullets": ["..."], "emoji": "🍚", "table": {"columns": ["Ingredient", "For 2", "For 4"], "rows": [["Rice", "1 cup", "2 cups"]]}}]}. ' +
+      'Make one slide per part of the project (follow the project instructions if given). Put amounts and calculations in tables with the student\'s values in the cells; ' +
+      'put calculation steps as bullets (e.g. "3/2 × 2 = 6/2 = 3"). 4 to 8 slides. ' +
+      common +
+      STYLE_RULE
+    );
+  }
+  return (
+    'You turn a student\'s own project details into a document. Reply with JSON only: {"title": "...", "sections": [{"heading": "...", "paragraphs": ["..."]}]}. ' +
+    'One section per part of the project; show calculations step by step as written by the student. ' +
+    common
+  );
+}
+
 function writerRules(kind) {
   const common =
     'Write in clear, friendly, correct language at the level the request suggests (default: a middle-school student). ' +
@@ -275,16 +297,16 @@ function writerRules(kind) {
 }
 
 /** Asks the local AI for the content. Returns { title, sections } or { title, subtitle, slides }. */
-export async function writeContent({ kind, topic, request, template = false, theme = null }, model) {
+export async function writeContent({ kind, topic, request, template = false, filled = false, theme = null }, model) {
   const out = await ollamaJSON(
     [
-      { role: 'system', content: template ? templateRules(kind) : writerRules(kind) },
+      { role: 'system', content: filled ? filledRules(kind) : template ? templateRules(kind) : writerRules(kind) },
       { role: 'user', content: `Topic: ${topic}\nThe full request was: "${String(request ?? topic).slice(0, 400)}"` },
     ],
     model,
     { temperature: 0.6 },
   );
-  const content = { ...tidyContent(kind, out, topic), template };
+  const content = { ...tidyContent(kind, out, topic), template, filled };
   if (kind === 'slides') {
     content.theme = theme && THEMES[theme] ? theme : pickTheme(`${topic} ${request ?? ''}`, out?.theme);
     const hangul = clean(out?.hangul);
@@ -300,6 +322,16 @@ export function pickTheme(text, aiTheme) {
   return THEMES[aiTheme] ? aiTheme : 'classic';
 }
 
+/** A table: column headers, and either a number of empty rows or the student's values. */
+function tidyTable(t) {
+  const columns = t.columns.map((c) => clean(c).slice(0, 30)).filter(Boolean).slice(0, 5);
+  if (Array.isArray(t.rows)) {
+    const cells = t.rows.filter(Array.isArray).slice(0, 12).map((r) => columns.map((_, i) => clean(r[i] ?? '').slice(0, 40)));
+    if (cells.length) return { columns, rows: cells.length, cells };
+  }
+  return { columns, rows: Math.min(10, Math.max(2, Number(t.rows) || 5)), cells: null };
+}
+
 export function tidyContent(kind, out, topic) {
   const title = clean(out?.title) || topic.replace(/^\p{L}/u, (c) => c.toUpperCase());
   if (kind === 'slides') {
@@ -309,9 +341,7 @@ export function tidyContent(kind, out, topic) {
         bullets: (Array.isArray(s?.bullets) ? s.bullets : []).map((b) => clean(b).slice(0, 160)).filter(Boolean).slice(0, 6),
         emoji: clean(s?.emoji).slice(0, 4) || '✨',
         notes: clean(s?.notes).slice(0, 600),
-        table: Array.isArray(s?.table?.columns) && s.table.columns.length
-          ? { columns: s.table.columns.map((c) => clean(c).slice(0, 30)).filter(Boolean).slice(0, 5), rows: Math.min(10, Math.max(2, Number(s.table.rows) || 5)) }
-          : null,
+        table: Array.isArray(s?.table?.columns) && s.table.columns.length ? tidyTable(s.table) : null,
       }))
       .filter((s) => s.title || s.bullets.length || s.table)
       .slice(0, 12);
@@ -436,8 +466,10 @@ export async function savePresentation(deck) {
     if (s.table?.columns.length) {
       // Numbers slide: a table with the column headers and empty cells to fill in, and a photo spot.
       const head = s.table.columns.map((c) => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: t.accent }, align: 'center' } }));
-      const empty = Array.from({ length: s.table.rows }, () => s.table.columns.map(() => ({ text: '' })));
-      slide.addTable([head, ...empty], {
+      const body = s.table.cells
+        ? s.table.cells.map((r) => r.map((v) => ({ text: v })))
+        : Array.from({ length: s.table.rows }, () => s.table.columns.map(() => ({ text: '' })));
+      slide.addTable([head, ...body], {
         x: 0.7, y: 1.85, w: 8.1, colW: Array(s.table.columns.length).fill(8.1 / s.table.columns.length),
         rowH: Math.min(0.55, 4.9 / (s.table.rows + 1)), fontFace: t.font, fontSize: 16, color: t.ink,
         border: { type: 'solid', pt: 1, color: t.soft }, fill: { color: t.card }, valign: 'middle',
@@ -448,7 +480,15 @@ export async function savePresentation(deck) {
       continue;
     }
     slide.addShape('roundRect', { x: 0.6, y: 1.75, w: 8.3, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.soft, width: 1.5 } });
-    if (deck.template) {
+    if (deck.filled) {
+      slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
+      slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, fontFace: t.font, fontSize: 20, color: t.accent, align: 'center', valign: 'middle' });
+      const size = s.bullets.join(' ').length > 260 ? 18 : s.bullets.join(' ').length > 160 ? 21 : 24;
+      slide.addText(
+        s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 28 }, paraSpaceAfter: 14 } })),
+        { x: 1.0, y: 2.05, w: 7.6, h: 4.7, fontFace: t.font, fontSize: size, color: t.ink, valign: 'top' },
+      );
+    } else if (deck.template) {
       slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
       slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, fontFace: t.font, fontSize: 20, color: t.accent, align: 'center', valign: 'middle' });
       slide.addText(

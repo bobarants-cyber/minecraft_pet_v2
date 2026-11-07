@@ -85,7 +85,7 @@ function splitItem(item) {
 }
 
 function scaleRecipe(text) {
-  const m = text.match(/(?:scale|change|make|convert|resize)\s+(?:the\s+|my\s+|this\s+)?recipe\s+(?:from\s+)?(\d+)\s*(?:servings?|people|portions?)?\s*(?:to|for|into)\s+(\d+)\s*(?:servings?|people|portions?)?\s*[:,\-–]?\s*([\s\S]+)/i);
+  const m = text.match(/(?:scale|change|make|convert|resize)\s+(?:the\s+|my\s+|this\s+)?recipe\s+(?:from\s+)?(\d+)\s*(?:servings?|people|portions?)?\s*(?:to|for|into)\s+(\d+(?:\.\d+)?)\s*(?:servings?|people|portions?)?\s*[:,\-–]?\s*([\s\S]+)/i);
   if (!m) return null;
   const from = Number(m[1]);
   const to = Number(m[2]);
@@ -208,4 +208,24 @@ export function recipeMath(message) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Finds a recipe in pasted project details ("bibimbap for 2 people: 1 cup rice, 1/2 cup spinach…") and works out the
+ * scaled amounts the details ask for (doubled, halved, or "for 6 people"); doubled and halved if nothing is said.
+ * Returns the worked steps as text ('' if there's no recipe).
+ */
+export function autoRecipeCalcs(text) {
+  const t = String(text ?? '');
+  const m = t.match(/(?:serves|for|feeds|makes)\s+(\d+)\s*(?:servings?|people|persons?|portions?)?\s*[:\-–]\s*([^\n]+?)(?:\.\s|\n|$)/i);
+  if (!m) return '';
+  const from = Number(m[1]);
+  const items = m[2];
+  if (!from || !/\d/.test(items)) return '';
+  const targets = new Set();
+  if (/\bdoubl|twice|×\s*2\b|\bx\s*2\b/i.test(t)) targets.add(from * 2);
+  if (/\bhalf|\bhalve|×\s*1\/2|\bx\s*1\/2/i.test(t)) targets.add(from / 2);
+  for (const x of t.matchAll(/\b(?:to|for)\s+(\d+)\s*(?:servings?|people|persons?|portions?)\b/gi)) if (Number(x[1]) !== from) targets.add(Number(x[1]));
+  if (!targets.size) [from * 2, from / 2].forEach((x) => targets.add(x));
+  return [...targets].map((to) => scaleRecipe(`scale the recipe from ${from} to ${to}: ${items}`)).filter(Boolean).join('\n\n');
 }

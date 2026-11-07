@@ -21,7 +21,7 @@ const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet'
 import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 import * as actions from './actions.js';
-import { recipeMath } from './recipeMath.js';
+import { autoRecipeCalcs, recipeMath } from './recipeMath.js';
 import { GoogleAuth } from './google.js';
 import { Canva, CANVA_REDIRECT } from './canva.js';
 import * as inbox from './inbox.js';
@@ -53,6 +53,7 @@ const inboxItems = new Map(); // id → message shown to you (with what's needed
 let checkingInbox = false;
 let junkIds = [];
 let project = null; // the school project you're working on: { title, course, text, due, link }
+let offer = null; // something Bbokari asked ("Want me to make you a template?") waiting for a yes: { kind, until }
 let notes = null;
 let skills = null;
 const proof = { last: 0, lastHash: '', busy: false };
@@ -375,6 +376,8 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   const math = recipeMath(text);
   if (math) return { ok: true, kind: 'skill', text: math };
   // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
+  const answer = await answerOffer(String(text).trim());
+  if (answer) return answer;
   const proj = await projectCommand(String(text).trim());
   if (proj) return proj;
   // Quick skills first (maths, dates, coin flips, to-do list, weather, translate, focus): instant, no AI needed.
@@ -710,7 +713,11 @@ export function parseProjectTemplate(said) {
   const name = said.match(/\bfor\s+(?:my|the|our|this)\s+(.{0,30}?)\s*(?:project|assignment|homework)\b/i)?.[1]?.trim() ?? '';
   const topic = said.match(/\b(?:i'?m doing|i am doing|i chose|i picked|my topic is|topic is|it'?s about|about|on)\s+(?:a\s+|an\s+|the\s+)?(.{2,60}?)(?=\s*(?:[,.;!]|\s(?:with|using|use|and|in canva|in google|please|so)\b|$))/i)?.[1]?.trim() ?? '';
   const doc = /\b(?:doc|document|google docs?|word|essay|report)\b/i.test(said) && !/\b(?:presentation|slides?|canva)\b/i.test(said);
-  return { name, topic, doc, korean: /\bkorean?\b|한국/i.test(said), canva: /\bcanva\b/i.test(said), slides: /\bgoogle slides\b/i.test(said) };
+  // "…fill it in with these details: …" → the details after the colon go into the slides.
+  const colon = said.indexOf(':');
+  const details = colon > 0 ? said.slice(colon + 1).trim() : '';
+  const fill = /\bfill(?:ed)?\s*(?:it\s*|them\s*)?(?:in|out|up)?\b|\bwith\s+(?:these|my|the following|this)\s+(?:details|info|information|calculations|numbers|data)\b/i.test(said) && details.length > 15;
+  return { name, topic, doc, fill, details, korean: /\bkorean?\b|한국/i.test(said), canva: /\bcanva\b/i.test(said), slides: /\bgoogle slides\b/i.test(said) };
 }
 
 async function projectText(p) {
@@ -719,7 +726,8 @@ async function projectText(p) {
   try {
     ex = await inbox.explainProject(p, settings.aiModel);
   } catch {}
-  const next = 'Want a template? Say “make me a template for this project, I’m doing …” 📝';
+  offer = { kind: 'template', until: Date.now() + 15 * 60_000 };
+  const next = 'Want me to make you a template for it? 📝';
   if (!ex?.about) return `📚 ${p.title}${due}\n${p.text.slice(0, 500)}\n\n${next}`;
   return [
     `📚 ${p.title}${p.course ? ` (${p.course})` : ''}${due}`,
@@ -771,20 +779,39 @@ async function projectCommand(said) {
   if (!project && !t.topic) {
     return { ok: true, kind: 'project', text: 'Which project? Say “check my math project” (if Classroom is connected), or paste it to me: “my math project is: …”. Then ask for the template!' };
   }
-  const topic = t.topic || project?.title || 'my project';
+  return { ok: true, kind: 'action', text: await runAction(projectAction(t, said)) };
+}
+
+/** The "make it" action for the project: a blank template, or one filled with your details (and the recipe math done). */
+function projectAction(t, said) {
+  const fromDetails = t.details?.match(/^\s*(.{2,40}?)\s+(?:for|serves|feeds)\s+\d/i)?.[1]?.trim();
+  const topic = t.topic || fromDetails || project?.title || 'my project';
   const place = t.doc ? 'gdocs' : t.slides ? 'gslides' : canva?.connected || t.canva ? 'canva' : 'gslides';
-  const action = {
-    type: 'create',
-    kind: t.doc ? 'doc' : 'slides',
-    template: true,
-    topic,
-    theme: t.korean ? 'korean' : null,
-    place,
-    request: project
-      ? `A blank template for a school project. Project: "${project.title}"${project.course ? ` (${project.course})` : ''}. Project instructions: ${project.text.slice(0, 2500)}\nThe student's topic: ${topic}. What they asked for: ${said}`
-      : said,
-  };
-  return { ok: true, kind: 'action', text: await runAction(action) };
+  const about = project
+    ? `School project: "${project.title}"${project.course ? ` (${project.course})` : ''}. Project instructions: ${project.text.slice(0, 2500)}\n`
+    : '';
+  let request = `${about}The student's topic: ${topic}. What they asked for: ${said}`;
+  if (t.fill) {
+    const calcs = autoRecipeCalcs(t.details);
+    request = `${about}The student's topic: ${topic}.\nThe student's own details:\n${t.details.slice(0, 3000)}${calcs ? `\nRecipe calculations (already worked out exactly; copy these numbers and steps):\n${calcs}` : ''}`;
+  } else if (project) request = `A blank template. ${request}`;
+  return { type: 'create', kind: t.doc ? 'doc' : 'slides', template: !t.fill, filled: t.fill, topic, theme: t.korean || /korea|한국/i.test(t.details ?? '') ? 'korean' : null, place, request };
+}
+
+/** "yes" (or "yes, I'm doing bibimbap") after Bbokari asked "Want me to make you a template?". */
+async function answerOffer(said) {
+  if (!offer || Date.now() > offer.until) {
+    offer = null;
+    return null;
+  }
+  const yes = /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|please|do it|go ahead|yes please|si|sí|claro|vale|of course)\b/i.test(said);
+  const no = /^(?:no|nope|not now|later|no thanks|nah)\b/i.test(said);
+  if (!yes && !no) return null;
+  offer = null;
+  if (no) return { ok: true, kind: 'project', text: 'Okay! Just ask me whenever you want one 👍' };
+  // Pick up anything said after the yes ("yes, I'm doing bibimbap, Korean style").
+  const t = parseProjectTemplate(`make a template for this project ${said.replace(/^\S+[,!.]?\s*/, '')}`) ?? { topic: '', korean: false };
+  return { ok: true, kind: 'action', text: await runAction(projectAction({ ...t, fill: false }, said)) };
 }
 
 // ---------- 📬 Inbox buddy: Gmail, Google Chat and Classroom ----------
@@ -1091,6 +1118,7 @@ async function runAction(a) {
       if (creating) return 'I’m still working on the last one! Give me a moment ✍️';
       createThing(a);
       const what = a.kind === 'slides' ? 'a presentation' : 'a doc';
+      if (a.filled) return `On it! I’m putting your ${a.topic} details and calculations into ${a.kind === 'slides' ? 'a presentation' : 'a doc'} ✍️ Give me a minute or two.`;
       if (a.template) return `Ooh, a blank ${a.kind === 'slides' ? 'presentation' : 'doc'} template for ${a.topic}! I’ll set up the spaces and you fill them in. One moment ✍️`;
       return `Ooh, ${what} about ${a.topic}! Let me write it, give me a minute ✍️`;
     }
