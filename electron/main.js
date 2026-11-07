@@ -21,6 +21,7 @@ const QUICK_OPEN = [['YouTube', 'youtube'], ['Google', 'google'], ['Google Meet'
 import { CAPTION_LANGUAGES } from './settings.js';
 import * as selection from './selection.js';
 import * as actions from './actions.js';
+import { recipeMath } from './recipeMath.js';
 import { GoogleAuth } from './google.js';
 import { Canva, CANVA_REDIRECT } from './canva.js';
 import * as inbox from './inbox.js';
@@ -51,6 +52,7 @@ let inboxState = null;
 const inboxItems = new Map(); // id → message shown to you (with what's needed to reply)
 let checkingInbox = false;
 let junkIds = [];
+let project = null; // the school project you're working on: { title, course, text, due, link }
 let notes = null;
 let skills = null;
 const proof = { last: 0, lastHash: '', busy: false };
@@ -369,6 +371,12 @@ ipcMain.on('chat:focus', (_e, on) => {
 });
 
 ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
+  // Recipe and fraction math, with the steps (exact, no AI guessing).
+  const math = recipeMath(text);
+  if (math) return { ok: true, kind: 'skill', text: math };
+  // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
+  const proj = await projectCommand(String(text).trim());
+  if (proj) return proj;
   // Quick skills first (maths, dates, coin flips, to-do list, weather, translate, focus): instant, no AI needed.
   const skill = await skills?.handle(String(text)).catch(() => null);
   if (skill) {
@@ -674,6 +682,109 @@ async function openThing(what) {
     send('typing', { on: false });
     opening = false;
   }
+}
+
+// ---------- 📚 Your school project ----------
+const projectFile = () => path.join(app.getPath('userData'), 'project.json');
+function loadProject() {
+  try {
+    project = JSON.parse(fs.readFileSync(projectFile(), 'utf8'));
+  } catch {
+    project = null;
+  }
+}
+function saveProject() {
+  try {
+    fs.writeFileSync(projectFile(), JSON.stringify(project));
+  } catch {}
+}
+
+const LEAD_WORDS = String.raw`^(?:(?:hey|hi|ok|okay)\s+\w+[,!.]?\s*)?(?:can you\s+|could you\s+|please\s+)?`;
+const CHECK_PROJECT = new RegExp(`${LEAD_WORDS}(?:check|read|look at|look up|find|explain|what(?:'s| is)(?: in)?|tell me about|open up)\\s+(?:my|the|our)\\s+(.{0,40}?)\\s*(project|assignment|homework|task)\\b`, 'i');
+const PASTE_PROJECT = new RegExp(`${LEAD_WORDS}(?:my|the|this)\\s+(.{0,30}?)\\s*(?:project|assignment|homework)\\s*(?:is|says|instructions?(?: are)?)?\\s*[:\\-–]\\s*([\\s\\S]{25,})$`, 'i');
+const PASTE_INSTRUCTIONS = new RegExp(`${LEAD_WORDS}(?:here(?:'s| is| are)\\s+)?(?:the\\s+|my\\s+)?(?:project\\s+)?instructions?\\s*[:\\-–]\\s*([\\s\\S]{25,})$`, 'i');
+
+/** "make me a template for the math project, I'm doing bibimbap, use Korean elements" → what's asked, or null. */
+export function parseProjectTemplate(said) {
+  if (!/\btemplate\b/i.test(said) || !/\b(?:project|assignment|homework|that|it)\b/i.test(said)) return null;
+  const name = said.match(/\bfor\s+(?:my|the|our|this)\s+(.{0,30}?)\s*(?:project|assignment|homework)\b/i)?.[1]?.trim() ?? '';
+  const topic = said.match(/\b(?:i'?m doing|i am doing|i chose|i picked|my topic is|topic is|it'?s about|about|on)\s+(?:a\s+|an\s+|the\s+)?(.{2,60}?)(?=\s*(?:[,.;!]|\s(?:with|using|use|and|in canva|in google|please|so)\b|$))/i)?.[1]?.trim() ?? '';
+  const doc = /\b(?:doc|document|google docs?|word|essay|report)\b/i.test(said) && !/\b(?:presentation|slides?|canva)\b/i.test(said);
+  return { name, topic, doc, korean: /\bkorean?\b|한국/i.test(said), canva: /\bcanva\b/i.test(said), slides: /\bgoogle slides\b/i.test(said) };
+}
+
+async function projectText(p) {
+  const due = p.due ? ` · due ${inbox.formatDue(new Date(p.due))}` : '';
+  let ex = null;
+  try {
+    ex = await inbox.explainProject(p, settings.aiModel);
+  } catch {}
+  const next = 'Want a template? Say “make me a template for this project, I’m doing …” 📝';
+  if (!ex?.about) return `📚 ${p.title}${due}\n${p.text.slice(0, 500)}\n\n${next}`;
+  return [
+    `📚 ${p.title}${p.course ? ` (${p.course})` : ''}${due}`,
+    ex.about,
+    ex.include.length ? `You need to:\n${ex.include.map((i) => `• ${i}`).join('\n')}` : '',
+    ex.tip ? `💡 ${ex.tip}` : '',
+    next,
+  ].filter(Boolean).join('\n');
+}
+
+async function projectCommand(said) {
+  // Pasted instructions (works without Classroom).
+  const pasted = said.match(PASTE_PROJECT) ?? said.match(PASTE_INSTRUCTIONS);
+  if (pasted && !/\btemplate\b/i.test(said.slice(0, 60))) {
+    const name = pasted.length > 2 ? pasted[1].trim() : '';
+    project = { title: `${name ? name.replace(/^\p{L}/u, (c) => c.toUpperCase()) : 'My'} project`, course: '', text: (pasted[2] ?? pasted[1]).trim().slice(0, 6000), due: null, link: null };
+    saveProject();
+    return { ok: true, kind: 'project', text: `Got it, I saved your project! ${await projectText(project)}` };
+  }
+
+  const check = said.match(CHECK_PROJECT);
+  if (check && !/\btemplate\b/i.test(said)) {
+    const name = check[1].trim();
+    const paste = `paste it to me instead: “my ${name || 'math'} project is: …” and then the instructions.`;
+    if (!google?.connected) return { ok: true, kind: 'project', text: `I can’t see Classroom yet (it isn’t connected), so ${paste}` };
+    let w;
+    try {
+      w = await inbox.findAssignment(gapi, `${name} ${check[2]}`);
+    } catch (err) {
+      return { ok: true, kind: 'project', text: `I couldn’t check Classroom (${inboxProblem('Classroom', err)}), so ${paste}` };
+    }
+    if (!w) return { ok: true, kind: 'project', text: `I couldn’t find a “${name} ${check[2]}” in Classroom 🤔 You can ${paste}` };
+    project = w;
+    inboxItems.set(`project:${w.id}`, { ...w, id: `project:${w.id}`, source: 'classroom', kind: 'project', from: w.course, subject: w.title });
+    saveProject();
+    return { ok: true, kind: 'project', text: await projectText(project) };
+  }
+
+  const t = parseProjectTemplate(said);
+  if (!t) return null;
+  // A project named here that isn't the one we know: look it up in Classroom.
+  if (t.name && google?.connected && !(project && new RegExp(t.name.split(/\s+/)[0], 'i').test(`${project.title} ${project.course}`))) {
+    const w = await inbox.findAssignment(gapi, `${t.name} project`).catch(() => null);
+    if (w) {
+      project = w;
+      saveProject();
+    }
+  }
+  if (!project && !t.topic) {
+    return { ok: true, kind: 'project', text: 'Which project? Say “check my math project” (if Classroom is connected), or paste it to me: “my math project is: …”. Then ask for the template!' };
+  }
+  const topic = t.topic || project?.title || 'my project';
+  const place = t.doc ? 'gdocs' : t.slides ? 'gslides' : canva?.connected || t.canva ? 'canva' : 'gslides';
+  const action = {
+    type: 'create',
+    kind: t.doc ? 'doc' : 'slides',
+    template: true,
+    topic,
+    theme: t.korean ? 'korean' : null,
+    place,
+    request: project
+      ? `A blank template for a school project. Project: "${project.title}"${project.course ? ` (${project.course})` : ''}. Project instructions: ${project.text.slice(0, 2500)}\nThe student's topic: ${topic}. What they asked for: ${said}`
+      : said,
+  };
+  return { ok: true, kind: 'action', text: await runAction(action) };
 }
 
 // ---------- 📬 Inbox buddy: Gmail, Google Chat and Classroom ----------
@@ -1131,6 +1242,7 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => setTimeout(() => reminders.start(), 3000));
   classes = new ClassSchedule({ file: path.join(app.getPath('userData'), 'classes.json') });
   google = new GoogleAuth({ dir: app.getPath('userData') });
+  loadProject();
   canva = new Canva({ dir: app.getPath('userData') });
   inboxState = new inbox.InboxState(path.join(app.getPath('userData'), 'inbox-state.json'));
   setTimeout(() => checkInbox(), 20_000);

@@ -35,7 +35,7 @@ export class Chat {
       <div class="chat__log" role="log" aria-live="polite"></div>
       <div class="chat__note" aria-live="polite"></div>
       <form class="chat__form" autocomplete="off">
-        <input class="chat__input" type="text" maxlength="1000" spellcheck="true" />
+        <input class="chat__input" type="text" maxlength="6000" spellcheck="true" />
         <button type="submit" class="chat__send" aria-label="Send">➤</button>
       </form>
       <div class="chat__actions">

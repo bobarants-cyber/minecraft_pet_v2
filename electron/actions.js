@@ -237,7 +237,10 @@ function templateRules(kind) {
       'You make empty presentation templates. Reply with JSON only: ' +
       '{"title": "...", "subtitle": "Add a subtitle", "slides": [{"title": "Ingredients", "bullets": ["Ingredient 1", "Ingredient 2", "Ingredient 3"], "emoji": "🥕"}]}. ' +
       'Make 3 to 6 slides, one per section the student asked for (e.g. Ingredients, Recipe steps), plus anything clearly useful. ' +
+      'If school project instructions are given, make one slide for each part the project requires, about the student\'s topic, in the order the project asks. ' +
       'Bullets are placeholder labels like "Ingredient 1", "Step 1", "Fun fact", 3 to 6 per slide. ' +
+      'For any slide with numbers, measurements or calculations (amounts, servings, scaling, cost, conversions), use a table instead of bullets: ' +
+      '"table": {"columns": ["Ingredient", "Amount for 4", "Amount for 8", "Cost"], "rows": 6} with 2 to 5 short column headers and EMPTY cells for the student. ' +
       common +
       STYLE_RULE
     );
@@ -272,7 +275,7 @@ function writerRules(kind) {
 }
 
 /** Asks the local AI for the content. Returns { title, sections } or { title, subtitle, slides }. */
-export async function writeContent({ kind, topic, request, template = false }, model) {
+export async function writeContent({ kind, topic, request, template = false, theme = null }, model) {
   const out = await ollamaJSON(
     [
       { role: 'system', content: template ? templateRules(kind) : writerRules(kind) },
@@ -283,7 +286,7 @@ export async function writeContent({ kind, topic, request, template = false }, m
   );
   const content = { ...tidyContent(kind, out, topic), template };
   if (kind === 'slides') {
-    content.theme = pickTheme(`${topic} ${request ?? ''}`, out?.theme);
+    content.theme = theme && THEMES[theme] ? theme : pickTheme(`${topic} ${request ?? ''}`, out?.theme);
     const hangul = clean(out?.hangul);
     content.hangul = content.theme === 'korean' && /[\uAC00-\uD7A3]/.test(hangul) ? hangul.slice(0, 30) : '';
   }
@@ -306,8 +309,11 @@ export function tidyContent(kind, out, topic) {
         bullets: (Array.isArray(s?.bullets) ? s.bullets : []).map((b) => clean(b).slice(0, 160)).filter(Boolean).slice(0, 6),
         emoji: clean(s?.emoji).slice(0, 4) || '✨',
         notes: clean(s?.notes).slice(0, 600),
+        table: Array.isArray(s?.table?.columns) && s.table.columns.length
+          ? { columns: s.table.columns.map((c) => clean(c).slice(0, 30)).filter(Boolean).slice(0, 5), rows: Math.min(10, Math.max(2, Number(s.table.rows) || 5)) }
+          : null,
       }))
-      .filter((s) => s.title || s.bullets.length)
+      .filter((s) => s.title || s.bullets.length || s.table)
       .slice(0, 12);
     if (!slides.length) throw new Error('The AI didn’t write any slides');
     return { title, subtitle: clean(out?.subtitle).slice(0, 120), slides };
@@ -369,13 +375,19 @@ function decorate(slide, t, name, cover) {
   if (name === 'korean') {
     stripes(slide, 0, cover ? 0.22 : 0.14);
     stripes(slide, 7.5 - (cover ? 0.22 : 0.14), cover ? 0.22 : 0.14);
+    // 🇰🇷 in the corners and a cloud (구름) on every slide.
+    slide.addText('🇰🇷', { x: cover ? 0.35 : 10.45, y: cover ? 0.4 : 0.42, w: 0.9, h: 0.8, fontSize: cover ? 30 : 34, align: 'center', valign: 'middle' });
     if (cover) {
       dot(slide, 8.2, 0.9, 5.4, t.soft); // a round "moon" like on a folding screen
+      slide.addText('🇰🇷', { x: 12.0, y: 0.4, w: 0.9, h: 0.6, fontSize: 30, align: 'center' });
+      // A red seal stamp (도장) with 한국, like on traditional paintings.
+      slide.addShape('roundRect', { x: 0.8, y: 5.55, w: 1.05, h: 1.05, rectRadius: 0.08, fill: { color: t.accent }, line: { color: t.accent }, rotate: -6 });
+      slide.addText('한국', { x: 0.8, y: 5.55, w: 1.05, h: 1.05, fontFace: t.title, fontSize: 22, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', rotate: -6 });
+      slide.addShape('cloud', { x: 2.3, y: 5.6, w: 1.7, h: 0.95, fill: { color: 'FFFFFF' }, line: { color: t.soft, width: 1 } });
+      slide.addShape('cloud', { x: 9.6, y: 5.9, w: 1.4, h: 0.8, fill: { color: 'FFFFFF' }, line: { color: t.soft, width: 1 } });
       dot(slide, 11.2, 5.0, 1.0, t.accent, 10);
       dot(slide, 12.0, 4.5, 0.55, t.accent2, 10);
       // Simple clouds (구름) from overlapping circles.
-      for (const [x, y] of [[0.5, 5.6], [1.2, 5.4], [1.9, 5.65]]) dot(slide, x, y, 1.0, 'FFFFFF', 0);
-      for (const [x, y] of [[9.9, 1.0], [10.5, 0.8], [11.1, 1.05]]) dot(slide, x, y, 0.8, 'FFFFFF', 0);
     }
   } else if (name === 'space') {
     for (let i = 0; i < (cover ? 40 : 18); i++) dot(slide, Math.random() * 13.2, Math.random() * 7.4, 0.04 + Math.random() * 0.06, 'FFFFFF', 30);
@@ -421,6 +433,20 @@ export async function savePresentation(deck) {
     slide.addText(s.emoji, { x: 11.4, y: top - 0.05, w: 1.3, h: 1.1, fontSize: 48, align: 'center', valign: 'middle' });
 
     // Content on a soft card, picture (or photo spot) on the right.
+    if (s.table?.columns.length) {
+      // Numbers slide: a table with the column headers and empty cells to fill in, and a photo spot.
+      const head = s.table.columns.map((c) => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: t.accent }, align: 'center' } }));
+      const empty = Array.from({ length: s.table.rows }, () => s.table.columns.map(() => ({ text: '' })));
+      slide.addTable([head, ...empty], {
+        x: 0.7, y: 1.85, w: 8.1, colW: Array(s.table.columns.length).fill(8.1 / s.table.columns.length),
+        rowH: Math.min(0.55, 4.9 / (s.table.rows + 1)), fontFace: t.font, fontSize: 16, color: t.ink,
+        border: { type: 'solid', pt: 1, color: t.soft }, fill: { color: t.card }, valign: 'middle',
+      });
+      slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 4.7, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });
+      slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.75, w: 3.45, h: 4.7, fontFace: t.font, fontSize: 20, color: t.accent, align: 'center', valign: 'middle' });
+      if (s.notes) slide.addNotes(s.notes);
+      continue;
+    }
     slide.addShape('roundRect', { x: 0.6, y: 1.75, w: 8.3, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.soft, width: 1.5 } });
     if (deck.template) {
       slide.addShape('roundRect', { x: 9.3, y: 1.75, w: 3.45, h: 5.2, rectRadius: 0.25, fill: { color: t.card }, line: { color: t.accent, width: 2, dashType: 'dash' } });

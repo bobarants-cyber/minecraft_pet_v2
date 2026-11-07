@@ -50,6 +50,9 @@ function systemPrompt(mob, remindersSummary) {
     'The app can do some things on the computer when the human says them like this: "open my math class", "open my robot project", ' +
       '"open my robot project in Claude", "open my volcano essay", "open my downloads", "make a doc about the solar system", ' +
       '"make a presentation about volcanoes in Canva" (or in Google Slides, Keynote, PowerPoint, Pages, Word). If they ask for one of these in another way, tell them the exact words to say. Never claim you did it yourself.',
+    'For a school project the app also understands: "check my math project" (reads it from Google Classroom), "my math project is: …" (pasted instructions), ' +
+      '"make me a template for this project, I\'m doing bibimbap, with Korean style". For recipe math they can say "scale the recipe from 2 to 6 servings: 1/2 cup rice, 3 tbsp gochujang", ' +
+      '"2/3 cup times 4", "3/4 + 2/3" or "$12 for 4 servings"; the app calculates it exactly with steps. Do not do math yourself; tell them those words.',
     `Right now it is ${now}.`,
     `Current reminders and timers: ${remindersSummary}`,
   ].join('\n');
