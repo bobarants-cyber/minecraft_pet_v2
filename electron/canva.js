@@ -151,6 +151,18 @@ export class Canva {
     throw new Error('Canva took too long to make the design');
   }
 
+  /** Your own designs whose title matches (newest first): [{ title, editUrl }]. */
+  async searchDesigns(query) {
+    const url = new URL(`${API}/designs`);
+    if (query) url.searchParams.set('query', String(query).slice(0, 100));
+    url.searchParams.set('ownership', 'any');
+    url.searchParams.set('sort_by', 'modified_descending');
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${await this.#access()}` }, signal: AbortSignal.timeout(30_000) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Canva said ${res.status}`);
+    return (data.items ?? []).map((d) => ({ title: d.title || 'Untitled', editUrl: d.urls?.edit_url })).filter((d) => d.editUrl);
+  }
+
   disconnect() {
     this.token = null;
     try {

@@ -446,6 +446,30 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
     return { ok: true, kind: 'notes', text: 'Done! Give me a moment to write your notes ✍️' };
   }
   const said = String(text).trim();
+  // Canva's template library: open Canva's own search with your words (apps can't search it directly).
+  if (/\btemplates?\b/i.test(said) && /\bcanva\b/i.test(said) && /\b(?:search|find|show|look(?:ing)? for|get|browse|any)\b/i.test(said)) {
+    const query = said
+      .replace(/^(?:(?:hey|hi|ok)\s+\w+[,!.]?\s*)?(?:can you\s+|please\s+)?/i, '')
+      .replace(/\b(?:search|find|show|look(?:ing)? for|get|browse|me|some|any|the|a|an|canva|templates?|for|in|on|from|of|please|good|nice|cool)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    await shell.openExternal(`https://www.canva.com/templates/?query=${encodeURIComponent(query || 'presentation')}`);
+    return { ok: true, kind: 'action', text: `Here are Canva templates for “${query || 'presentation'}” 🎨 Click one you like and it opens in Canva!` };
+  }
+  // Your own Canva designs: "find my bibimbap design in canva".
+  const mine = said.match(/\b(?:find|open|search|show|where(?:'s| is))\s+(?:me\s+)?(?:my\s+|the\s+)(.{1,40}?)\s+(?:design|presentation|slides?|poster|deck)s?\s+(?:in|on|from)\s+canva\b/i);
+  if (mine) {
+    if (!canva?.connected) return { ok: true, kind: 'action', text: 'Connect Canva first: menu bar → 🎨 Canva → Connect Canva.' };
+    try {
+      const found = await canva.searchDesigns(mine[1].trim());
+      if (!found.length) return { ok: true, kind: 'action', text: `I couldn’t find a “${mine[1].trim()}” design in your Canva 🤔` };
+      await shell.openExternal(found[0].editUrl);
+      const others = found.slice(1, 4).map((d) => d.title).join(', ');
+      return { ok: true, kind: 'action', text: `Opening “${found[0].title}” in Canva 🎨${others ? ` (I also found: ${others})` : ''}` };
+    } catch (err) {
+      return { ok: true, kind: 'action', text: `Canva didn’t answer: ${err.message}` };
+    }
+  }
   if (/\b(?:clean|clear|tidy)\s*(?:up|out)?\s+(?:my\s+)?(?:inbox|e-?mails?|gmail|mail)\b|\b(?:delete|remove|get rid of|trash)\s+(?:all\s+)?(?:the\s+|my\s+)?(?:junk|spam|promotions?)\b/i.test(said)) {
     if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
     findJunk();
