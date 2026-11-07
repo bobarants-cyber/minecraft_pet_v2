@@ -58,6 +58,21 @@ const BROWSERS = {
   'com.apple.Safari': 'safari',
 };
 
+/**
+ * The address of the first open browser tab (front window of each running browser) that matches `re`, or ''.
+ * Used for "fill this Canva template": Bbokari's own chat window is in front then, so it asks the browsers directly.
+ */
+export async function findBrowserTab(re) {
+  for (const [id, kind] of Object.entries(BROWSERS)) {
+    const tab = kind === 'safari' ? 'current tab' : 'active tab';
+    try {
+      const url = await osascript(`if application id "${id}" is running then\ntell application id "${id}"\nif (count of windows) > 0 then return URL of ${tab} of front window\nend tell\nend if\nreturn ""`);
+      if (url && re.test(url)) return url.trim();
+    } catch {}
+  }
+  return '';
+}
+
 /** The kind of activity for an app (bundle id) with an optional tab URL and window/tab title, or null. */
 export function classify({ id = '', url = '', title = '' } = {}) {
   for (const r of RULES) {

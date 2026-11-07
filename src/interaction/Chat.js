@@ -488,6 +488,55 @@ export class Chat {
     this.#toast(row, { opensChat: false, hideAfter: 0 });
   }
 
+  /** Filling a Canva template: each page's text with a Copy button (paste it into the template's text boxes). */
+  showFill({ pages, intro }) {
+    if (this.isOpen) this.close();
+    if (this.inboxShowing) this.#endInbox();
+    this.character.emote('note', 0.4);
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet chat__inbox';
+    const head = document.createElement('b');
+    head.textContent = '🎨 Your math for the Canva template';
+    const sub = document.createElement('small');
+    sub.textContent = intro;
+    row.append(head, sub);
+    const copy = (text, btn) => {
+      this.host?.copyText(text);
+      btn.textContent = '✓ Copied';
+      btn.closest('.chat__todo')?.classList.add('chat__todo--done');
+    };
+    pages.forEach((p, i) => {
+      const line = document.createElement('div');
+      line.className = 'chat__todo';
+      const label = document.createElement('div');
+      label.className = 'chat__todo-label';
+      label.textContent = `Page ${i + 1} · ${p.title}`;
+      const preview = document.createElement('small');
+      preview.className = 'chat__fill-preview';
+      preview.textContent = p.text.split('\n').slice(0, 2).join(' · ');
+      const btns = document.createElement('div');
+      btns.className = 'chat__inbox-acts';
+      const both = this.#button('📋 Copy page', () => copy(`${p.title}\n${p.text}`, both), true);
+      const title = this.#button('Title only', () => copy(p.title, title));
+      btns.append(both, title);
+      if (p.text) {
+        const body = this.#button('Text only', () => copy(p.text, body));
+        btns.append(body);
+      }
+      line.append(label, preview, btns);
+      row.append(line);
+    });
+    const end = document.createElement('div');
+    end.className = 'chat__inbox-acts';
+    const all = this.#button('Copy everything', () => {
+      this.host?.copyText(pages.map((p, i) => `PAGE ${i + 1}: ${p.title}\n${p.text}`).join('\n\n'));
+      all.textContent = '✓ Copied';
+    });
+    end.append(all, this.#button('Done', () => this.close()));
+    row.append(end);
+    this.#toast(row, { opensChat: false, hideAfter: 0 });
+  }
+
   /** "Clean up my inbox": what junk was found, and Trash / Archive / Cancel. */
   showJunk({ total, senders }) {
     if (this.isOpen) this.close();

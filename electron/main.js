@@ -13,7 +13,7 @@ import { ActivityWatcher } from './activity.js';
 import { Skills } from './skills.js';
 import { AudioSwitcher } from './audioSwitch.js';
 import * as proofread from './proofread.js';
-import { classify } from './activity.js';
+import { classify, findBrowserTab } from './activity.js';
 import { execFile, spawn } from 'node:child_process';
 
 /** Shortcuts in the Open menus: label → what to type. */
@@ -402,6 +402,9 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
   const answer = await answerOffer(String(text).trim());
   if (answer) return answer;
+  // "Open a presentation with this template and fill it in with my math" (while looking at a Canva template).
+  const filled = await templateFill(String(text).trim());
+  if (filled) return filled;
   // Remember any recipe you type, even inside another question.
   const typed = String(text).trim();
   const typedDetails = typed.includes(':') ? typed.slice(typed.indexOf(':') + 1).trim() : typed;
@@ -450,14 +453,16 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   }
   const said = String(text).trim();
   // Canva's template library: open Canva's own search with your words (apps can't search it directly).
-  if (/\btemplates?\b/i.test(said) && /\bcanva\b/i.test(said) && /\b(?:search|find|show|look(?:ing)? for|get|browse|any)\b/i.test(said)) {
-    const query = said
+  if (/\btemplates?\b/i.test(said) && /\b(?:canva|korean?|bibimbap|presentation|slides?)\b/i.test(said) && /\b(?:search|find|show|look(?:ing)? for|get|browse|any)\b/i.test(said)) {
+    let query = said
       .replace(/^(?:(?:hey|hi|ok)\s+\w+[,!.]?\s*)?(?:can you\s+|please\s+)?/i, '')
       .replace(/\b(?:search|find|show|look(?:ing)? for|get|browse|me|some|any|the|a|an|canva|templates?|for|in|on|from|of|please|good|nice|cool)\b/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    await shell.openExternal(`https://www.canva.com/templates/?query=${encodeURIComponent(query || 'presentation')}`);
-    return { ok: true, kind: 'action', text: `Here are Canva templates for “${query || 'presentation'}” 🎨 Click one you like and it opens in Canva!` };
+    // Presentations unless you asked for something else (poster, flyer, doc…).
+    if (!/\b(?:presentation|slides?|poster|flyer|card|doc(?:ument)?|infographic|worksheet|menu|video|logo)\b/i.test(query)) query = `${query} presentation`.trim();
+    await shell.openExternal(`https://www.canva.com/templates/?query=${encodeURIComponent(query)}`);
+    return { ok: true, kind: 'action', text: `Here are Canva templates for “${query}” 🎨 Open one you like, then tell me “use this template and fill it in with my math” and I’ll give you all your text, page by page!` };
   }
   // Your own Canva designs: "find my bibimbap design in canva".
   const mine = said.match(/\b(?:find|open|search|show|where(?:'s| is))\s+(?:me\s+)?(?:my\s+|the\s+)(.{1,40}?)\s+(?:design|presentation|slides?|poster|deck)s?\s+(?:in|on|from)\s+canva\b/i);
@@ -816,6 +821,56 @@ async function projectText(p) {
     ex.tip ? `💡 ${ex.tip}` : '',
     next,
   ].filter(Boolean).join('\n');
+}
+
+/**
+ * Canva templates: "use this template and fill it in with my math", "open a presentation with this template…".
+ * Canva doesn't let apps type into its public templates, so Bbokari finds the template you're looking at, works out
+ * all your math, and gives you each page's text with a Copy button (click a text box in Canva, ⌘A, ⌘V).
+ */
+async function templateFill(said) {
+  // "this template" / "this Canva design" = the one open in your browser ("make me a template…" is the project maker).
+  const aboutTemplate = /\b(?:this|that|these|the one i'?m (?:looking at|on))\s+(?:canva\s+)?(?:template|design)s?\b/i.test(said) || /\b(?:template|design) i'?m (?:looking at|on)\b/i.test(said);
+  const wantsFill = /\b(?:fill|use|open|start|make|put|with)\b/i.test(said);
+  const aboutMath = /\b(?:math|calculations?|numbers|recipe|project|details|it in|this in)\b/i.test(said);
+  // Only when you say "template" ("fill it in with my math" alone still makes Bbokari's own designed deck).
+  if (!aboutTemplate || !wantsFill || (!aboutMath && !/\b(?:use|open)\b/i.test(said))) return null;
+  const url = await findBrowserTab(/canva\.com/i);
+  // A recipe typed in the same message ("… fill it with my math: bibimbap for 4: rice 1 1/2 cups, …").
+  const inline = said.includes(':') ? said.slice(said.indexOf(':') + 1).trim() : '';
+  if (parseRecipe(inline).items.length >= 2) lastRecipe = inline;
+  let deck = lastWork?.content?.recipeDeck && (!lastRecipe || lastWork.content.details === lastRecipe) ? lastWork.content : null;
+  if (!deck && !lastRecipe) {
+    return { ok: true, kind: 'action', text: 'Send me your recipe first 🍚 (like “bibimbap for 4 people: rice 1 1/2 cups, beef 1 cup, … double it and halve it”), then say “fill this template with my math”.' };
+  }
+  if (!url) {
+    const korean = /\bkorean?\b|한국|bibimbap/i.test(`${said} ${lastRecipe ?? ''} ${deck?.topic ?? ''}`);
+    await shell.openExternal(`https://www.canva.com/templates/?query=${encodeURIComponent(korean ? 'korean food presentation' : 'food presentation')}`);
+    return { ok: true, kind: 'action', text: 'I don’t see Canva open, so here are some templates 🎨 Pick one, press “Customize this template”, then tell me “fill this template with my math”.' };
+  }
+  send('typing', { on: true });
+  try {
+    if (!deck) {
+      const korean = /\bkorean?\b|한국|bibimbap/i.test(`${said} ${lastRecipe}`);
+      const topic = lastRecipe.match(/^\s*([a-z][a-z ]{2,40}?)\s+(?:for|serves|recipe|:)/i)?.[1]?.trim() || '';
+      deck = await actions.buildRecipeDeck(lastRecipe, { topic, theme: korean ? 'korean' : null, model: settings.aiModel });
+      lastWork = { action: { kind: 'slides', place: 'canva', topic: deck.topic, recipeDeck: true, details: lastRecipe, theme: deck.theme, request: said }, content: deck, at: Date.now() };
+      saveLastWork();
+    }
+  } catch (err) {
+    return { ok: true, kind: 'action', text: brainError(err) };
+  } finally {
+    send('typing', { on: false });
+  }
+  const pages = actions.deckToPages(deck);
+  const template = /canva\.com\/(?:[a-z-]+\/)?templates?\//i.test(url) && !/\/design\//i.test(url);
+  send('fill', {
+    pages,
+    intro: template
+      ? 'First press the purple “Customize this template” button in Canva so you get your own copy. Then copy each page and paste it in:'
+      : 'In Canva, click a text box, press ⌘A, then ⌘V to paste. Need more pages? Use the “Duplicate page” button in Canva.',
+  });
+  return { ok: true, kind: 'action', text: `Your math is ready for the template 🎨 ${pages.length} pages of text. Copy them one by one with the buttons ✨` };
 }
 
 async function projectCommand(said) {

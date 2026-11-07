@@ -855,6 +855,33 @@ export function looksLikeEdit(message) {
 }
 
 /** The slides as Markdown, one string per slide (for Presenton), keeping every number and step exactly. */
+/**
+ * The deck as plain text, one entry per page, ready to paste into a Canva template: [{ title, text }].
+ * Tables become one line per ingredient so they paste nicely into a text box.
+ */
+export function deckToPages(deck) {
+  return deckToMarkdown(deck).map((md) => {
+    const lines = md.split('\n');
+    const title = lines.shift().replace(/^#\s*/, '').trim();
+    const body = [];
+    let header = [];
+    for (const line of lines) {
+      if (!line.trim() || /^\|\s*-{3}/.test(line)) continue;
+      if (line.startsWith('|')) {
+        const cells = line.split('|').slice(1, -1).map((c) => c.trim()).filter(Boolean);
+        if (!cells.length) continue;
+        if (/^ingredient$/i.test(cells[0])) {
+          header = cells; // header row: remember it so fractions read as "(= 3/2)" and not as a change
+          continue;
+        }
+        const asFraction = /fraction/i.test(header[2] ?? '') && cells.length === 3;
+        body.push(asFraction ? `${cells[0]}: ${cells[1]} (= ${cells[2]})` : cells.length > 1 ? `${cells[0]}: ${cells.slice(1).join(' → ')}` : cells.join(''));
+      } else body.push(line.replace(/^-\s+/, '• '));
+    }
+    return { title, text: body.join('\n').replace(/\*\*/g, '').trim() };
+  });
+}
+
 export function deckToMarkdown(deck) {
   const table = (head, rows) => [`| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
   const out = [`# ${deck.title}\n\n${deck.subtitle ?? ''}${deck.hangul ? `\n\n${deck.hangul}` : ''}`];
