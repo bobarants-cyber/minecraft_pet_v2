@@ -8,6 +8,7 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "node scripts/launch.mjs --dev",
+    "prebuild": "node scripts/ensure-deps.mjs",
     "build": "vite build",
     "start": "npm run build && node scripts/launch.mjs",
     "icons": "node scripts/make-icons.mjs",

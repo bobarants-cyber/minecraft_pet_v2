@@ -73,6 +73,7 @@ Type it in the chat or say it with "Hey Bbokari":
 | "write a report on Egypt in Word" (or Pages) | Saves a Word file and opens it |
 | "make a presentation about volcanoes in Canva" | Makes the slides; drag the file onto Canva and it becomes a Canva design |
 | "…in Google Slides" / "…in Keynote" / "…in PowerPoint" | Same slides for those apps |
+| "make a presentation about bibimbap in Canva, don't type anything, give me a base for the ingredients and recipe" | A blank template: sections with lines to fill in and photo boxes (also "make a blank doc about…") |
 
 Everything Bbokari writes is also saved in **Documents → Bbokari Docs**. Read it over and make it yours: the local AI
 can get facts wrong. Bbokari can only do the things in this list; it can't run other programs or delete anything.

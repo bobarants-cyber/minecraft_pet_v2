@@ -29,6 +29,18 @@ function splitPlace(text) {
   return { rest: text.slice(0, m.index), place: PLACES[m[1].toLowerCase().replace(/\s+/g, ' ')] ?? null };
 }
 
+/** "…but don't type anything, give me a base I can fill in": an empty template instead of written content. */
+const TEMPLATE = /\b(?:don'?t|do not|dont)\s+(?:type|write|put|fill|add)\b|\b(?:blank|empty|template|base|layout|skeleton)\b|\b(?:i(?:'ll| will| can)|so i can|that i can|where i can|in which i can|for me to)\s+(?:put|fill|add|write|type)\b|\bfill(?:\s+it)?\s+in\b|\bwithout\s+(?:text|words|writing)\b/i;
+const TOPIC_TAIL = /\s*(?:[,;.]|\s(?:but|and|so|with|without|then)\b)?\s*(?:\b(?:don'?t|do not|dont|without|leave|just|only|so i can|that i can|where i can|in which|for me to|i(?:'ll| will| want| need)|give me|make it|blank|empty|template|with (?:a |an |the )?(?:base|layout|space|spaces|place|places|room))\b.*)$/i;
+
+/** Splits "bibimbap dont type anything but give me a base…" into the topic ("bibimbap") and whether it's a template. */
+export function splitTopic(raw) {
+  const text = clean(raw);
+  const template = TEMPLATE.test(text);
+  const topic = clean(text.replace(TOPIC_TAIL, '')) || text;
+  return { topic: topic.replace(/^(?:a|an|the)\s+/i, (m) => m).slice(0, 120), template };
+}
+
 /**
  * Turns a request into an action, or null if it isn't one:
  *   { type: 'open_class', name }            "open my math class", "join science class"
@@ -60,14 +72,19 @@ export function parseAction(message) {
     return { type: 'open_file', name: clean(m[1]), folder: /^\s*(?:\S+\s+){0,6}?open\s+(?:up\s+)?(?:the\s+)?folder/i.test(text) };
   }
 
-  const create = new RegExp(`${LEAD}(?:make|create|write|do|build|start|prepare|put together)\\s+(?:me\\s+|us\\s+)?(?:a|an|some|the)?\\s*(?:new\\s+|quick\\s+|short\\s+|long\\s+|simple\\s+|cool\\s+)*(?:(?:google slides|google docs|google|canva|keynote|powerpoint|word)\\s+)?(${SLIDE_WORDS}|${DOC_WORDS})\\s+(?:about|on|for|explaining|that explains|of)\\s+(.{2,300}?)${END}`, 'i');
+  const create = new RegExp(`${LEAD}(?:make|create|write|do|build|start|prepare|put together)\\s+(?:me\\s+|us\\s+)?(?:a|an|some|the)?\\s*(?:new\\s+|quick\\s+|short\\s+|long\\s+|simple\\s+|cool\\s+|blank\\s+|empty\\s+|template\\s+|basic\\s+)*(?:(?:google slides|google docs|google|canva|keynote|powerpoint|word)\\s+)?(${SLIDE_WORDS}|${DOC_WORDS})\\s+(?:about|on|for|explaining|that explains|of)\\s+(.{2,300}?)${END}`, 'i');
   if ((m = text.match(create))) {
     const word = m[1].toLowerCase();
-    const { rest, place } = splitPlace(m[2]);
+    // Where ("in canva") can be at the end or in the middle ("about bibimbap in canva, don't type anything").
+    const placeMid = m[2].match(/\s+(?:in|on|using|with)\s+(google docs?|docs|pages|microsoft word|word|google slides|slides|canva|keynote|power ?point)\b/i);
+    const split = splitPlace(m[2]);
+    const rest = placeMid && !split.place ? m[2].slice(0, placeMid.index) + m[2].slice(placeMid.index + placeMid[0].length) : split.rest;
+    const place = split.place ?? (placeMid ? PLACES[placeMid[1].toLowerCase().replace(/\s+/g, ' ')] ?? null : null);
+    const { topic, template } = splitTopic(rest);
     const kind = new RegExp(`^(?:${SLIDE_WORDS})$`, 'i').test(word) ? 'slides' : 'doc';
     const implied = word === 'canva' ? 'canva' : word === 'keynote' ? 'keynote' : word === 'powerpoint' ? 'powerpoint' : /google/i.test(text.slice(0, m.index + 40)) && kind === 'slides' ? 'gslides' : null;
     const finalPlace = place ?? implied ?? (/\bcanva\b/i.test(text) ? 'canva' : null);
-    return { type: 'create', kind, topic: clean(rest), place: finalPlace ?? (kind === 'doc' ? 'gdocs' : 'gslides'), request: text };
+    return { type: 'create', kind, topic, template: template || TEMPLATE.test(text), place: finalPlace ?? (kind === 'doc' ? 'gdocs' : 'gslides'), request: text };
   }
   return null;
 }
@@ -114,8 +131,9 @@ export async function classifyAction(message, model) {
   if (a === 'open_class' && name) return { type: 'open_class', name };
   if (a === 'open_project' && name) return { type: 'open_project', name, claude: /claude/i.test(message) };
   if (a === 'open_file' && name) return { type: 'open_file', name };
-  if (a === 'create_doc' && topic) return { type: 'create', kind: 'doc', topic, place: app && ['gdocs', 'pages', 'word'].includes(app) ? app : 'gdocs', request: String(message) };
-  if (a === 'create_slides' && topic) return { type: 'create', kind: 'slides', topic, place: app && ['gslides', 'canva', 'keynote', 'powerpoint'].includes(app) ? app : 'gslides', request: String(message) };
+  const tpl = TEMPLATE.test(message);
+  if (a === 'create_doc' && topic) return { type: 'create', kind: 'doc', template: tpl, topic: splitTopic(topic).topic, place: app && ['gdocs', 'pages', 'word'].includes(app) ? app : 'gdocs', request: String(message) };
+  if (a === 'create_slides' && topic) return { type: 'create', kind: 'slides', template: tpl, topic: splitTopic(topic).topic, place: app && ['gslides', 'canva', 'keynote', 'powerpoint'].includes(app) ? app : 'gslides', request: String(message) };
   return null;
 }
 
@@ -206,6 +224,26 @@ export const standardFolder = (name) => (FOLDERS[name]?.startsWith('/') ? FOLDER
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fileSafe = (s) => String(s ?? 'Bbokari').replace(/[/\\:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70) || 'Bbokari';
 
+function templateRules(kind) {
+  const common =
+    'The student wants an EMPTY TEMPLATE to fill in themselves: do NOT write the real content (no facts, no recipe steps, no answers). ' +
+    'Only give the structure the request asks for, with short placeholder labels. Write in the same language as the request.';
+  if (kind === 'slides') {
+    return (
+      'You make empty presentation templates. Reply with JSON only: ' +
+      '{"title": "...", "subtitle": "Add a subtitle", "slides": [{"title": "Ingredients", "bullets": ["Ingredient 1", "Ingredient 2", "Ingredient 3"], "emoji": "🥕"}]}. ' +
+      'Make 3 to 6 slides, one per section the student asked for (e.g. Ingredients, Recipe steps), plus anything clearly useful. ' +
+      'Bullets are placeholder labels like "Ingredient 1", "Step 1", "Fun fact", 3 to 6 per slide. ' +
+      common
+    );
+  }
+  return (
+    'You make empty document templates. Reply with JSON only: {"title": "...", "sections": [{"heading": "Ingredients", "paragraphs": ["Ingredient 1", "Ingredient 2"]}]}. ' +
+    'One section per part the student asked for; paragraphs are short placeholder labels. ' +
+    common
+  );
+}
+
 function writerRules(kind) {
   const common =
     'Write in clear, friendly, correct language at the level the request suggests (default: a middle-school student). ' +
@@ -228,16 +266,16 @@ function writerRules(kind) {
 }
 
 /** Asks the local AI for the content. Returns { title, sections } or { title, subtitle, slides }. */
-export async function writeContent({ kind, topic, request }, model) {
+export async function writeContent({ kind, topic, request, template = false }, model) {
   const out = await ollamaJSON(
     [
-      { role: 'system', content: writerRules(kind) },
+      { role: 'system', content: template ? templateRules(kind) : writerRules(kind) },
       { role: 'user', content: `Topic: ${topic}\nThe full request was: "${String(request ?? topic).slice(0, 400)}"` },
     ],
     model,
     { temperature: 0.6 },
   );
-  return tidyContent(kind, out, topic);
+  return { ...tidyContent(kind, out, topic), template };
 }
 
 export function tidyContent(kind, out, topic) {
@@ -263,7 +301,8 @@ export function tidyContent(kind, out, topic) {
 }
 
 export function docHTML(doc) {
-  const body = doc.sections.map((s) => `${s.heading ? `<h2>${esc(s.heading)}</h2>` : ''}${s.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}`).join('');
+  const para = (p) => (doc.template ? `<p><span style="color:#9a9a9a">${esc(p)}:</span> ______________________________</p>` : `<p>${esc(p)}</p>`);
+  const body = doc.sections.map((s) => `${s.heading ? `<h2>${esc(s.heading)}</h2>` : ''}${s.paragraphs.map(para).join('')}`).join('');
   return `<html><head><meta charset="utf-8"><title>${esc(doc.title)}</title></head><body><h1>${esc(doc.title)}</h1>${body}</body></html>`;
 }
 
@@ -315,6 +354,17 @@ export async function savePresentation(deck) {
     slide.addShape('rect', { x: 0, y: 0, w: 13.33, h: 1.35, fill: { color: t.bg }, line: { color: t.bg } });
     slide.addShape('rect', { x: 0, y: 1.35, w: 13.33, h: 0.07, fill: { color: t.accent }, line: { color: t.accent } });
     slide.addText(s.title, { x: 0.7, y: 0.2, w: 10.4, h: 1, fontFace: font, fontSize: 32, bold: true, color: t.ink, valign: 'middle', fit: 'shrink' });
+    if (deck.template) {
+      // Empty template: the emoji in the header, a box for a photo, and grey placeholder lines to type over.
+      slide.addText(s.emoji, { x: 11.3, y: 0.12, w: 1.4, h: 1.15, fontSize: 50, align: 'center', valign: 'middle' });
+      slide.addShape('roundRect', { x: 9.3, y: 1.9, w: 3.5, h: 4.6, rectRadius: 0.2, fill: { color: 'FAFAFA' }, line: { color: 'BBBBBB', width: 2, dashType: 'dash' } });
+      slide.addText('📷\nAdd a photo', { x: 9.3, y: 1.9, w: 3.5, h: 4.6, fontFace: font, fontSize: 20, color: '9A9A9A', align: 'center', valign: 'middle' });
+      slide.addText(
+        s.bullets.map((b) => ({ text: `${b}:  ____________________`, options: { bullet: { indent: 28 }, paraSpaceAfter: 20 } })),
+        { x: 0.9, y: 1.9, w: 8.1, h: 5.1, fontFace: font, fontSize: 24, color: '9A9A9A', valign: 'top' },
+      );
+      continue;
+    }
     slide.addShape('ellipse', { x: 9.4, y: 2.4, w: 3.4, h: 3.4, fill: { color: t.bg }, line: { color: t.bg } });
     slide.addText(s.emoji, { x: 9.4, y: 2.4, w: 3.4, h: 3.4, fontSize: 130, align: 'center', valign: 'middle' });
     if (s.bullets.length) {

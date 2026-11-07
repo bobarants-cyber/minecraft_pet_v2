@@ -884,6 +884,7 @@ async function runAction(a) {
       if (creating) return 'I’m still working on the last one! Give me a moment ✍️';
       createThing(a);
       const what = a.kind === 'slides' ? 'a presentation' : 'a doc';
+      if (a.template) return `Ooh, a blank ${a.kind === 'slides' ? 'presentation' : 'doc'} template for ${a.topic}! I’ll set up the spaces and you fill them in. One moment ✍️`;
       return `Ooh, ${what} about ${a.topic}! Let me write it, give me a minute ✍️`;
     }
   }
@@ -895,6 +896,7 @@ function brainError(err) {
   if (/ECONNREFUSED|fetch failed|connect/i.test(msg)) return 'I can’t reach my brain! Open the Ollama app and ask me again.';
   if (/not found|pull/i.test(msg)) return `I’m missing my brain file! In Terminal run:  ollama pull ${settings.aiModel}`;
   if (err?.name === 'TimeoutError') return 'Writing took too long… try a smaller topic, or ask again!';
+  if (/Cannot find package|ERR_MODULE_NOT_FOUND/i.test(msg)) return 'I need a quick update! Quit me and open me again (I install what’s missing when I start).';
   return `Oops, something went wrong while writing: ${msg.slice(0, 120)}`;
 }
 
