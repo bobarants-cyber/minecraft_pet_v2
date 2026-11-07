@@ -378,6 +378,12 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
   const answer = await answerOffer(String(text).trim());
   if (answer) return answer;
+  // "Add a slide about fun facts", "change the title to …", "make it for 6 people": update the last thing made.
+  if (lastWork && actions.looksLikeEdit(text)) {
+    if (creating) return { ok: true, kind: 'action', text: 'I’m still working on it! Give me a moment ✍️' };
+    updateThing(String(text).trim());
+    return { ok: true, kind: 'action', text: `Okay! Updating “${lastWork.content.title}” ✏️ One moment…` };
+  }
   const proj = await projectCommand(String(text).trim());
   if (proj) return proj;
   // Quick skills first (maths, dates, coin flips, to-do list, weather, translate, focus): instant, no AI needed.
@@ -1080,6 +1086,20 @@ const osa = (script) =>
   new Promise((resolve, reject) => execFile('osascript', ['-e', script], { timeout: 15_000 }, (err, out, errOut) => (err ? reject(new Error(errOut || err.message)) : resolve(String(out).trim()))));
 const hasApp = (name) => fs.existsSync(`/Applications/${name}.app`);
 let creating = false;
+let lastWork = null; // the last doc or presentation Bbokari made: { action, content, at } (so you can ask for changes)
+const lastWorkFile = () => path.join(app.getPath('userData'), 'last-work.json');
+function loadLastWork() {
+  try {
+    lastWork = JSON.parse(fs.readFileSync(lastWorkFile(), 'utf8'));
+  } catch {
+    lastWork = null;
+  }
+}
+function saveLastWork() {
+  try {
+    fs.writeFileSync(lastWorkFile(), JSON.stringify(lastWork));
+  } catch {}
+}
 
 /** Runs one action and returns what the pet says right away (long jobs report back later with 'say'). */
 async function runAction(a) {
@@ -1156,6 +1176,45 @@ async function createThing(a) {
   send('typing', { on: true }); // Bbokari sits at the desk and types while the AI writes
   try {
     const content = await actions.writeContent(a, settings.aiModel);
+    lastWork = { action: a, content, at: Date.now() };
+    saveLastWork();
+    await deliver(a, content);
+  } catch (err) {
+    send('say', { text: brainError(err), error: true });
+  } finally {
+    creating = false;
+    send('typing', { on: false });
+  }
+}
+
+/** "Change the title to …", "add a slide about fun facts", "make it for 6 people": a new, updated version. */
+async function updateThing(instruction) {
+  creating = true;
+  send('typing', { on: true });
+  try {
+    const { action: a, content } = lastWork;
+    // New serving sizes or amounts: work the recipe math out exactly first.
+    let calcs = '';
+    const details = a.request?.match(/The student's own details:\n([\s\S]*?)(?:\nRecipe calculations|$)/)?.[1] ?? '';
+    if (/\b(?:\d+\s*(?:people|servings?|persons?|portions?)|doubl|halve|half|triple|cups?|tbsp|tsp|grams?)\b/i.test(instruction)) {
+      calcs = autoRecipeCalcs(`${details}\n${instruction}`) || recipeMath(instruction) || '';
+    }
+    const next = await actions.editContent(a.kind, content, instruction, settings.aiModel, calcs);
+    lastWork = { action: a, content: next, at: Date.now() };
+    saveLastWork();
+    await deliver(a, next, { update: true });
+  } catch (err) {
+    send('say', { text: brainError(err), error: true });
+  } finally {
+    creating = false;
+    send('typing', { on: false });
+  }
+}
+
+/** Saves and opens a doc or presentation where it was asked for (Canva, Google Docs, Keynote…). */
+async function deliver(a, content, { update = false } = {}) {
+  const done = update ? 'Here’s the updated version' : 'Done!';
+  {
     if (a.kind === 'doc') {
       if (a.place === 'gdocs') {
         await actions.saveDoc(content);
@@ -1163,12 +1222,12 @@ async function createThing(a) {
         await shell.openExternal('https://docs.new');
         send('say', { text: `“${content.title}” is written! Opening a new Google Doc and pasting it in… 📄` });
         const pasted = await pasteWhenReady(/Google Docs/i);
-        send('say', { text: pasted ? `Done! “${content.title}” is in Google Docs 🎉 Read it over and make it yours!` : 'Your doc is copied! Click inside the new Google Doc and press ⌘V to paste it 📋' });
+        send('say', { text: pasted ? `${done} “${content.title}” is in Google Docs 🎉 Tell me if you want to change anything!` : 'Your doc is copied! Click inside the new Google Doc and press ⌘V to paste it 📋' });
       } else {
         const files = await actions.saveDoc(content, { docx: true });
         if (a.place === 'pages' && hasApp('Pages')) execFile('open', ['-a', 'Pages', files.docx]);
         else shell.openPath(files.docx);
-        send('say', { text: `Done! “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.)` });
+        send('say', { text: `${done} “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.)` });
       }
     } else {
       const file = await actions.savePresentation(content);
@@ -1180,7 +1239,7 @@ async function createThing(a) {
         try {
           const design = await canva.importPresentation(file, content.title);
           await shell.openExternal(design.editUrl);
-          send('say', { text: `Done! “${content.title}” is open in Canva 🎉 Tip: click Elements on the left to add stickers and photos.` });
+          send('say', { text: update ? `${done} of “${content.title}”, open in Canva 🎉 (The old one is still in your Canva too.) Want more changes? Just tell me!` : `Done! “${content.title}” is open in Canva 🎉 Want changes? Just tell me, like “add a slide about fun facts”. Tip: Elements on the left adds stickers.` });
           return;
         } catch (err) {
           send('say', { text: `Canva didn’t take it (${err.message}), so here’s the file to drag in instead.`, error: true });
@@ -1199,13 +1258,8 @@ async function createThing(a) {
         send('say', { text: `Your slides are ready! 📊 Drag “${name}” into Google Drive, then double-click it and choose “Open with Google Slides”.` });
         return;
       } else shell.openPath(file);
-      send('say', { text: `Done! “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.)` });
+      send('say', { text: `${done} “${content.title}” is open 🎉 (It’s saved in Documents → Bbokari Docs.) Want changes? Just tell me!` });
     }
-  } catch (err) {
-    send('say', { text: brainError(err), error: true });
-  } finally {
-    creating = false;
-    send('typing', { on: false });
   }
 }
 
@@ -1271,6 +1325,7 @@ app.whenReady().then(() => {
   classes = new ClassSchedule({ file: path.join(app.getPath('userData'), 'classes.json') });
   google = new GoogleAuth({ dir: app.getPath('userData') });
   loadProject();
+  loadLastWork();
   canva = new Canva({ dir: app.getPath('userData') });
   inboxState = new inbox.InboxState(path.join(app.getPath('userData'), 'inbox-state.json'));
   setTimeout(() => checkInbox(), 20_000);

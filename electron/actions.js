@@ -514,3 +514,44 @@ export async function savePresentation(deck) {
   await pptx.writeFile({ fileName: file });
   return file;
 }
+
+
+/**
+ * Applies a change you ask for ("add a slide about fun facts", "change the title to …", "make it for 6 people") to
+ * something Bbokari already made, and returns the updated content (same shape, same look unless you ask otherwise).
+ * `calcs` are exact recipe calculations worked out beforehand, so the AI never does the math.
+ */
+export async function editContent(kind, content, instruction, model, calcs = '') {
+  const { template, filled, theme, hangul, ...shape } = content;
+  const out = await ollamaJSON(
+    [
+      {
+        role: 'system',
+        content:
+          'You edit a student\'s ' + (kind === 'slides' ? 'presentation' : 'document') + '. You get the current version as JSON and the change they want. ' +
+          'Reply with the FULL updated JSON in exactly the same format. Change only what they ask; keep everything else the same (same slides, same order, same wording). ' +
+          'Do not invent facts or numbers. If exact calculations are given, use those numbers and steps exactly.' +
+          (template ? ' This is a blank template: keep placeholders empty for the student.' : ''),
+      },
+      { role: 'user', content: `Current version:\n${JSON.stringify(shape).slice(0, 12000)}\n\nThe change: ${String(instruction).slice(0, 1500)}${calcs ? `\n\nExact calculations to use:\n${calcs}` : ''}` },
+    ],
+    model,
+    { temperature: 0.2 },
+  );
+  const next = { ...tidyContent(kind, out, content.title), template, filled, theme, hangul };
+  // "make it space themed" / "Korean style": switch the look.
+  const asked = Object.keys(THEMES).find((name) => new RegExp(`\\b${name}\\b`, 'i').test(instruction));
+  if (asked) next.theme = asked;
+  if (/\bkorea/i.test(instruction)) next.theme = 'korean';
+  if (next.theme === 'korean' && !next.hangul && hangul) next.hangul = hangul;
+  return next;
+}
+
+/** True when the message is asking to change the thing Bbokari just made (not to make a new one). */
+export function looksLikeEdit(message) {
+  const t = String(message ?? '').trim().replace(/^(?:(?:hey|hi|ok|okay)\s+\w+[,!.]?\s*)?(?:can you\s+|could you\s+|please\s+|now\s+)?/i, '');
+  if (/^(?:make|create|write|build|do)\s+(?:me\s+|us\s+)?(?:a|an|another|new)\b/i.test(t)) return false; // a new one
+  if (/^(?:fix|check|proofread)\s+my\s+(?:writing|text|spelling|grammar|code|essay)\b/i.test(t)) return false; // proofreading
+  if (/\b(?:to-?do|reminders?|timers?|alarm|calendar|class(?:es)? schedule)\b/i.test(t)) return false; // other skills
+  return /^(?:change|update|edit|fix|add|remove|delete|take out|replace|rename|put|move|swap|switch|use|make (?:it|the|slide|that|this|them|everything|all)|turn (?:it|the)|translate (?:it|the)|redo|undo)\b/i.test(t);
+}
