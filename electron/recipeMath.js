@@ -277,6 +277,7 @@ export function parseRecipe(text) {
   };
   if (/\bdoubl|\btwice|×\s*2\b|\bx\s*2\b/i.test(t)) add(new Frac(2), 'Doubled (× 2)');
   if (/\bhalf|\bhalve|×\s*1\/2|\bx\s*1\/2/i.test(t)) add(new Frac(1, 2), 'Halved (× 1/2)');
+  if (/\bone and a half\b|\b1\.5\s*(?:times|x)\b|\b1 1\/2\s*times\b|×\s*(?:1\.5|3\/2)\b|\bx\s*(?:1\.5|3\/2)\b/i.test(t)) add(new Frac(3, 2), 'One and a half (× 3/2)');
   if (/\btripl|×\s*3\b|\bx\s*3\b/i.test(t)) add(new Frac(3), 'Tripled (× 3)');
   if (from) {
     for (const x of sizes.filter((y) => y !== original && !y.serves)) {
@@ -320,4 +321,14 @@ export function metricLine(item) {
     return `${short(item.qty)} ${item.unit} ${item.name} ≈ ${Math.round(ml)} mL = ${Number((ml / 1000).toPrecision(3))} L = ${sci(ml / 1000)} L`;
   }
   return null;
+}
+
+/** A ratio of two amounts in whole numbers: 3/2 cups : 1/2 cup → "3/2 : 1/2 = 3 : 1". */
+export function ratioText(a, b) {
+  const left = a.n * b.d;
+  const right = b.n * a.d;
+  const g = gcd(left, right) || 1;
+  const raw = `${a.d === 1 ? a.n : `${a.n}/${a.d}`} : ${b.d === 1 ? b.n : `${b.n}/${b.d}`}`;
+  const simple = `${left / g} : ${right / g}`;
+  return raw === simple ? raw : `${raw} = ${simple}`;
 }

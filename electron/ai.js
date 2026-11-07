@@ -35,7 +35,7 @@ export function personaFor(mob) {
   return PERSONAS[mob] ?? PERSONAS.bee;
 }
 
-function systemPrompt(mob, remindersSummary) {
+function systemPrompt(mob, remindersSummary, context = '') {
   const p = personaFor(mob);
   const now = new Date().toLocaleString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   return [
@@ -55,6 +55,9 @@ function systemPrompt(mob, remindersSummary) {
       '"2/3 cup times 4", "3/4 + 2/3" or "$12 for 4 servings"; the app calculates it exactly with steps. Do not do math yourself; tell them those words.',
     `Right now it is ${now}.`,
     `Current reminders and timers: ${remindersSummary}`,
+    'NEVER make up school assignments, projects, classes, due dates, messages or things the human supposedly said. Only mention ones listed below. ' +
+      'If asked about homework, Classroom or what is due and nothing is listed, say you will check and tell them to say "what\'s due this week".',
+    context ? `What you know for sure:\n${context}` : 'You do not know their assignments right now.',
   ].join('\n');
 }
 
@@ -68,9 +71,9 @@ function friendlyError(err, model) {
 }
 
 /** Asks the local model for a reply. Always resolves with text the pet can say. */
-export async function askAI({ history = [], mob = 'bee', model = 'llama3.2', remindersSummary = 'none' }) {
+export async function askAI({ history = [], mob = 'bee', model = 'llama3.2', remindersSummary = 'none', context = '' }) {
   const messages = [
-    { role: 'system', content: systemPrompt(mob, remindersSummary) },
+    { role: 'system', content: systemPrompt(mob, remindersSummary, context) },
     ...history
       .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .slice(-MAX_HISTORY),

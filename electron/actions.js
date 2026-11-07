@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { OLLAMA_URL } from './ai.js';
-import { improperText, metricLine, mixedToImproper, multiplySteps, parseRecipe, qtyText } from './recipeMath.js';
+import { improperText, metricLine, mixedToImproper, multiplySteps, parseRecipe, qtyText, ratioText } from './recipeMath.js';
 
 export const DOCS_DIR = path.join(os.homedir(), 'Documents', 'Bbokari Docs');
 
@@ -614,6 +614,18 @@ export async function buildRecipeDeck(details, { topic = '', theme = null, proje
     });
     slides.push({ title: `How I worked it out (× ${kText})`, emoji: '📝', steps: true, bullets: r.items.map((i) => `${cap1(i.name)}: ${multiplySteps(i.qty, k)}${i.unit ? ` ${unitFor(i.qty.mul(k), i.unit)}` : ''}`) });
   }
+
+  // Ratios between ingredients measured the same way (cups with cups…), and per person.
+  const family = (u) => (/^(cups?|c)$/i.test(u) ? 'cup' : /^(tbsp|tablespoons?|tbs)$/i.test(u) ? 'tbsp' : /^(tsp|teaspoons?)$/i.test(u) ? 'tsp' : /^(g|grams?)$/i.test(u) ? 'g' : u ? u.toLowerCase() : 'count');
+  const groups = {};
+  for (const i of r.items) (groups[family(i.unit)] ??= []).push(i);
+  const ratios = [];
+  for (const list of Object.values(groups)) {
+    for (let j = 1; j < list.length && ratios.length < 5; j++) ratios.push(`${cap1(list[0].name)} : ${list[j].name} = ${ratioText(list[0].qty, list[j].qty)}`);
+  }
+  const counted = r.items.find((i) => !i.unit);
+  if (counted && r.from) ratios.push(`${cap1(counted.name)} per person = ${ratioText(counted.qty, { n: r.from, d: 1 })}`);
+  if (ratios.length) slides.push({ title: L('Ingredient ratios', '비율'), emoji: '⚖️', steps: true, bullets: ratios.slice(0, 6) });
 
   const metric = r.items.map(metricLine).filter(Boolean).slice(0, 4);
   slides.push({

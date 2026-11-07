@@ -72,6 +72,8 @@ function shownItem(item) {
 }
 let junkIds = [];
 let project = null; // the school project you're working on: { title, course, text, due, link }
+let dueCache = []; // Classroom work due this week, from the last check (so the chat AI never has to guess)
+let lastRecipe = ''; // the last recipe you typed (so "make the presentation with that" can use it)
 let offer = null; // something Bbokari asked ("Want me to make you a template?") waiting for a yes: { kind, until }
 let notes = null;
 let skills = null;
@@ -397,6 +399,22 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
   const answer = await answerOffer(String(text).trim());
   if (answer) return answer;
+  // Remember any recipe you type, even inside another question.
+  const typed = String(text).trim();
+  const typedDetails = typed.includes(':') ? typed.slice(typed.indexOf(':') + 1).trim() : typed;
+  if (parseRecipe(typedDetails).items.length >= 3) lastRecipe = typedDetails;
+  // "make the project in canva", "update the presentation with that", "fill it in with my calculations" → the recipe you typed.
+  if (
+    lastRecipe &&
+    parseRecipe(typedDetails).items.length < 2 &&
+    (!lastWork?.content?.recipeDeck || lastWork.content.details !== lastRecipe) &&
+    /\b(?:make|do|create|build|update|fill|put|use|open)\b/i.test(typed) &&
+    /\b(?:project|presentat\w*|slides?|canva|th[aeis]t|this|those|them|my calculations|the calculations|it)\b/i.test(typed) &&
+    typed.length < 160
+  ) {
+    const base = { name: '', topic: '', doc: false, korean: /\bkorean?\b|한국/i.test(`${typed} ${lastRecipe}`), canva: /\bcanva\b/i.test(typed), slides: false };
+    return { ok: true, kind: 'action', text: await runAction(projectAction({ ...base, fill: true, details: lastRecipe }, typed)) };
+  }
   // "Add a slide about fun facts", "change the title to …", "make it for 6 people": update the last thing made.
   if (lastWork && actions.looksLikeEdit(text)) {
     if (creating) return { ok: true, kind: 'action', text: 'I’m still working on it! Give me a moment ✍️' };
@@ -433,7 +451,12 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
     findJunk();
     return { ok: true, kind: 'inbox', text: 'Let me look for junk in your inbox… 🧹' };
   }
-  if (/\b(?:homework|assignments?|due|classroom)\b/i.test(said) && /\b(?:what|any|check|show|list|do i have|tell me)\b/i.test(said)) {
+  if (
+    (/\b(?:homework|assignments?|due|class?\s?room)\b/i.test(said) && /\b(?:what|any|check|show|list|do i have|tell me|look|see|which|are they)\b/i.test(said)) ||
+    /^(?:from|in|on|check|open)?\s*(?:google\s+)?class?\s?room\??$/i.test(said) ||
+    /\bwhat\s+(?:things|stuff|work)\s+(?:do\s+)?i\s+have\b/i.test(said) ||
+    /^(?:what are they|which ones|list them)\??$/i.test(said)
+  ) {
     if (!google?.connected) return { ok: true, kind: 'inbox', text: notConnectedText() };
     return { ok: true, kind: 'inbox', text: await showTodo() };
   }
@@ -460,7 +483,7 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
     setTimeout(() => openThing(target), 400);
     return { ok: true, kind: 'open', text: `On it! I’ll type “${target.text}” ${target.kind === 'web' ? 'in a new tab' : 'in Spotlight'} for you 🐥` };
   }
-  const res = await askAI({ history, mob, model: settings.aiModel, remindersSummary: reminders.describeAll() });
+  const res = await askAI({ history, mob, model: settings.aiModel, remindersSummary: reminders.describeAll(), context: knownContext() });
   return { ...res, kind: 'ai' };
 });
 
@@ -821,8 +844,18 @@ async function projectCommand(said) {
   return { ok: true, kind: 'action', text: await runAction(projectAction(t, said)) };
 }
 
+/** Facts the chat AI may use (so it doesn't invent projects or assignments). */
+function knownContext() {
+  const lines = [];
+  if (project) lines.push(`The school project they are working on: "${project.title}"${project.course ? ` (${project.course})` : ''}${project.due ? `, due ${inbox.formatDue(new Date(project.due))}` : ''}.`);
+  if (dueCache.length) lines.push(`Due this week in Google Classroom: ${dueCache.map((w) => `${w.course}: ${w.title} (${inbox.formatDue(new Date(w.due))})`).join('; ')}.`);
+  if (lastWork) lines.push(`The last thing you made for them: "${lastWork.content.title}" (${lastWork.action.kind === 'slides' ? 'presentation' : 'document'}).`);
+  return lines.join('\n');
+}
+
 /** The "make it" action for the project: a blank template, or one filled with your details (and the recipe math done). */
-function projectAction(t, said) {
+function projectAction(input, said) {
+  let t = input;
   const head = t.details?.match(/^\s*(.{2,40}?)\s+(?:for|serves|feeds)\s+\d/i)?.[1]?.trim();
   const fromDetails = head && !/\d/.test(head) ? head : '';
   const dish = `${said} ${t.details ?? ''}`.match(/\b(korean bibimbap|bibimbap|kimchi(?: fried rice| jjigae)?|bulgogi|japchae|kimbap|gimbap|tteokbokki|ramyeon|pancakes?|cookies?|brownies?|pizza|tacos?|cake|cupcakes?|muffins?|curry|pasta|lasagna|salad|soup|smoothies?|fried rice|sushi|dumplings?)\b/i)?.[1];
@@ -837,6 +870,10 @@ function projectAction(t, said) {
     request = `${about}The student's topic: ${topic}.\nThe student's own details:\n${t.details.slice(0, 3000)}${calcs ? `\nRecipe calculations (already worked out exactly; copy these numbers and steps):\n${calcs}` : ''}`;
   } else if (project) request = `A blank template. ${request}`;
   const recipeDeck = t.fill && !t.doc && parseRecipe(t.details).items.length >= 2;
+  // What the teacher asks for (× 1 1/2…) goes into the sizes to work out, plus double and half.
+  if (recipeDeck && project?.text && /one and a half|1\.5|1 1\/2 times|× ?3\/2/i.test(project.text) && !/one and a half|1\.5|3\/2 times/i.test(t.details)) {
+    t = { ...t, details: `${t.details}${/doubl|half|halve/i.test(t.details) ? '' : ' Double it and halve it.'} Also make it one and a half times.` };
+  }
   return {
     type: 'create',
     kind: t.doc ? 'doc' : 'slides',
@@ -858,8 +895,11 @@ async function answerOffer(said) {
     offer = null;
     return null;
   }
-  const yes = /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|please|do it|go ahead|yes please|si|sí|claro|vale|of course)\b/i.test(said);
-  const no = /^(?:no|nope|not now|later|no thanks|nah)\b/i.test(said);
+  // Only a real answer: short ("yes", "sure!", "ok do it") or a yes with the topic ("yes, I'm doing bibimbap").
+  // "ok so make the project in canva…" is a new request, not a yes.
+  const short = said.split(/\s+/).length <= 5;
+  const yes = /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|please|do it|go ahead|yes please|si|sí|claro|vale|of course)\b/i.test(said) && (short || /\b(?:i'?m doing|i am doing|about|topic|my recipe is|it'?s)\b/i.test(said));
+  const no = /^(?:no|nope|not now|later|no thanks|nah)\b/i.test(said) && short;
   if (!yes && !no) return null;
   offer = null;
   if (no) return { ok: true, kind: 'project', text: 'Okay! Just ask me whenever you want one 👍' };
@@ -1073,14 +1113,19 @@ function showInboxItem(id) {
 async function showTodo({ daily = false } = {}) {
   try {
     const work = await inbox.upcomingWork(gapi);
-    if (!work.length) return daily ? '' : 'Nothing due in Classroom this week! 🎉';
+    if (!work.length) {
+      dueCache = [];
+      return daily ? '' : 'Nothing due in Classroom this week! 🎉';
+    }
     const items = work.slice(0, 6).map((w) => {
       const id = `todo:${w.id}`;
       inboxItems.set(id, { ...w, id, source: 'classroom', kind: 'todo', from: w.course, subject: w.title });
       return { id, course: w.course, title: w.title, due: w.due };
     });
+    dueCache = work;
     send('inboxTodo', { items, daily });
-    return daily ? '' : `You have ${work.length} thing${work.length === 1 ? '' : 's'} due this week 📚 Want me to make a template for any of them?`;
+    const list = work.slice(0, 8).map((w) => `• ${w.course}: ${w.title} (${inbox.formatDue(new Date(w.due))})`).join('\n');
+    return daily ? '' : `Due this week in Classroom 📚\n${list}\nWant me to make a template for any of them?`;
   } catch (err) {
     return `I couldn’t check Classroom: ${inboxProblem('Classroom', err)}`;
   }
