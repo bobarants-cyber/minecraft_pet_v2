@@ -533,7 +533,80 @@ export class Chat {
   prefill(text) {
     this.open();
     this.input.value = text;
-    setTimeout(() => this.input.setSelectionRange(text.length, text.length), 450);
+    // A double space marks where you type ("plan my  due Thursday"); otherwise the cursor goes at the end.
+    const gap = text.indexOf('  ');
+    const at = gap >= 0 ? gap + 1 : text.length;
+    setTimeout(() => this.input.setSelectionRange(at, at), 450);
+  }
+
+  /** Opens the chat and sends `text` as if you typed it (used by the feature hub). */
+  ask(text) {
+    this.open();
+    this.input.value = text;
+    setTimeout(() => this.send(), 120);
+  }
+
+  /** 🃏 Flashcards: question → “Show answer” → “👍 Got it” / “🔁 Again” (again = it comes back later). */
+  showQuiz({ title, cards }) {
+    if (this.isOpen) this.close();
+    if (this.inboxShowing) this.#endInbox();
+    const c = this.character;
+    if (SLEEPING.has(c.stateName)) c.trigger('surprised', { then: 'wake' }, true);
+    c.emote('sparkle', 0.4);
+    const deck = cards.map((card) => ({ ...card }));
+    const total = deck.length;
+    let right = 0;
+    const row = document.createElement('div');
+    row.className = 'chat__msg chat__msg--pet chat__inbox chat__quiz';
+    const head = document.createElement('b');
+    const progress = document.createElement('small');
+    const q = document.createElement('div');
+    q.className = 'chat__quiz-q';
+    const a = document.createElement('div');
+    a.className = 'chat__quiz-a';
+    const acts = document.createElement('div');
+    acts.className = 'chat__inbox-acts';
+    row.append(head, progress, q, a, acts);
+    head.textContent = `🃏 Quiz: ${title}`;
+    const next = () => {
+      if (!deck.length) {
+        const pct = Math.round((right / total) * 100);
+        q.textContent = pct >= 80 ? `🎉 Amazing! You know this!` : pct >= 50 ? '💪 Good job! A bit more practice and you’ve got it.' : '🌱 Nice try! Let’s practice again later.';
+        a.textContent = `You knew ${right} of ${total} cards on the first try (${pct}%)`;
+        a.style.display = 'block';
+        progress.textContent = 'Done!';
+        acts.replaceChildren(this.#button('🔁 Again', () => this.showQuiz({ title, cards }), true), this.#button('Close', () => this.close()));
+        c.trigger(pct >= 50 ? 'dance' : 'wave', { then: 'idle' }, true);
+        this.host?.quizDone?.(pct);
+        return;
+      }
+      const card = deck[0];
+      progress.textContent = `${deck.length} card${deck.length === 1 ? '' : 's'} left`;
+      q.textContent = card.q;
+      a.textContent = card.a;
+      a.style.display = 'none';
+      acts.replaceChildren(
+        this.#button('👀 Show answer', () => {
+          a.style.display = 'block';
+          acts.replaceChildren(
+            this.#button('👍 Got it', () => {
+              if (!card.missed) right++;
+              deck.shift();
+              c.emote('note', 0.3);
+              next();
+            }, true),
+            this.#button('🔁 Again', () => {
+              card.missed = true;
+              deck.push(deck.shift());
+              next();
+            }),
+          );
+        }, true),
+        this.#button('Stop', () => this.close()),
+      );
+    };
+    next();
+    this.#toast(row, { opensChat: false, hideAfter: 0 });
   }
 
   /** Show a message from the pet without opening the text box, e.g. when a reminder goes off. */

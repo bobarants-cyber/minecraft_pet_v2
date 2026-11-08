@@ -28,6 +28,11 @@ import * as presenton from './presenton.js';
 import { recipePhotos, testKey as testPixabayKey } from './photos.js';
 import { fillTemplate } from './fillTemplate.js';
 import * as inbox from './inbox.js';
+import { Memory } from './memory.js';
+import { Diary } from './diary.js';
+import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
+import { findNotes, latestNotes, makeCards, parseQuiz } from './flashcards.js';
+import { FEATURES, hubData } from './features.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
 const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
@@ -80,6 +85,8 @@ let lastRecipe = ''; // the last recipe you typed (so "make the presentation wit
 let offer = null; // something Bbokari asked ("Want me to make you a template?") waiting for a yes: { kind, until }
 let notes = null;
 let skills = null;
+let memory = null; // 🧠 facts you asked Bbokari to remember
+let diary = null; // 📓 time per activity and wins, per day
 const proof = { last: 0, lastHash: '', busy: false };
 const PROOF_EVERY_MS = 90_000;
 const audioSwitch = new AudioSwitcher({
@@ -101,6 +108,7 @@ const BREAK_IDLE_S = 5 * 60;
 const watcher = new ActivityWatcher({
   onChange: (kind) => {
     activity = kind;
+    diary?.activity(kind);
     send('activity', { kind });
   },
 });
@@ -197,6 +205,8 @@ function buildTray() {
   // While hidden, a little 📝 in the menu bar shows that it's still taking notes.
   if (process.platform === 'darwin') tray.setTitle(settings.hidden ? (notes ? ' 📝' : ' 🙈') : '');
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '✨ Everything I can do…', accelerator: 'Control+Alt+Space', click: openHub },
+    { type: 'separator' },
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
@@ -406,6 +416,8 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   // "Open a presentation with this template and fill it in with my math" (while looking at a Canva template).
   const filled = await templateFill(String(text).trim());
   if (filled) return filled;
+  const extra = await newFeatures(String(text).trim());
+  if (extra) return extra;
   // Remember any recipe you type, even inside another question.
   const typed = String(text).trim();
   const typedDetails = typed.includes(':') ? typed.slice(typed.indexOf(':') + 1).trim() : typed;
@@ -666,6 +678,7 @@ function stopFocus(quiet = false, finished = false) {
   focus = null;
   send('focus', { active: false, finished, minutes });
   if (finished) {
+    diary?.win('focus');
     if (Notification.isSupported()) new Notification({ title: '🍅 Focus done!', body: `${minutes} minutes of focus. Time for a break!` }).show();
     send('say', { text: `🍅 Done! ${minutes} minutes of focus. Amazing work! 🎉 Take a 5-minute break: stretch, drink some water.` });
   } else if (!quiet) send('say', { text: 'Focus timer stopped. Good work! 🌟' });
@@ -676,6 +689,7 @@ function tickTodo(i) {
   const item = skills.todos.list()[i];
   if (!item) return;
   skills.todos.handle(`done #${i + 1}`);
+  diary?.win('todo');
   send('say', { text: skills.todos.list().length ? `Done: “${item.text}” ✔️` : `Done: “${item.text}”. Your list is clear! 🎉` });
   if (!skills.todos.list().length) send('effect', { effect: 'confetti' });
   buildTray();
@@ -824,6 +838,138 @@ async function projectText(p) {
   ].filter(Boolean).join('\n');
 }
 
+// ---------- ✨ Feature hub and the big update's features ----------
+
+let hubWin = null;
+/** The feature hub: every feature as a card you can search and click (⌃⌥Space, or ✨ in the menu). */
+function openHub() {
+  if (hubWin && !hubWin.isDestroyed()) {
+    hubWin.show();
+    return hubWin.focus();
+  }
+  hubWin = new BrowserWindow({
+    width: 820,
+    height: 640,
+    title: `Everything ${personaFor(settings.mob).name} can do`,
+    backgroundColor: '#fffaf0',
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
+  });
+  hubWin.loadFile(path.join(__dirname, 'hub.html'));
+}
+ipcMain.handle('hub:list', () => hubData());
+ipcMain.handle('hub:run', (_e, id) => {
+  const f = FEATURES.find((x) => x.id === id);
+  if (!f) return;
+  hubWin?.close();
+  if (settings.hidden) applySettings({ hidden: false });
+  if (f.ask) return command('chat', { ask: f.ask });
+  if (f.prefill) return command('chat', { prefill: f.prefill });
+  const OUTFITS = ['none', 'party', 'crown', 'beanie', 'bow', 'flower', 'sunglasses'];
+  const runs = {
+    chat: () => command('chat'),
+    check: () => checkWritingNow(),
+    notes: () => (notes ? send('say', { text: `I’m already taking notes (${notes.title}) 📝` }) : (startNotes({ title: 'Notes' }), send('say', { text: 'Okay! I’m listening and taking notes 📝 Say “stop notes” when you’re done.' }))),
+    captions: () => applySettings({ captionsOn: !settings.captionsOn }),
+    voice: () => (applySettings({ voiceOn: !settings.voiceOn }), send('say', { text: settings.voiceOn ? `I’m listening for “Hey ${personaFor(settings.mob).name}” 🗣` : 'Voice is off now.' })),
+    focus: () => (startFocus(25), send('say', { text: '🍅 Focus time! 25 minutes. Let’s go! 💪' })),
+    hide: () => applySettings({ hidden: true }),
+    dance: () => command('trigger', { name: 'dance' }),
+    outfit: () => applySettings({ outfit: OUTFITS[(OUTFITS.indexOf(settings.outfit) + 1) % OUTFITS.length] }),
+  };
+  if (f.run?.startsWith('game:')) return command('game', { name: f.run.slice(5) });
+  runs[f.run]?.();
+});
+
+/** Memory, planner, flashcards, "plan my day", "how was my day", and "what can you do". Returns a reply or null. */
+async function newFeatures(said) {
+  if (/^(?:what (?:else )?can you do|help|show me (?:what you can do|everything)|features|what are your features|everything you can do|qu[eé] puedes hacer|ayuda)\??$/i.test(said)) {
+    openHub();
+    return { ok: true, kind: 'action', text: 'Here’s everything I can do ✨ Click any card to try it! (Press ⌃⌥Space anytime to open it.)' };
+  }
+  const mem = memory?.handle(said);
+  if (mem) return { ok: true, kind: 'skill', text: mem };
+  if (/^(?:how was my day|how(?:'s| is) my day(?: going)?|my day|diary|today'?s diary|what did i do today|c[oó]mo fue mi d[ií]a)\??$/i.test(said)) {
+    return { ok: true, kind: 'skill', text: diary.story() };
+  }
+  if (/^(?:(?:hey|good)\s+)?(?:plan my day|what(?:'s| is) (?:my day|on today|today'?s plan)|my plan for today|good morning|what do i do today|what should i do (?:today|now|first))\??$/i.test(said)) {
+    return { ok: true, kind: 'skill', text: await planMyDay() };
+  }
+  if (looksLikePlan(said)) return { ok: true, kind: 'skill', text: planHomework(said) };
+  const quiz = parseQuiz(said);
+  if (quiz) {
+    startQuiz(quiz);
+    return { ok: true, kind: 'action', text: 'Making your flashcards… 🃏 One moment!' };
+  }
+  return null;
+}
+
+/** "Plan my science project due Thursday": daily steps with a reminder for each. */
+function planHomework(said) {
+  const words = said.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+  // A matching Classroom assignment gives the real due date and title.
+  const work = dueCache.find((w) => words.some((x) => `${w.title} ${w.course}`.toLowerCase().includes(x) && !['plan', 'project', 'homework', 'due', 'help'].includes(x)));
+  const due = parseDue(said) ?? (work ? new Date(work.due) : project?.due && /project/i.test(said) ? new Date(project.due) : null);
+  if (!due) return 'When is it due? 📅 Try “plan my science project due Thursday” or “plan my test on Nov 20”.';
+  const plan = makePlan(said, { due, title: !parseDue(said) && work ? work.title : null, projectText: project && /project|kitchen|recipe|math/i.test(said) ? `${project.title} ${project.text.slice(0, 500)}` : '' });
+  if (!plan.steps.length) return 'Hmm, I couldn’t make a plan for that. Try “plan my science project due Thursday”.';
+  for (const st of plan.steps) reminders.add({ kind: 'reminder', at: st.at.getTime(), label: `📅 ${plan.title}: ${st.text}` });
+  diary?.win('plan');
+  return planText(plan);
+}
+
+/** "Plan my day": classes, due work, reminders and to-dos for today, and what to start with. */
+async function planMyDay() {
+  const now = new Date();
+  const hello = now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  const lines = [`☀️ ${hello}! Here’s your day:`];
+  const today = classes?.today() ?? [];
+  const later = today.filter((c) => c.startAt > now);
+  if (today.length) lines.push(`🎒 Classes: ${today.map((c) => `${clock(c.startAt)} ${c.name}`).join(', ')}`);
+  if (google?.connected) {
+    try {
+      dueCache = await inbox.upcomingWork(gapi);
+    } catch {}
+  }
+  const soon = [...dueCache].sort((a, b) => a.due - b.due).slice(0, 4);
+  if (soon.length) lines.push(`📚 Due soon: ${soon.map((w) => `${w.title} (${inbox.formatDue(new Date(w.due))})`).join('; ')}`);
+  const end = new Date(now);
+  end.setHours(23, 59, 59);
+  const rems = (reminders?.items ?? []).filter((r) => r.at <= end.getTime());
+  if (rems.length) lines.push(`⏰ Reminders: ${rems.slice(0, 5).map((r) => `${formatClock(r.at)} ${r.kind === 'timer' ? 'timer' : r.label ?? 'reminder'}`).join('; ')}`);
+  const todos = skills?.todos.list() ?? [];
+  if (todos.length) lines.push(`☑️ To-do: ${todos.slice(0, 4).map((x) => x.text).join('; ')}${todos.length > 4 ? ` (+${todos.length - 4} more)` : ''}`);
+  if (lines.length === 1) lines.push('Nothing planned yet! Add things with “add … to my list”, or plan homework with “plan my project due Thursday”.');
+  // What to do first.
+  if (later[0] && later[0].startAt - now < 60 * 60_000) lines.push(`👉 First: ${later[0].name} starts at ${clock(later[0].startAt)}. I’ll open it for you 2 minutes before.`);
+  else if (soon[0]) lines.push(`👉 Start with “${soon[0].title}”: it’s due first. Want a plan? Say “plan ${soon[0].title} due ${new Date(soon[0].due).toLocaleDateString([], { weekday: 'long' })}”.`);
+  else if (todos[0]) lines.push(`👉 Start with “${todos[0].text}”. Want a 25-minute focus timer? Say “focus”.`);
+  return lines.join('\n');
+}
+
+/** "Quiz me…": flashcards from notes, pasted text or a topic, shown as a card. */
+async function startQuiz({ text = '', topic = '' }) {
+  try {
+    let source = text;
+    let title = topic || 'your text';
+    if (!source) {
+      const onlyNotes = /^(?:(?:my|the|last|latest)\s+)?(?:class\s+)?notes?$/i.test(topic);
+      const notesFile = !topic || onlyNotes ? latestNotes(NOTES_DIR) : findNotes(NOTES_DIR, topic);
+      if (notesFile) {
+        source = notesFile.text;
+        title = notesFile.name;
+      } else if (!topic || onlyNotes) {
+        send('say', { text: onlyNotes ? 'I don’t have any notes yet! Say “take notes” in class, or paste your notes after “quiz me:” 🃏' : 'What should I quiz you on? 🃏 Try “quiz me on fractions”, or paste your notes after “quiz me:”.' });
+        return;
+      }
+    }
+    const cards = await makeCards({ text: source, topic, model: settings.aiModel });
+    send('quiz', { title, cards });
+  } catch (err) {
+    send('say', { text: err.message, error: true });
+  }
+}
+ipcMain.on('quiz:done', () => diary?.win('quiz'));
+
 /**
  * Canva templates: open a template in Canva (press "Customize this template"), then say "fill it in with my math".
  * Bbokari downloads that design from your Canva account, writes your math into its own text boxes (same fonts,
@@ -945,6 +1091,8 @@ async function projectCommand(said) {
 /** Facts the chat AI may use (so it doesn't invent projects or assignments). */
 function knownContext() {
   const lines = [];
+  const mem = memory?.context();
+  if (mem) lines.push(mem);
   if (project) lines.push(`The school project they are working on: "${project.title}"${project.course ? ` (${project.course})` : ''}${project.due ? `, due ${inbox.formatDue(new Date(project.due))}` : ''}.`);
   if (dueCache.length) lines.push(`Due this week in Google Classroom: ${dueCache.map((w) => `${w.course}: ${w.title} (${inbox.formatDue(new Date(w.due))})`).join('; ')}.`);
   if (lastWork) lines.push(`The last thing you made for them: "${lastWork.content.title}" (${lastWork.action.kind === 'slides' ? 'presentation' : 'document'}).`);
@@ -1513,6 +1661,7 @@ async function createThing(a) {
     lastWork = { action: a, content, at: Date.now() };
     saveLastWork();
     await deliver(a, content);
+    diary?.win('made');
   } catch (err) {
     send('say', { text: brainError(err), error: true });
   } finally {
@@ -1678,6 +1827,9 @@ app.whenReady().then(() => {
   inboxState = new inbox.InboxState(path.join(app.getPath('userData'), 'inbox-state.json'));
   setTimeout(() => checkInbox(), 20_000);
   setInterval(() => checkInbox(), 3 * 60_000);
+  memory = new Memory(path.join(app.getPath('userData'), 'memory.json'));
+  diary = new Diary(path.join(app.getPath('userData'), 'diary.json'));
+  setInterval(() => (diary.activity(activity), diary.save()), 5 * 60_000);
   skills = new Skills({
     dir: app.getPath('userData'),
     settings,
@@ -1704,6 +1856,16 @@ app.whenReady().then(() => {
   // If the sound was left on the Multi-Output Device (volume keys off), put it back on your normal output.
   if (process.platform === 'darwin' && settings.autoSwitchAudio) setTimeout(() => audioSwitch.normalize(), 2500);
   globalShortcut.register('Control+Alt+P', () => applySettings({ hidden: !settings.hidden }));
+  if (!globalShortcut.register('Control+Alt+Space', openHub)) console.log('Shortcut ⌃⌥Space is taken by another app.');
+  // Tell you about the big update once.
+  if (settings.seenUpdate !== 'hub-1') {
+    win.webContents.once('did-finish-load', () =>
+      setTimeout(() => {
+        send('say', { text: '✨ I got a BIG update! Homework planner, flashcards, I can remember things about you, repeating reminders, “how was my day”… Press ⌃⌥Space (or ✨ in my menu) to see everything I can do!' });
+        applySettings({ seenUpdate: 'hub-1' });
+      }, 7000),
+    );
+  }
   for (const [mode, key] of Object.entries(REWRITE_KEYS)) {
     if (!globalShortcut.register(key, () => rewriteSelection(mode))) console.log(`Shortcut ${key} is taken by another app.`);
   }
@@ -1714,6 +1876,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
+  diary?.activity(null);
+  diary?.save();
   audioSwitch.restoreNow();
   globalShortcut.unregisterAll();
   whisper.stop();

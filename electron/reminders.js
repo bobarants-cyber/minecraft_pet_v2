@@ -67,6 +67,44 @@ export function parseClockTime(match, now) {
   return at;
 }
 
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const DAY_RE = /\b(sun|mon|tues|tue|wednes|wed|thurs|thur|thu|fri|satur|sat)(?:day)?s?\b/gi;
+const REPEAT_PHRASE = /\b(?:every\s*day|everyday|daily|each\s+day|every\s+(?:week\s*day|school\s*day)s?|on\s+(?:week\s*days|school\s*days)|week\s*days|school\s*days|(?:every|on)\s+week\s*ends?|every\s+(?:(?:sun|mon|tues|tue|wednes|wed|thurs|thur|thu|fri|satur|sat)(?:day)?s?(?:\s*(?:,|and|&)\s*)?)+|on\s+(?:(?:sun|mon|tues|wednes|thurs|fri|satur)days(?:\s*(?:,|and|&)\s*)?)+)/i;
+
+/** Which weekdays (0 = Sunday) a phrase like "every Monday and Wednesday", "weekdays", "every day" means, or null. */
+export function parseRepeat(text) {
+  const m = REPEAT_PHRASE.exec(text);
+  if (!m) return null;
+  const p = m[0].toLowerCase();
+  if (/every\s*day|everyday|daily|each\s+day/.test(p)) return { days: [0, 1, 2, 3, 4, 5, 6], phrase: m[0] };
+  if (/week\s*days?|school\s*days?/.test(p) && !/week\s*ends?/.test(p)) return { days: [1, 2, 3, 4, 5], phrase: m[0] };
+  if (/week\s*ends?/.test(p)) return { days: [0, 6], phrase: m[0] };
+  const days = [...new Set([...p.matchAll(DAY_RE)].map((d) => DAY_NAMES.findIndex((n) => n.startsWith(d[1].toLowerCase().slice(0, 3)))))].filter((d) => d >= 0).sort();
+  return days.length ? { days, phrase: m[0] } : null;
+}
+
+/** The next time after `now` on one of `days` at hour:minute. */
+export function nextOnDays(days, hour, minute, now = new Date()) {
+  const at = new Date(now);
+  at.setSeconds(0, 0);
+  at.setHours(hour, minute);
+  for (let i = 0; i < 8; i++) {
+    if (at > now && days.includes(at.getDay())) return at;
+    at.setDate(at.getDate() + 1);
+    at.setHours(hour, minute);
+  }
+  return at;
+}
+
+/** "every day", "weekdays", "Mondays and Wednesdays". */
+export function repeatText(days) {
+  if (days.length === 7) return 'every day';
+  if (days.join() === '1,2,3,4,5') return 'every school day';
+  if (days.join() === '0,6') return 'every weekend';
+  const names = days.map((d) => DAY_NAMES[d][0].toUpperCase() + DAY_NAMES[d].slice(1) + 's');
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+}
+
 function cleanTask(text) {
   return text
     .replace(/\s+/g, ' ')
@@ -109,6 +147,7 @@ export function parseCommand(input, now = new Date()) {
   const durationMatch = DURATION_RUN.exec(text);
   const duration = durationMatch ? parseDuration(durationMatch[0]) : null;
   const tomorrow = /\btomorrow\b/i.test(text);
+  const repeat = isRemind || isAlarm ? parseRepeat(text) : null;
 
   let when = null;
   const strip = [];
@@ -127,6 +166,11 @@ export function parseCommand(input, now = new Date()) {
     strip.push(m[0]);
   }
   if (!when) return { type: 'needTime', kind: isTimer ? 'timer' : 'reminder' };
+  // "Every Monday at 4pm", "weekdays at 7am": repeats on those days (needs a clock time, not "in 10 minutes").
+  if (repeat && !duration) {
+    when = nextOnDays(repeat.days, when.getHours(), when.getMinutes(), now);
+    strip.push(repeat.phrase);
+  }
 
   if (isTimer) return { type: 'add', kind: 'timer', at: when.getTime(), duration, label: null };
 
@@ -142,7 +186,8 @@ export function parseCommand(input, now = new Date()) {
     .replace(/\b(?:today|tonight|tomorrow)\b/gi, ' ');
   task = cleanTask(task);
   if (/^(?:for|at|in|by)$/i.test(task)) task = '';
-  return { type: 'add', kind: 'reminder', at: when.getTime(), duration, label: task || (isAlarm ? 'Alarm!' : null) };
+  const repeatDays = repeat && !duration ? repeat.days : null;
+  return { type: 'add', kind: 'reminder', at: when.getTime(), duration, label: task || (isAlarm ? 'Alarm!' : null), ...(repeatDays ? { repeat: repeatDays } : {}) };
 }
 
 export function formatClock(ms) {
@@ -164,6 +209,7 @@ export function formatDuration(ms) {
 function describe(r, now) {
   const left = formatDuration(Math.max(0, r.at - now));
   if (r.kind === 'timer') return `a ${formatDuration(r.duration ?? r.at - r.created)} timer (${left} left)`;
+  if (r.repeat) return `“${r.label ?? 'reminder'}” ${repeatText(r.repeat)} at ${formatClock(r.at)} (next: ${new Date(r.at).toLocaleDateString([], { weekday: 'short' })})`;
   return `“${r.label ?? 'reminder'}” at ${formatClock(r.at)} (in ${left})`;
 }
 
@@ -205,8 +251,8 @@ export class ReminderStore {
     this.onChange(this.items);
   }
 
-  add({ kind, at, duration = null, label = null }) {
-    const r = { id: this.nextId++, kind, at, duration, label, created: Date.now() };
+  add({ kind, at, duration = null, label = null, repeat = null }) {
+    const r = { id: this.nextId++, kind, at, duration, label, created: Date.now(), ...(repeat ? { repeat } : {}) };
     this.items.push(r);
     this.items.sort((a, b) => a.at - b.at);
     this.save();
@@ -231,6 +277,13 @@ export class ReminderStore {
     const due = this.items.filter((r) => r.at <= now);
     if (!due.length) return;
     this.items = this.items.filter((r) => r.at > now);
+    // Repeating reminders come back on their next day.
+    for (const r of due) {
+      if (!r.repeat?.length) continue;
+      const t = new Date(r.at);
+      this.items.push({ ...r, at: nextOnDays(r.repeat, t.getHours(), t.getMinutes(), new Date(Math.max(now, r.at) + 60_000)).getTime() });
+    }
+    this.items.sort((a, b) => a.at - b.at);
     this.save();
     for (const r of due) {
       const late = now - r.at > 60_000;
@@ -266,6 +319,7 @@ export class ReminderStore {
       const r = this.add(cmd);
       if (r.kind === 'timer') return `Timer set for ${formatDuration(r.duration)}! I'll let you know at ${formatClock(r.at)}.`;
       const what = r.label ? ` to ${r.label}` : '';
+      if (r.repeat) return `Okay! I'll remind you${what} ${repeatText(r.repeat)} at ${formatClock(r.at)} 🔁 (Say “list my reminders” to see them.)`;
       const inTime = r.duration ? `in ${formatDuration(r.duration)}` : `at ${formatClock(r.at)}`;
       return `Okay! I'll remind you${what} ${inTime}.`;
     }

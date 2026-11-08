@@ -10,6 +10,19 @@ npm start
 > Use **Node 22** (`brew install node@22`). With very new Node versions, npm may skip Electron's
 > download step, and you'll get "Electron failed to install correctly".
 
+
+## ✨ Everything in one place: the feature hub
+
+Press **⌃⌥Space** (or click **✨ Everything I can do…** at the top of the menu bar menu, or ask “what can you do?”). Every feature is a card: search (“study”, “canva”, “remind”), click to try it. New features have a **NEW** badge.
+
+New in the big update:
+- 📅 **Homework planner**: “plan my science test due Friday” → small daily steps, each with a reminder (uses your Classroom due dates when it can).
+- 🃏 **Quiz me**: “quiz me on fractions”, “quiz me on my notes”, or “quiz me: <paste text>” → flashcards with Show answer / Got it / Again.
+- ☀️ **Plan my day** (or “good morning”): classes, what’s due, reminders, to-dos, and what to start with.
+- 🧠 **Memory**: “remember that my math teacher is Ms. Lopez”, “what do you remember”, “forget 2”.
+- 🔁 **Repeating reminders**: “remind me every Monday and Wednesday at 4pm to practice piano”, “on weekdays at 7am…”.
+- 📓 **How was my day?**: time spent writing, reading, on videos and games today, plus your wins (focus sessions, to-dos, plans).
+
 ## Bbokari as a Mac app 🐥
 
 Make an app with Bbokari's icon that you can open from Launchpad, Spotlight or the Dock, without Terminal:

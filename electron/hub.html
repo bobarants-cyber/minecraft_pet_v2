@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Everything Bbokari can do</title>
+<style>
+  :root { --bg: #fffaf0; --card: #fff; --ink: #3b2f14; --muted: #8a7a52; --line: #eadfc4; --yellow: #ffd23f; --new: #e8590c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 14px -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; }
+  header { padding: 18px 20px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  .sub { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  #q { width: 100%; padding: 11px 14px; font: inherit; font-size: 15px; border: 2px solid var(--ink); border-radius: 12px; outline: none; background: #fff; }
+  #q:focus { box-shadow: 0 0 0 3px #ffd23f88; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink); }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  main { flex: 1; overflow-y: auto; padding: 14px 20px 22px; }
+  h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 14px 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
+  .card { text-align: left; background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 13px; cursor: pointer; font: inherit; color: inherit; display: flex; flex-direction: column; gap: 4px; transition: transform .08s, border-color .08s; }
+  .card:hover, .card.sel { border-color: var(--ink); transform: translateY(-1px); box-shadow: 0 3px 0 var(--ink); }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .emoji { font-size: 22px; }
+  .title { font-weight: 700; font-size: 14.5px; flex: 1; }
+  .new { background: var(--new); color: #fff; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 2px 6px; letter-spacing: .05em; }
+  .desc { color: #5b4d2b; font-size: 12.5px; line-height: 1.35; }
+  .ex { color: var(--muted); font-size: 12px; font-style: italic; margin-top: 2px; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  footer { padding: 8px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+  #tip { position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 14px; border-radius: 12px; max-width: 80%; font-size: 13px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>✨ Everything Bbokari can do</h1>
+  <p class="sub">Click a card to try it. Type to search: “study”, “canva”, “remind”…</p>
+  <input id="q" placeholder="Search… (Enter = first result)" autocomplete="off" autofocus>
+  <div class="chips" id="chips"></div>
+</header>
+<main id="list"></main>
+<footer><span>⌃⌥Space opens this anytime · Esc closes</span><span id="count"></span></footer>
+<div id="tip"></div>
+<script>
+  const q = document.getElementById('q');
+  const list = document.getElementById('list');
+  const chips = document.getElementById('chips');
+  let data = { categories: [], features: [] };
+  let cat = 'all';
+  let shown = [];
+  let sel = 0;
+
+  const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  function matches(f, words) {
+    const hay = norm(`${f.title} ${f.desc} ${f.example} ${f.keys ?? ''} ${f.isNew ? 'new nuevo' : ''}`);
+    return words.every((w) => hay.includes(w));
+  }
+
+  function render() {
+    const words = norm(q.value).split(/\s+/).filter(Boolean);
+    shown = data.features.filter((f) => (cat === 'all' || (cat === 'new' ? f.isNew : f.cat === cat)) && matches(f, words));
+    sel = Math.min(sel, Math.max(0, shown.length - 1));
+    list.replaceChildren();
+    if (!shown.length) {
+      list.innerHTML = '<div class="empty">Nothing found 🤔 Try another word, or just ask Bbokari in the chat!</div>';
+    }
+    // Grouped by category (new features first when not searching).
+    const groups = words.length || cat !== 'all' ? [['', '', shown]] : [['new', '🆕 New in this update', shown.filter((f) => f.isNew)], ...data.categories.map(([id, label]) => [id, label, shown.filter((f) => f.cat === id && !f.isNew)])];
+    let i = 0;
+    for (const [, label, items] of groups) {
+      if (!items.length) continue;
+      if (label) list.append(Object.assign(document.createElement('h2'), { textContent: label }));
+      const grid = Object.assign(document.createElement('div'), { className: 'grid' });
+      for (const f of items) {
+        const idx = shown.indexOf(f);
+        const b = document.createElement('button');
+        b.className = `card${idx === sel ? ' sel' : ''}`;
+        b.innerHTML = '<div class="top"><span class="emoji"></span><span class="title"></span></div><div class="desc"></div><div class="ex"></div>';
+        b.querySelector('.emoji').textContent = f.emoji;
+        b.querySelector('.title').textContent = f.title;
+        if (f.isNew) b.querySelector('.top').append(Object.assign(document.createElement('span'), { className: 'new', textContent: 'NEW' }));
+        b.querySelector('.desc').textContent = f.desc;
+        b.querySelector('.ex').textContent = `“${f.example}”`;
+        b.onclick = () => run(f);
+        grid.append(b);
+        i++;
+      }
+      list.append(grid);
+    }
+    document.getElementById('count').textContent = `${shown.length} thing${shown.length === 1 ? '' : 's'}`;
+  }
+
+  function run(f) {
+    if (f.tip) {
+      const tip = document.getElementById('tip');
+      tip.textContent = f.tip;
+      tip.style.display = 'block';
+      clearTimeout(run.t);
+      run.t = setTimeout(() => (tip.style.display = 'none'), 6000);
+      return;
+    }
+    window.mobHost.hubRun(f.id);
+  }
+
+  function chip(id, label) {
+    const c = Object.assign(document.createElement('button'), { className: `chip${cat === id ? ' on' : ''}`, textContent: label });
+    c.onclick = () => {
+      cat = id;
+      sel = 0;
+      [...chips.children].forEach((x) => x.classList.toggle('on', x === c));
+      render();
+      q.focus();
+    };
+    return c;
+  }
+
+  q.addEventListener('input', () => { sel = 0; render(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.close();
+    else if (e.key === 'Enter' && shown[sel]) run(shown[sel]);
+    else if (e.key === 'ArrowDown') { sel = Math.min(shown.length - 1, sel + 1); render(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); render(); e.preventDefault(); }
+  });
+
+  window.mobHost.hubList().then((d) => {
+    data = d;
+    chips.append(chip('all', 'All'), chip('new', '🆕 New'), ...d.categories.map(([id, label]) => chip(id, label)));
+    render();
+  });
+</script>
+</body>
+</html>

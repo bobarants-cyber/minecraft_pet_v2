@@ -56,4 +56,8 @@ contextBridge.exposeInMainWorld('mobHost', {
   canvaKeys: (keys) => ipcRenderer.invoke('canva:keys', keys),
   presentonKey: (key) => ipcRenderer.invoke('presenton:key', key),
   pixabayKey: (key) => ipcRenderer.invoke('pixabay:key', key),
+  hubList: () => ipcRenderer.invoke('hub:list'),
+  hubRun: (id) => ipcRenderer.invoke('hub:run', id),
+  onQuiz: (fn) => ipcRenderer.on('quiz', (_e, q) => fn(q)),
+  quizDone: (score) => ipcRenderer.send('quiz:done', score),
 });

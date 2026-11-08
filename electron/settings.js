@@ -53,6 +53,7 @@ export const DEFAULTS = {
   // Real food photos in Bbokari's own design, from Pixabay (free key from pixabay.com/api/docs).
   pixabayKey: '',
   deckPhotos: true,
+  seenUpdate: '',
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');
