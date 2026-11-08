@@ -159,7 +159,6 @@ host?.onSay(({ text, error }) => chat.say(text, { error }));
 host?.onInbox?.(({ items, intro }) => chat.showInbox(items, intro));
 host?.onInboxJunk?.((j) => chat.showJunk(j));
 host?.onInboxTodo?.((t) => chat.showTodo(t));
-host?.onFill?.((t) => chat.showFill(t));
 
 // React to what you're doing (the Mac side tells us: video, writing, music, meeting, gaming, coding, reading, drawing).
 let seenActivity = null;

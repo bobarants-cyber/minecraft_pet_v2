@@ -10,7 +10,8 @@ import { safeStorage, shell } from 'electron';
 const API = 'https://api.canva.com/rest/v1';
 export const CANVA_PORT = 4519;
 export const CANVA_REDIRECT = `http://127.0.0.1:${CANVA_PORT}/canva`;
-const SCOPES = 'design:content:write design:meta:read';
+// design:content:read lets Bbokari download a design you have open (to fill a template with your math).
+export const SCOPES = 'design:content:read design:content:write design:meta:read';
 const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -30,6 +31,11 @@ export class Canva {
 
   get connected() {
     return this.hasKeys && !!this.token?.refresh_token;
+  }
+
+  /** Was Canva sign-in done with permission to read designs? (Older sign-ins weren't.) */
+  get canReadDesigns() {
+    return this.connected && /design:content:read/.test(this.token?.scope ?? '');
   }
 
   #read(file) {
@@ -112,7 +118,7 @@ export class Canva {
       throw new Error(params.grant_type === 'refresh_token' ? 'Your Canva sign-in expired. Use 🎨 Canva → Connect Canva again.' : data.error_description || data.error || data.message || `Canva said ${res.status}`);
     }
     // Canva gives a new refresh token every time; the old one stops working.
-    this.token = { access_token: data.access_token, refresh_token: data.refresh_token ?? this.token?.refresh_token, expires_at: Date.now() + ((data.expires_in ?? 3600) - 60) * 1000 };
+    this.token = { access_token: data.access_token, refresh_token: data.refresh_token ?? this.token?.refresh_token, scope: data.scope ?? this.token?.scope ?? (params.grant_type === 'authorization_code' ? SCOPES : ''), expires_at: Date.now() + ((data.expires_in ?? 3600) - 60) * 1000 };
     this.#write(this.tokenFile, this.token);
   }
 
@@ -149,6 +155,32 @@ export class Canva {
       if (job.status === 'failed') throw new Error(job.error?.message || 'Canva couldn’t open the file');
     }
     throw new Error('Canva took too long to make the design');
+  }
+
+  /** Downloads one of your designs as a .pptx (Buffer). `id` is the part after /design/ in its address. */
+  async exportPptx(id) {
+    const res = await fetch(`${API}/exports`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await this.#access()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ design_id: id, format: { type: 'pptx' } }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403) throw new Error('NEEDS_READ_PERMISSION');
+    if (!res.ok) throw new Error(data.message || data.error || `Canva said ${res.status}`);
+    const jobId = data.job?.id;
+    for (let i = 0; i < 80 && jobId; i++) {
+      await sleep(i < 5 ? 1500 : 3000);
+      const r = await fetch(`${API}/exports/${jobId}`, { headers: { Authorization: `Bearer ${await this.#access()}` }, signal: AbortSignal.timeout(30_000) });
+      const job = (await r.json().catch(() => ({}))).job ?? {};
+      if (job.status === 'success' && job.urls?.[0]) {
+        const file = await fetch(job.urls[0], { signal: AbortSignal.timeout(120_000) });
+        if (!file.ok) throw new Error(`Couldn’t download the design (${file.status})`);
+        return Buffer.from(await file.arrayBuffer());
+      }
+      if (job.status === 'failed') throw new Error(job.error?.message || 'Canva couldn’t download that design');
+    }
+    throw new Error('Canva took too long to download the design');
   }
 
   /** Your own designs whose title matches (newest first): [{ title, editUrl }]. */

@@ -22,6 +22,7 @@
     "bee"
   ],
   "dependencies": {
+    "jszip": "^3.10.1",
     "pptxgenjs": "^3.12.0",
     "three": "^0.186.1"
   },

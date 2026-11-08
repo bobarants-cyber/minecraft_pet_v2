@@ -76,11 +76,13 @@ running, Bbokari uses his own design.
 
 Next time, just open Docker Desktop and start the `presenton` container (or run `docker start presenton`).
 
-## 🇰🇷 Canva templates filled with your math
+## 🇰🇷 Canva templates filled with your math (automatic)
 
-- **"find Korean bibimbap templates"** → Bbokari opens Canva's template search (presentations).
-- Open one you like, then say **"use this template and fill it in with my math"** (or "open a presentation with this template…"). Bbokari finds the Canva tab, works out all your recipe math, and shows every page's text with **📋 Copy** buttons. In Canva press **Customize this template**, click a text box, **⌘A**, **⌘V**.
-- Canva doesn't let apps type into its public templates, so you paste; Bbokari does all the math and writing.
+1. Say **"find Korean bibimbap templates"**: Canva's presentation templates open.
+2. Open one and press **Customize this template**.
+3. Say **"fill it in with my math"**. Bbokari downloads that design from your Canva account, writes your recipe math into its own text boxes (same fonts, colours and pictures; extra pages are added when needed) and opens the filled copy in Canva.
+
+One-time setup: in your Canva integration (canva.com/developers → Your integrations → Bbokari → **Scopes**) turn on **design:content Read**, then menu bar → 🎨 Canva → **Connect Canva** again.
 
 ## 🎨 Canva: designs open right in Canva
 

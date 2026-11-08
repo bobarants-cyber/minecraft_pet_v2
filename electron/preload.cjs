@@ -53,7 +53,6 @@ contextBridge.exposeInMainWorld('mobHost', {
   inboxTemplate: (id) => ipcRenderer.invoke('inbox:template', id),
   inboxDone: (id) => ipcRenderer.send('inbox:done', id),
   onInboxTodo: (fn) => ipcRenderer.on('inboxTodo', (_e, t) => fn(t)),
-  onFill: (fn) => ipcRenderer.on('fill', (_e, t) => fn(t)),
   canvaKeys: (keys) => ipcRenderer.invoke('canva:keys', keys),
   presentonKey: (key) => ipcRenderer.invoke('presenton:key', key),
   pixabayKey: (key) => ipcRenderer.invoke('pixabay:key', key),
