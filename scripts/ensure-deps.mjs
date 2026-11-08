@@ -10,3 +10,9 @@ if (missing.length) {
   console.log(`Installing what's new: ${missing.join(', ')}…`);
   execSync('npm install --no-audit --no-fund', { stdio: 'inherit' });
 }
+
+// Newer npm versions skip packages' install steps unless approved, so Electron's app download may not have happened.
+if (fs.existsSync('node_modules/electron/install.js') && !fs.existsSync('node_modules/electron/path.txt')) {
+  console.log('Finishing the Electron download (one time, about 100 MB)…');
+  execSync('node node_modules/electron/install.js', { stdio: 'inherit' });
+}
