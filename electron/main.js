@@ -886,6 +886,9 @@ async function newFeatures(said) {
     openHub();
     return { ok: true, kind: 'action', text: 'Here’s everything I can do ✨ Click any card to try it! (Press ⌃⌥Space anytime to open it.)' };
   }
+  if (/\b(?:my grades?|what grades?|which grades?|what did i get on|did i get (?:my )?(?:\w+ )?(?:exam|test|quiz|grade)s? back|exam results?|test results?|my results|qu[eé] nota|mis notas|mis calificaciones)\b/i.test(said) && said.length < 90) {
+    return { ok: true, kind: 'skill', text: await gradesReply() };
+  }
   const mem = memory?.handle(said);
   if (mem) return { ok: true, kind: 'skill', text: mem };
   if (/^(?:how was my day|how(?:'s| is) my day(?: going)?|my day|diary|today'?s diary|what did i do today|c[oó]mo fue mi d[ií]a)\??$/i.test(said)) {
@@ -1093,6 +1096,8 @@ function knownContext() {
   const lines = [];
   const mem = memory?.context();
   if (mem) lines.push(mem);
+  const grades = (inboxState?.data.grades ?? []).slice(0, 5);
+  if (grades.length) lines.push(`Their recent grades: ${grades.map((g) => g.line.replace(/\s*[🏆🎉👍💪].*$/u, '')).join('; ')}.`);
   if (project) lines.push(`The school project they are working on: "${project.title}"${project.course ? ` (${project.course})` : ''}${project.due ? `, due ${inbox.formatDue(new Date(project.due))}` : ''}.`);
   if (dueCache.length) lines.push(`Due this week in Google Classroom: ${dueCache.map((w) => `${w.course}: ${w.title} (${inbox.formatDue(new Date(w.due))})`).join('; ')}.`);
   if (lastWork) lines.push(`The last thing you made for them: "${lastWork.content.title}" (${lastWork.action.kind === 'slides' ? 'presentation' : 'document'}).`);
@@ -1404,12 +1409,20 @@ async function checkInbox({ manual = false, show = true } = {}) {
     await grab(settings.inboxGmail, 'Gmail', inbox.fetchGmail);
     await grab(settings.inboxChat, 'Google Chat', inbox.fetchChat);
     await grab(settings.inboxClassroom, 'Classroom', inbox.fetchClassroom);
+    await grab(settings.inboxClassroom, 'Classroom grades', inbox.fetchGrades);
     const items = [];
+    const summed = [];
     for (const it of found.sort((a, b) => b.time - a.time).slice(0, 12)) {
-      const s = await inbox.summarize(it, settings.aiModel);
+      summed.push(await inbox.summarize(it, settings.aiModel));
       inboxState.markSeen(it.id);
-      inboxItems.set(it.id, s);
-      rememberInbox(it.id);
+    }
+    // The same grade can come from Classroom and from its email: keep the Classroom one (it has the exact grade).
+    const fromClass = summed.filter((x) => x.kind === 'grade' && x.source === 'classroom').map((x) => x.grade.exam.toLowerCase());
+    for (const s of summed) {
+      if (s.kind === 'grade' && s.source === 'gmail' && fromClass.some((e) => e && (s.grade.exam.toLowerCase().includes(e) || e.includes(s.grade.exam.toLowerCase()) || s.subject.toLowerCase().includes(e)))) continue;
+      if (s.kind === 'grade') noteGrade(s);
+      inboxItems.set(s.id, s);
+      rememberInbox(s.id);
       items.push(shownItem(s));
     }
     if (items.length) buildTray();
@@ -1426,6 +1439,33 @@ async function checkInbox({ manual = false, show = true } = {}) {
   } finally {
     checkingInbox = false;
   }
+}
+
+/** Keeps the last 30 grades (for "what grades did I get?") and celebrates good ones. */
+function noteGrade(item) {
+  const list = (inboxState.data.grades ??= []);
+  if (!list.some((g) => g.id === item.id)) list.unshift({ id: item.id, line: item.summary, at: item.time ?? Date.now(), grade: item.grade, link: item.link });
+  inboxState.data.grades = list.slice(0, 30);
+  const g = item.grade;
+  const pct = g?.max ? (g.grade / g.max) * 100 : g?.letter ? (/^[AB]/.test(g.letter) ? 90 : 60) : null;
+  if (pct >= 75) setTimeout(() => command('trigger', { name: 'dance' }), 1500);
+}
+
+/** "What grades did I get?", "did I get my exam back?": recent grades from Classroom and your email. */
+async function gradesReply() {
+  if (!google?.connected) return notConnectedText();
+  let fresh = [];
+  try {
+    fresh = await inbox.fetchGrades(gapi, inboxState, { all: true, days: 30 });
+  } catch {}
+  const lines = fresh.map((x) => ({ at: x.time, line: inbox.gradeLine(x.grade) }));
+  for (const g of inboxState.data.grades ?? []) {
+    if (g.id.startsWith('gmail:') && !lines.some((l) => l.line === g.line)) lines.push({ at: g.at, line: g.line });
+  }
+  if (!lines.length) return 'I don’t see any graded work from the last 30 days yet 📭 When a teacher returns something in Classroom or emails you about it, I’ll tell you right away!';
+  lines.sort((a, b) => b.at - a.at);
+  const when = (t) => new Date(t).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return `🎓 Your recent grades:\n${lines.slice(0, 8).map((l) => `• ${when(l.at)}: ${l.line}`).join('\n')}`;
 }
 
 /** "✨ Catch me up": checks for anything new, then goes through everything you haven't dealt with yet. */

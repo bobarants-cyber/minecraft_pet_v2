@@ -332,9 +332,9 @@ export class Chat {
     head.textContent = `${icon} ${item.from}${more ? `  ·  ${more} more` : ''}`;
     const sub = document.createElement('small');
     if (item.source === 'classroom') {
-      const kind = { assignment: 'New assignment', announcement: 'New announcement', due: '⏰ Due soon' }[item.kind] ?? 'Classroom';
+      const kind = { assignment: 'New assignment', announcement: 'New announcement', due: '⏰ Due soon', grade: '🎓 Graded' }[item.kind] ?? 'Classroom';
       sub.textContent = `${kind}${item.kind !== 'announcement' ? `: ${item.subject}` : ''}${item.due ? ` · due ${new Date(item.due).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}`;
-    } else sub.textContent = item.source === 'gmail' ? item.subject : `in ${item.where}`;
+    } else sub.textContent = item.source === 'gmail' ? `${item.kind === 'grade' ? '🎓 ' : ''}${item.subject}` : `in ${item.where}`;
     const sum = document.createElement('div');
     sum.className = 'chat__inbox-sum';
     sum.textContent = item.summary;
