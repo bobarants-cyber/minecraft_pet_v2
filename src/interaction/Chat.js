@@ -339,11 +339,12 @@ export class Chat {
     sum.className = 'chat__inbox-sum';
     sum.textContent = item.summary;
     row.append(head, sub, sum);
-    const canTemplate = item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due');
-    if (item.question || canTemplate) {
+    // Old cards (from before smart buttons) still offer a template.
+    const oldTemplate = !item.actions && item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due');
+    if (item.question || item.offer || oldTemplate) {
       const q = document.createElement('div');
       q.className = 'chat__inbox-q';
-      q.textContent = item.question ? `❓ ${item.question}` : '📝 Want me to make you a template to work on?';
+      q.textContent = item.question ? `❓ ${item.question}` : item.offer ? `💡 ${item.offer}` : '📝 Want me to make you a template to work on?';
       row.append(q);
     }
     const acts = document.createElement('div');
@@ -372,16 +373,29 @@ export class Chat {
         this.#button('✏️ My reply', () => this.#ownReply(item, acts)),
       );
     }
-    if (item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due')) {
-      acts.append(this.#button('📝 Make a template', () => this.#template(item.id, acts, () => this.#nextInbox()), true));
-    }
+    const smart = item.actions ?? (item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due') ? [{ id: 'doc', label: '📝 Make a template' }] : []);
+    smart.forEach((a, i) => acts.append(this.#button(a.label, () => this.#smart(item, a, acts), i === 0 && !item.needsReply)));
     acts.append(
-      this.#button('Open', () => {
+      ...(smart.some((a) => a.url || a.id === 'open') ? [] : [this.#button('Open', () => {
         this.host?.inboxOpen(item.id);
         this.#nextInbox();
-      }),
-      this.#button(last ? 'OK' : 'Next ▸', () => this.#nextInbox(), !item.needsReply && !(item.source === 'classroom' && (item.kind === 'assignment' || item.kind === 'due'))),
+      })]),
+      this.#button(last ? 'OK' : 'Next ▸', () => this.#nextInbox(), !item.needsReply && !smart.length),
     );
+  }
+
+  /** A smart button (open the form, quiz me, ideas, plan…). Results like ideas and plans stay on the card to read. */
+  async #smart(item, action, acts, then = () => this.#nextInbox()) {
+    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: 'On it! ✨' }));
+    const res = await this.host?.inboxAction?.(item.id, action.id);
+    const out = Object.assign(document.createElement('div'), { className: 'chat__inbox-q chat__inbox-result', textContent: res?.text ?? 'That didn’t work.' });
+    acts.replaceChildren(out);
+    if (res?.stay) {
+      const row = document.createElement('div');
+      row.className = 'chat__inbox-acts';
+      row.append(this.#button(this.inboxQueue?.length ? 'Next ▸' : 'OK', () => then(), true));
+      acts.append(row);
+    } else setTimeout(() => then(), 2500);
   }
 
   #typingBox(acts, value, placeholder) {
@@ -439,14 +453,6 @@ export class Chat {
     } else setTimeout(() => this.inboxShowing && this.#inboxButtons(item, acts), 4000);
   }
 
-  /** Asks for a blank template for a Classroom assignment; Bbokari then writes it and opens it. */
-  async #template(id, acts, then) {
-    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__hint', textContent: 'On it! ✍️' }));
-    const res = await this.host?.inboxTemplate(id);
-    acts.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat__inbox-q', textContent: res?.text ?? 'That didn’t work.' }));
-    setTimeout(() => then?.(), 2500);
-  }
-
   /** Classroom work due this week, each with “📝 Template” and “Open”. */
   showTodo({ items, daily = false }) {
     if (this.isOpen) return;
@@ -464,7 +470,7 @@ export class Chat {
     const head = document.createElement('b');
     head.textContent = `📚 ${daily ? 'Good morning! ' : ''}You have ${items.length} thing${items.length === 1 ? '' : 's'} to do this week`;
     const sub = document.createElement('small');
-    sub.textContent = 'Want me to make a template for any of them?';
+    sub.textContent = 'Tap a button and I’ll help with it:';
     row.append(head, sub);
     for (const it of items) {
       const line = document.createElement('div');
@@ -474,9 +480,10 @@ export class Chat {
       label.textContent = `${it.course}: ${it.title} · ${new Date(it.due).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;
       const btns = document.createElement('div');
       btns.className = 'chat__inbox-acts';
+      const smart = it.actions ?? [{ id: 'doc', label: '📝 Template' }];
       btns.append(
-        this.#button('📝 Template', () => this.#template(it.id, btns, null), true),
-        this.#button('Open', () => this.host?.inboxOpen(it.id)),
+        ...smart.slice(0, 2).map((a, k) => this.#button(a.label, () => this.#smart({ id: it.id }, a, btns, () => {}), k === 0)),
+        ...(smart.some((a) => a.url || a.id === 'open') ? [] : [this.#button('Open', () => this.host?.inboxOpen(it.id))]),
       );
       line.append(label, btns);
       row.append(line);

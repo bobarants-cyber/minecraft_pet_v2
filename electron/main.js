@@ -1538,22 +1538,23 @@ async function showTodo({ daily = false } = {}) {
     }
     const items = work.slice(0, 6).map((w) => {
       const id = `todo:${w.id}`;
-      inboxItems.set(id, { ...w, id, source: 'classroom', kind: 'todo', from: w.course, subject: w.title });
-      return { id, course: w.course, title: w.title, due: w.due };
+      const smart = inbox.smartActions({ ...w, source: 'classroom', kind: 'todo', subject: w.title });
+      inboxItems.set(id, { ...w, ...smart, id, source: 'classroom', kind: 'todo', from: w.course, subject: w.title });
+      return { id, course: w.course, title: w.title, due: w.due, actions: smart.actions };
     });
     dueCache = work;
     send('inboxTodo', { items, daily });
     const list = work.slice(0, 8).map((w) => `• ${w.course}: ${w.title} (${inbox.formatDue(new Date(w.due))})`).join('\n');
-    return daily ? '' : `Due this week in Classroom 📚\n${list}\nWant me to make a template for any of them?`;
+    return daily ? '' : `Due this week in Classroom 📚\n${list}\nTap the buttons on the card and I’ll help: open forms, quiz you, make slides, ideas…`;
   } catch (err) {
     return `I couldn’t check Classroom: ${inboxProblem('Classroom', err)}`;
   }
 }
 
 /** A blank template to work on, for a Classroom assignment (slides if it sounds like a presentation, otherwise a doc). */
-function templateFor(work) {
+function templateFor(work, kind = null) {
   const text = `${work.subject ?? work.title} ${work.text ?? ''}`;
-  const slides = /present|slide|poster|canva|deck|keynote|powerpoint|infographic/i.test(text);
+  const slides = kind ? kind === 'slides' : /present|slide|poster|canva|deck|keynote|powerpoint|infographic/i.test(text);
   return {
     type: 'create',
     kind: slides ? 'slides' : 'doc',
@@ -1569,6 +1570,75 @@ ipcMain.handle('inbox:template', async (_e, id) => {
   if (!work) return { ok: false, text: 'I lost that assignment, sorry! Ask me “what homework do I have?” again.' };
   markHandled(id);
   return { ok: true, text: await runAction(templateFor(work)) };
+});
+
+/** The buttons on an assignment or message card: open the form, quiz me, make slides, ideas, plan, remind me… */
+ipcMain.handle('inbox:action', async (_e, { id, action }) => {
+  const item = inboxItems.get(id);
+  if (!item) return { ok: false, text: 'I lost that one, sorry! Say “catch me up” to see it again.' };
+  const a = (item.actions ?? []).find((x) => x.id === action) ?? { id: action };
+  const title = item.subject ?? item.title ?? 'it';
+  markHandled(id);
+  try {
+    switch (a.id) {
+      case 'form':
+      case 'file':
+      case 'video':
+      case 'open': {
+        const url = a.url ?? item.link;
+        if (!url || !/^https:\/\//.test(url)) return { ok: false, text: 'I couldn’t find the link 😕' };
+        await shell.openExternal(url);
+        return { ok: true, text: a.id === 'form' ? 'Opened the form! 📝' : 'Opened it! ✨' };
+      }
+      case 'slides':
+      case 'doc':
+        return { ok: true, text: await runAction(templateFor(item, a.id === 'slides' ? 'slides' : 'doc')), next: true };
+      case 'quiz':
+        startQuiz({ topic: `${item.course ? `${item.course}: ` : ''}${title}${item.text ? `. ${String(item.text).slice(0, 500)}` : ''}` });
+        return { ok: true, text: 'Making your flashcards… 🃏', next: true };
+      case 'plan': {
+        if (!item.due) return { ok: true, text: planHomework(`plan ${title}`), stay: true };
+        const plan = makePlan('', { due: new Date(item.due), title, projectText: item.text ?? '' });
+        for (const st of plan.steps) reminders.add({ kind: 'reminder', at: st.at.getTime(), label: `📅 ${plan.title}: ${st.text}` });
+        diary?.win('plan');
+        return { ok: true, text: planText(plan), stay: true };
+      }
+      case 'ideas':
+        return { ok: true, text: await inbox.projectIdeas(item, settings.aiModel), stay: true };
+      case 'remind': {
+        // The day before at 6 pm, and an hour before (if we know when it is).
+        const when = item.due ?? null;
+        const now = Date.now();
+        const added = [];
+        if (when) {
+          const dayBefore = new Date(when - 864e5);
+          dayBefore.setHours(18, 0, 0, 0);
+          if (dayBefore > now) added.push(reminders.add({ kind: 'reminder', at: dayBefore.getTime(), label: `Tomorrow: ${title}` }));
+          if (when - 3600_000 > now) added.push(reminders.add({ kind: 'reminder', at: when - 3600_000, label: `In 1 hour: ${title}` }));
+        }
+        // An email that says "on Friday": the evening before and that morning.
+        const day = !when ? parseDue(`${title} ${item.text ?? ''}`) : null;
+        if (day) {
+          const eve = new Date(day.getTime() - 864e5);
+          eve.setHours(18, 0, 0, 0);
+          const morning = new Date(day);
+          morning.setHours(7, 30, 0, 0);
+          if (eve > now) added.push(reminders.add({ kind: 'reminder', at: eve.getTime(), label: `Tomorrow: ${title}` }));
+          if (morning > now) added.push(reminders.add({ kind: 'reminder', at: morning.getTime(), label: `Today: ${title}` }));
+          if (added.length) return { ok: true, text: `I’ll remind you ${added.length === 2 ? 'the evening before and that morning' : 'that morning'} (${day.toLocaleDateString([], { weekday: 'long' })}) ⏰`, next: true };
+        }
+        if (!added.length) {
+          command('chat', { prefill: `remind me tomorrow at 8am to ${title}` });
+          return { ok: true, text: 'When is it? I put a reminder in the chat for you to finish ⏰' };
+        }
+        return { ok: true, text: `I’ll remind you ${added.length === 2 ? 'the day before and 1 hour before' : 'before it'} ⏰`, next: true };
+      }
+      default:
+        return { ok: false, text: 'I don’t know how to do that yet!' };
+    }
+  } catch (err) {
+    return { ok: false, text: brainError(err), stay: true };
+  }
 });
 
 async function dueText() {
