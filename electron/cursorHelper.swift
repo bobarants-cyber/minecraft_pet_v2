@@ -53,11 +53,30 @@ for sig in [SIGTERM, SIGINT, SIGHUP] {
 }
 
 // Clicking another app (Chrome, Finder…) can bring the arrow back: hide it again straight away.
-if hidden {
-  Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { _ in
-    if CGCursorIsVisible() != 0 && hides < 60 { hideNow() }
-  }
+// (CGCursorIsVisible can't be called directly with the newest Apple tools, so it's looked up while running.)
+typealias VisibleFn = @convention(c) () -> Int32
+let visibleSym = dlsym(anywhere, "CGCursorIsVisible")
+func rehide() {
+  for _ in 0..<hides { CGDisplayShowCursor(display) }
+  hides = 0
+  hideNow()
 }
+if hidden {
+  if let visibleSym {
+    let isVisible = unsafeBitCast(visibleSym, to: VisibleFn.self)
+    Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { _ in
+      if isVisible() != 0 { rehide() }
+    }
+  }
+  // Backup: after every click and every app switch, hide it again (twice, in case the app shows it a bit later).
+  let again = {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { rehide() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { rehide() }
+  }
+  NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp, .rightMouseDown, .otherMouseDown]) { _ in again() }
+  NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in again() }
+}
+
 Thread.detachNewThread {
   _ = FileHandle.standardInput.readDataToEndOfFile() // Bbokari closed our input: cursor mode is over
   DispatchQueue.main.async { bye() }
