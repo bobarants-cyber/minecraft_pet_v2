@@ -5,13 +5,22 @@
 <title>Bbokari cursor</title>
 <style>
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
-  svg { position: absolute; left: 0; top: 0; width: 72px; height: 72px; overflow: visible; transform-origin: 8px 6px; animation: pop 0.5s cubic-bezier(.3, 1.6, .5, 1) both; }
-  .body { animation: bob 2.4s ease-in-out infinite; transform-origin: 8px 6px; }
-  .eyes { animation: blink 4.2s infinite; transform-origin: 18px 30px; transform-box: view-box; }
-  .hair { animation: wave 1.8s ease-in-out infinite; transform-origin: 12px 8px; transform-box: view-box; }
-  .badge { font: 13px -apple-system, system-ui; position: absolute; left: 34px; top: 44px; opacity: 0; transition: opacity .2s; }
+  /* The pointer's hot spot (where clicks land) is at (40, 40) in this 112×112 window. */
+  svg { position: absolute; left: 0; top: 0; width: 112px; height: 112px; overflow: visible; transform-origin: 40px 40px; animation: pop 0.5s cubic-bezier(.3, 1.6, .5, 1) both; }
+  .shape { display: none; }
+  body[data-shape="arrow"] .s-arrow, body[data-shape="ibeam"] .s-ibeam, body[data-shape="hand"] .s-hand,
+  body[data-shape="open"] .s-open, body[data-shape="grab"] .s-grab, body[data-shape="cross"] .s-cross,
+  body[data-shape="resizeH"] .s-resizeH, body[data-shape="resizeV"] .s-resizeV,
+  body[data-shape="no"] .s-arrow, body[data-shape="no"] .b-no, body[data-shape="copy"] .s-arrow, body[data-shape="copy"] .b-copy,
+  body[data-shape="link"] .s-arrow, body[data-shape="link"] .b-link, body[data-shape="menu"] .s-arrow, body[data-shape="menu"] .b-menu,
+  body[data-shape="other"] .s-arrow { display: inline; }
+  .bob { animation: bob 2.4s ease-in-out infinite; }
+  .eyes { animation: blink 4.2s infinite; transform-box: fill-box; transform-origin: center; }
+  .hair { animation: wave 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: 20% 90%; }
+  .grabbing { animation: squeeze .5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+  .badge { font: 13px -apple-system, system-ui; position: absolute; left: 66px; top: 78px; opacity: 0; transition: opacity .2s; }
   .badge.on { opacity: 1; }
-  .dots { position: absolute; left: 40px; top: 12px; display: flex; gap: 2px; opacity: 0; transition: opacity .2s; }
+  .dots { position: absolute; left: 74px; top: 44px; display: flex; gap: 2px; opacity: 0; transition: opacity .2s; }
   .dots.on { opacity: 1; }
   .dots i { width: 4px; height: 4px; border-radius: 50%; background: #3b2f14; animation: dot 1s infinite; }
   .dots i:nth-child(2) { animation-delay: .15s; }
@@ -20,38 +29,115 @@
   @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1px); } }
   @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
   @keyframes wave { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
+  @keyframes squeeze { from { transform: scale(1); } to { transform: scale(0.94, 1.04); } }
   @keyframes dot { 0%, 100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-3px); opacity: 1; } }
   body.bye svg { animation: bye .35s ease-in both; }
   @keyframes bye { to { transform: scale(0) rotate(90deg); } }
 </style>
 </head>
-<body>
-<!-- Bbokari as a mouse pointer: the real arrow's tip is at (8, 6), so the real arrow sits inside his yellow body. -->
-<svg viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
-  <g class="body">
-    <!-- His wavy hair curl, on top of the arrow -->
-    <path class="hair" d="M9 8 C 9 -3, 24 -4, 23 5 C 22 11, 14 11, 15 5" fill="none" stroke="#E8A800" stroke-width="3.2" stroke-linecap="round"/>
-    <!-- Arrow-shaped body -->
-    <path d="M6 4 L6 52 L18 41.5 L26 60 L35 56 L27 38.5 L43 38.5 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M9 10 L9 44" stroke="#FFF2B0" stroke-width="2" stroke-linecap="round" opacity=".7"/>
-    <!-- Face -->
-    <g class="eyes">
-      <ellipse cx="14" cy="29" rx="2.4" ry="2.8" fill="#1d1408"/>
-      <ellipse cx="22.5" cy="29" rx="2.4" ry="2.8" fill="#1d1408"/>
-      <circle cx="14.8" cy="28" r=".8" fill="#fff"/>
-      <circle cx="23.3" cy="28" r=".8" fill="#fff"/>
+<body data-shape="arrow">
+<svg viewBox="0 0 112 112" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Bbokari's little face, centred on (0, 0), for a head about 22 px wide -->
+    <g id="face">
+      <g class="eyes">
+        <ellipse cx="-4.2" cy="-1" rx="2.2" ry="2.6" fill="#1d1408"/>
+        <ellipse cx="4.2" cy="-1" rx="2.2" ry="2.6" fill="#1d1408"/>
+        <circle cx="-3.5" cy="-2" r=".75" fill="#fff"/>
+        <circle cx="4.9" cy="-2" r=".75" fill="#fff"/>
+      </g>
+      <ellipse cx="-7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".85"/>
+      <ellipse cx="7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".85"/>
+      <path d="M-2.2 2.2 Q0 0.7 2.2 2.2 Q0 5.2 -2.2 2.2 Z" fill="#FF8A1F" stroke="#C25E00" stroke-width=".5"/>
     </g>
-    <ellipse cx="10.5" cy="33.5" rx="2.2" ry="1.3" fill="#FF9AA8" opacity=".85"/>
-    <ellipse cx="26.5" cy="33.5" rx="2.2" ry="1.3" fill="#FF9AA8" opacity=".85"/>
-    <!-- Beak -->
-    <path d="M16 32.2 Q18.2 30.6 20.6 32.2 Q18.3 35.4 16 32.2 Z" fill="#FF8A1F" stroke="#C25E00" stroke-width=".6"/>
+    <!-- Happy squished eyes (while grabbing) -->
+    <g id="happyface">
+      <path d="M-6.4 -0.5 Q-4.2 -3.6 -2 -0.5 M2 -0.5 Q4.2 -3.6 6.4 -0.5" fill="none" stroke="#1d1408" stroke-width="1.6" stroke-linecap="round"/>
+      <ellipse cx="-7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".9"/>
+      <ellipse cx="7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".9"/>
+      <path d="M-2.2 2.2 Q0 0.7 2.2 2.2 Q0 5.2 -2.2 2.2 Z" fill="#FF8A1F" stroke="#C25E00" stroke-width=".5"/>
+    </g>
+    <!-- His wavy hair curl, for the top of a head at (0, 0) -->
+    <path id="curl" d="M0 0 C 0 -9, 12 -10, 11 -3 C 10 1, 4 1, 5 -3" fill="none" stroke="#E8A800" stroke-width="3" stroke-linecap="round"/>
+  </defs>
+
+  <!-- Arrow (normal): tip at (40, 40) -->
+  <g class="shape s-arrow"><g class="bob">
+    <use class="hair" href="#curl" x="33" y="42"/>
+    <path d="M38 38 L38 86 L50 75.5 L58 94 L67 90 L59 72.5 L75 72.5 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M41 44 L41 78" stroke="#FFF2B0" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+    <use href="#face" x="50.3" y="64"/>
+  </g></g>
+
+  <!-- Text I-beam: middle at (40, 40), with a little Bbokari head on top -->
+  <g class="shape s-ibeam">
+    <path d="M33 23 Q40 26 47 23 M33 57 Q40 54 47 57" fill="none" stroke="#3b2f14" stroke-width="5" stroke-linecap="round"/>
+    <path d="M33 23 Q40 26 47 23 M33 57 Q40 54 47 57" fill="none" stroke="#FFD84D" stroke-width="2.4" stroke-linecap="round"/>
+    <rect x="37.6" y="24.5" width="4.8" height="31" rx="2.2" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
+    <g class="bob">
+      <use class="hair" href="#curl" x="53" y="8"/>
+      <circle cx="56" cy="17" r="10" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
+      <use href="#face" x="56" y="18" transform="translate(56 18) scale(.8) translate(-56 -18)"/>
+    </g>
   </g>
+
+  <!-- Pointing hand (links, buttons): Bbokari points his wing; the wing tip is at (40, 40) -->
+  <g class="shape s-hand"><g class="bob">
+    <path d="M40.5 41 L52 56" stroke="#3b2f14" stroke-width="9" stroke-linecap="round"/>
+    <path d="M40.5 41 L52 56" stroke="#FFD84D" stroke-width="5.6" stroke-linecap="round"/>
+    <use class="hair" href="#curl" x="55" y="50"/>
+    <circle cx="58" cy="64" r="13" fill="#FFD84D" stroke="#3b2f14" stroke-width="2"/>
+    <use href="#face" x="59" y="65"/>
+    <path d="M70 66 Q76 63 75 70" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/>
+  </g></g>
+
+  <!-- Open hand (can grab / drag): wings up and open; the middle is at (40, 40) -->
+  <g class="shape s-open"><g class="bob">
+    <ellipse cx="25" cy="34" rx="5" ry="9" transform="rotate(-30 25 34)" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
+    <ellipse cx="55" cy="34" rx="5" ry="9" transform="rotate(30 55 34)" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
+    <use class="hair" href="#curl" x="37" y="31"/>
+    <circle cx="40" cy="44" r="13" fill="#FFD84D" stroke="#3b2f14" stroke-width="2"/>
+    <use href="#face" x="40" y="45"/>
+  </g></g>
+
+  <!-- Closed hand (dragging): wings hugging, happy squished eyes -->
+  <g class="shape s-grab"><g class="grabbing">
+    <use href="#curl" x="37" y="29"/>
+    <circle cx="40" cy="42" r="13" fill="#FFD84D" stroke="#3b2f14" stroke-width="2"/>
+    <use href="#happyface" x="40" y="42"/>
+    <ellipse cx="30" cy="51" rx="6" ry="4" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/>
+    <ellipse cx="50" cy="51" rx="6" ry="4" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/>
+  </g></g>
+
+  <!-- Crosshair -->
+  <g class="shape s-cross">
+    <path d="M40 26 V54 M26 40 H54" stroke="#3b2f14" stroke-width="5" stroke-linecap="round"/>
+    <path d="M40 26 V54 M26 40 H54" stroke="#FFD84D" stroke-width="2.4" stroke-linecap="round"/>
+    <g class="bob"><circle cx="60" cy="22" r="8.5" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/><use href="#face" transform="translate(60 22.5) scale(.7)"/></g>
+  </g>
+
+  <!-- Resize left/right and up/down -->
+  <g class="shape s-resizeH">
+    <path d="M22 40 L30 32 L30 37 L50 37 L50 32 L58 40 L50 48 L50 43 L30 43 L30 48 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8" stroke-linejoin="round"/>
+    <g class="bob"><circle cx="40" cy="25" r="8.5" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/><use href="#face" transform="translate(40 25.5) scale(.7)"/></g>
+  </g>
+  <g class="shape s-resizeV">
+    <path d="M40 22 L48 30 L43 30 L43 50 L48 50 L40 58 L32 50 L37 50 L37 30 L32 30 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8" stroke-linejoin="round"/>
+    <g class="bob"><circle cx="57" cy="40" r="8.5" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/><use href="#face" transform="translate(57 40.5) scale(.7)"/></g>
+  </g>
+
+  <!-- Little signs added to the arrow -->
+  <g class="shape b-no"><circle cx="76" cy="88" r="8" fill="#fff" stroke="#E03131" stroke-width="2.6"/><path d="M70.5 93.5 L81.5 82.5" stroke="#E03131" stroke-width="2.6"/></g>
+  <g class="shape b-copy"><circle cx="76" cy="88" r="8" fill="#2F9E44" stroke="#fff" stroke-width="1.5"/><path d="M76 83.5 V92.5 M71.5 88 H80.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></g>
+  <g class="shape b-link"><circle cx="76" cy="88" r="8" fill="#1971C2" stroke="#fff" stroke-width="1.5"/><path d="M72 91 Q72 84 79 84 M76.5 81.5 L79.5 84 L76.5 86.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></g>
+  <g class="shape b-menu"><rect x="68" y="81" width="16" height="14" rx="3" fill="#fff" stroke="#3b2f14" stroke-width="1.5"/><path d="M71 85 H81 M71 88 H81 M71 91 H78" stroke="#3b2f14" stroke-width="1.4"/></g>
 </svg>
 <div class="badge" id="notes">📝</div>
 <div class="dots" id="dots"><i></i><i></i><i></i></div>
 <script>
   window.mobHost?.onCursorState?.((s) => {
     if (s.bye) document.body.classList.add('bye');
+    if (s.shape) document.body.dataset.shape = s.shape;
     document.getElementById('notes').classList.toggle('on', !!s.notes);
     document.getElementById('dots').classList.toggle('on', !!s.typing);
   });
