@@ -21,6 +21,7 @@ export function parsePlay(text) {
   if (!m) return null;
   let q = m[1].trim();
   // Not music: "play ping pong", "play a game", "play rock paper scissors" are Bbokari's games.
+  if (/^(?:it|that|this|the song|this song|that song)(?:\s+again)?$|\bagain$/i.test(q)) return null; // "play it again" is a control
   if (/^(?:a game|games?|ping ?pong|tic[- ]?tac[- ]?toe|rock paper scissors|rps|cups|bubbles|with me|together)\b/i.test(q)) return null;
   if (/^(?:some(?:thing)?|music|songs?|anything|any music|algo|m[uú]sica)$/i.test(q)) return { query: '', kind: 'resume', mine: false };
   const mine = /^(?:my|mi)\s+/i.test(q) || /\b(?:liked songs|my likes|canciones que me gustan)\b/i.test(q);
@@ -41,7 +42,21 @@ export function parsePlay(text) {
 
 /** "pause", "next song", "louder", "what's playing" → { action, value? }, or null. */
 export function parseControl(text) {
-  const t = String(text).trim().toLowerCase().replace(/[.!?]+$/, '').replace(/^(?:hey|ok)\s+\w+[,!]?\s*/, '');
+  // "Skip this song please" → "skip": drop greetings, "please", "can you", "the/this song" and so on first.
+  const t = String(text)
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/, '')
+    .replace(/^(?:hey|ok)\s+\w+[,!]?\s*/, '')
+    .replace(/^(?:can you|could you|please|por favor)\s+/, '')
+    .replace(/\s+(?:please|por favor|plz|pls)$/, '')
+    .replace(/\s+(?:this|the|that|a|one)\s+(?:song|track)$/, ' song')
+    .replace(/\s+(?:esta|la|una)\s+canci[oó]n$/, '')
+    .trim();
+  if (/^(?:salta|s[aá]ltala|p[aá]sala|pasa(?: la)? canci[oó]n|otra canci[oó]n|next one)$/.test(t)) return { action: 'next' };
+  if (/^(?:atr[aá]s|vuelve|la anterior|go back (?:a )?song|back (?:a )?song)$/.test(t)) return { action: 'previous' };
+  if (/^(?:play (?:it|the song|that) again|restart (?:it|the song)|from the start)$/.test(t)) return { action: 'restart' };
+  if (/^(?:skip(?: song)?|next song)$/.test(t)) return { action: 'next' };
   if (/^(?:pause|stop)(?: the)?(?: music| song| spotify)?$|^para(?: la m[uú]sica)?$|^pausa$/.test(t)) return { action: 'pause' };
   if (/^(?:resume|continue|unpause|keep playing|play)(?: the)?(?: music| song| spotify)?$|^sigue$/.test(t)) return { action: 'play' };
   if (/^(?:next|skip)(?: (?:song|track|one))?$|^(?:skip (?:this|it))$|^siguiente(?: canci[oó]n)?$/.test(t)) return { action: 'next' };
@@ -141,6 +156,10 @@ export async function control({ action, value }) {
       await tell('next track');
       await new Promise((r) => setTimeout(r, 700));
       return { ok: true, text: `⏭ ${(await nowPlaying().catch(() => '')) || 'Next song!'}` };
+    case 'restart':
+      await tell('set player position to 0');
+      await tell('play');
+      return { ok: true, text: '🔁 From the start!' };
     case 'previous':
       await tell('previous track');
       await new Promise((r) => setTimeout(r, 700));

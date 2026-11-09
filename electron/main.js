@@ -896,6 +896,11 @@ async function newFeatures(said) {
     command('game', { name });
     return { ok: true, kind: 'action', text: 'Let’s play! 🎮' };
   }
+  const music = process.platform === 'darwin' ? spotify.parseControl(said) : null;
+  if (music) {
+    const r = await spotify.control(music).catch(() => null);
+    if (r) return { ok: r.ok, kind: 'skill', text: r.text };
+  }
   // 🎵 "Play Blinding Lights", "play my study playlist", "pause", "next song", "louder", "what's playing?"
   const song = spotify.parsePlay(said);
   if (song) {
@@ -908,11 +913,6 @@ async function newFeatures(said) {
       .catch((err) => send('say', { text: `Spotify didn’t work: ${selection.explain(err)}`, error: true }))
       .finally(() => send('typing', { on: false }));
     return { ok: true, kind: 'action', text: song.kind === 'resume' ? '🎵 Okay!' : `🎵 Okay! Typing “${song.query}” in Spotify…` };
-  }
-  const music = process.platform === 'darwin' ? spotify.parseControl(said) : null;
-  if (music) {
-    const r = await spotify.control(music).catch(() => null);
-    if (r) return { ok: r.ok, kind: 'skill', text: r.text };
   }
   // "What did my science teacher say about the atom model?": searches Classroom, private comments, your doc, your journal.
   if (looksLikeFeedback(said)) {
