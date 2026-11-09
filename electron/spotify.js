@@ -4,6 +4,9 @@
 // needed) and asks the Spotify app to play it. Controls (pause, next, volume…) use the Spotify app's AppleScript.
 // Mac only. No Electron imports, so the parsing can be tested with plain Node.
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { typingScript } from './opener.js';
 
 const osascript = (script, timeout = 60_000) =>
@@ -70,12 +73,12 @@ export async function findUri(query, kind = 'track', { fetchFn = fetch } = {}) {
   return null;
 }
 
+/** Is the Spotify app installed (or open)? Looks in both Applications folders, then asks macOS. */
 const hasSpotify = async () => {
-  try {
-    return (await osascript('exists application id "com.spotify.client"', 5000)) === 'true';
-  } catch {
-    return false;
-  }
+  if (['/Applications/Spotify.app', path.join(os.homedir(), 'Applications', 'Spotify.app')].some((p) => fs.existsSync(p))) return true;
+  if ((await osascript('application id "com.spotify.client" is running', 5000).catch(() => 'false')) === 'true') return true;
+  const found = await new Promise((resolve) => execFile('mdfind', ['kMDItemCFBundleIdentifier == "com.spotify.client"'], { timeout: 5000 }, (err, out) => resolve(!err && String(out).trim().length > 0)));
+  return found;
 };
 
 /**
