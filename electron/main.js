@@ -901,7 +901,8 @@ async function newFeatures(said) {
   const quiz = parseQuiz(said);
   if (quiz) {
     startQuiz(quiz);
-    return { ok: true, kind: 'action', text: 'Making your flashcards… 🃏 One moment!' };
+    const fromClassroom = /\b(?:test|exam|quiz|prueba|examen)s?\b|^(?:classroom|homework|my homework)$/i.test(quiz.topic ?? '');
+    return { ok: true, kind: 'action', text: fromClassroom ? 'Let me check Classroom for your test… 🔍' : 'Making your flashcards… 🃏 One moment!' };
   }
   return null;
 }
@@ -952,6 +953,21 @@ async function planMyDay() {
 /** "Quiz me…": flashcards from notes, pasted text or a topic, shown as a card. */
 async function startQuiz({ text = '', topic = '' }) {
   try {
+    // "Quiz me on my next test": find it in Google Classroom.
+    if (!text && /\b(?:next|upcoming|my|the|this week'?s?)\s+(?:\w+\s+)?(?:test|exam|quiz|assessment|prueba|examen|evaluaci[oó]n)s?\b|^(?:test|exam|quiz|classroom|my homework|homework)$/i.test(topic)) {
+      const found = await nextTest(topic);
+      if (!found) {
+        send('say', { text: google?.connected ? 'I don’t see a test in Classroom this week 🤔 What’s it about? Say “quiz me on …” (for example “quiz me on the atom”).' : 'Connect Google first (menu bar → 📬 Inbox) so I can find your test in Classroom. Or tell me the topic: “quiz me on …”.' });
+        return;
+      }
+      // "EG-Grade 8 Math-Elissa Sbeity" → "Grade 8 Math".
+      const parts = found.course.split(/\s*[-–]\s*/);
+      const subject = (parts.find((x) => /grade|math|science|english|history|spanish|french|art|music|geography|biology|chemistry|physics|social/i.test(x)) ?? parts[0]).replace(/^EG\s+/i, '').replace(/\s+\d{2}\s*\/\s*\d{2}$/, '').trim();
+      send('say', { text: `${found.isTest ? 'Found it' : 'I don’t see a test, so let’s practice your next assignment'}: “${found.title}” (${subject}, due ${inbox.formatDue(new Date(found.due))}) 🃏 Making flashcards…` });
+      const cards = await makeCards({ topic: `${subject}: ${found.title}${found.text ? `. What the teacher wrote: ${found.text.slice(0, 600)}` : ''}`, model: settings.aiModel });
+      send('quiz', { title: found.title, cards });
+      return;
+    }
     let source = text;
     let title = topic || 'your text';
     if (!source) {
@@ -972,6 +988,26 @@ async function startQuiz({ text = '', topic = '' }) {
   }
 }
 ipcMain.on('quiz:done', () => diary?.win('quiz'));
+
+/** The next test in Classroom (or, if there isn't one, the next assignment): { course, title, text, due, isTest } or null. */
+async function nextTest(topic = '') {
+  let work = dueCache;
+  if (google?.connected) {
+    try {
+      work = dueCache = await inbox.upcomingWork(gapi);
+    } catch {}
+  }
+  if (!work.length) return null;
+  const isTest = (w) => /\b(?:test|exam|quiz|assessment|midterm|final|prueba|examen|evaluaci[oó]n|control)\b/i.test(`${w.title} ${w.text ?? ''}`);
+  // "my science test": only that class, if it has anything.
+  const words = topic.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !['next', 'upcoming', 'test', 'exam', 'quiz', 'the', 'this', 'week', 'my'].includes(w));
+  const inClass = words.length ? work.filter((w) => words.some((x) => `${w.course} ${w.title}`.toLowerCase().includes(x))) : [];
+  if (inClass.length) work = inClass;
+  const test = work.find(isTest);
+  // Skip things that aren't schoolwork (club meetups etc.) when picking "the next assignment".
+  const fallback = work.find((w) => !/\b(?:student life|meetup|club|event)\b/i.test(`${w.course} ${w.title}`)) ?? work[0];
+  return test ? { ...test, isTest: true } : { ...fallback, isTest: false };
+}
 
 /**
  * Canva templates: open a template in Canva (press "Customize this template"), then say "fill it in with my math".
