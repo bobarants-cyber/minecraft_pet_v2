@@ -975,6 +975,9 @@ async function newFeatures(said) {
     command('game', { name });
     return { ok: true, kind: 'action', text: 'Let’s play! 🎮' };
   }
+  // 🎵 "What song is this?", "who made this song?" (Spotify, Apple Music or a YouTube tab).
+  const songQ = spotify.songQuestion(said);
+  if (songQ && process.platform === 'darwin') return { ok: true, kind: 'skill', text: await spotify.songAnswer(songQ) };
   const music = process.platform === 'darwin' ? spotify.parseControl(said) : null;
   if (music) {
     const r = await spotify.control(music).catch(() => null);

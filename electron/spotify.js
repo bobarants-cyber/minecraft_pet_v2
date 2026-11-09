@@ -159,6 +159,73 @@ export async function nowPlaying() {
   return out ? `“${out.replace(/ by /, '” by ')}` : '';
 }
 
+// ---------- 🎵 "What song is this?" / "Who made this song?" ----------
+
+/** Is this a question about the song that's playing? { who: true } when it asks who made it. */
+export function songQuestion(text) {
+  const t = String(text).trim().toLowerCase().replace(/[.!?]+$/, '').replace(/^(?:hey|ok)\s+\w+[,!]?\s*/, '');
+  const song = /\b(?:song|track|music|tune|canci[oó]n|tema)\b/;
+  if (/^(?:who(?:'?s| is)? (?:made|sings?|sang|wrote|performs?|produced|is singing|singing|the (?:artist|singer))|who(?:'?s| is) (?:this|it|that) by|who(?:'?s| is) the (?:artist|singer|band)|what (?:artist|singer|band) is (?:this|that|it)|qui[eé]n (?:canta|hizo|la canta|es el artista|es la cantante|es el cantante))/.test(t)) return { who: true };
+  if (/^(?:what(?:'?s| is)? (?:this|that|the) (?:song|track|tune)(?: called)?|what song is (?:this|that|playing|on)|what(?:'?s| is) (?:playing|on)(?: now| right now)?|which song is (?:this|playing)|name (?:of )?(?:this|the) song|what(?:'?s| is) the name of (?:this|the) song|qu[eé] (?:canci[oó]n|tema) es (?:esta|esa|este)|qu[eé] suena|c[oó]mo se llama (?:esta|la) canci[oó]n)/.test(t)) return { who: /\bwho\b|\bartist|\bsinger|\bby\b/.test(t) };
+  if (/\bwhat\b.*\b(?:song|track)\b.*\b(?:and|&)\b.*\bwho\b/.test(t) && song.test(t)) return { who: true };
+  return null;
+}
+
+/** "Stray Kids "Back Door" M/V" or "Artist - Song (Official Video)" → { song, artist }. */
+export function songFromTitle(title) {
+  const clean = String(title)
+    .replace(/\s*[-–|]\s*(?:YouTube(?: Music)?|Spotify|SoundCloud)\s*$/i, '')
+    .replace(/^\(\d+\)\s*/, '')
+    .replace(/\s*[([](?:official\s*)?(?:music\s*)?(?:video|audio|lyrics?|lyric video|visualizer|m\/?v|mv|performance video|dance practice)[^)\]]*[)\]]/gi, '')
+    .replace(/\s+(?:M\/?V|MV|Official (?:Music )?Video)\s*$/i, '')
+    .trim();
+  const quoted = clean.match(/^(.+?)\s*[“"'‘](.+?)[”"'’]/);
+  if (quoted) return { artist: quoted[1].trim(), song: quoted[2].trim() };
+  const dash = clean.match(/^(.+?)\s+[-–]\s+(.+)$/);
+  if (dash) return { artist: dash[1].trim(), song: dash[2].trim() };
+  return { song: clean, artist: '' };
+}
+
+const MUSIC_TABS = ['youtube.com/watch', 'music.youtube.com', 'open.spotify.com', 'soundcloud.com'];
+
+/** The song playing in Spotify, Apple Music, or a YouTube / Spotify / SoundCloud browser tab: { song, artist, album, where, paused } or null. */
+export async function songInfo() {
+  const fromApp = async (appId, appName) => {
+    const running = await osascript(`application id "${appId}" is running`, 4000).catch(() => 'false');
+    if (running !== 'true') return null;
+    const out = await osascript(`tell application "${appName}"\nif player state is stopped then return ""\nreturn (name of current track) & "\\n" & (artist of current track) & "\\n" & (album of current track) & "\\n" & (player state as string)\nend tell`, 6000).catch(() => '');
+    if (!out) return null;
+    const [song, artist, album, state] = out.split('\n');
+    return song ? { song, artist, album, where: appName === 'Music' ? 'Apple Music' : appName, paused: /paused/i.test(state ?? '') } : null;
+  };
+  const playing = (await fromApp('com.spotify.client', 'Spotify')) ?? (await fromApp('com.apple.Music', 'Music'));
+  if (playing && !playing.paused) return playing;
+  // A music tab in a browser (YouTube etc.).
+  const checks = [
+    ['com.google.Chrome', 'chromium'], ['company.thebrowser.Browser', 'chromium'], ['com.brave.Browser', 'chromium'], ['com.microsoft.edgemac', 'chromium'], ['com.apple.Safari', 'safari'],
+  ];
+  for (const [id, kind] of checks) {
+    const titleOf = kind === 'safari' ? 'name of t' : 'title of t';
+    const cond = MUSIC_TABS.map((u) => `URL of t contains "${u}"`).join(' or ');
+    const script = `if application id "${id}" is running then\ntell application id "${id}"\nrepeat with w in windows\nrepeat with t in tabs of w\nif ${cond} then return ${titleOf}\nend repeat\nend repeat\nend tell\nend if\nreturn ""`;
+    const title = await osascript(script, 6000).catch(() => '');
+    if (title) return { ...songFromTitle(title), album: '', where: /spotify/i.test(title) ? 'Spotify (web)' : /soundcloud/i.test(title) ? 'SoundCloud' : 'YouTube', paused: false };
+  }
+  return playing; // a paused song is better than nothing
+}
+
+/** The answer to "what song is this?" / "who made this song?". */
+export async function songAnswer({ who }) {
+  const s = await songInfo().catch(() => null);
+  if (!s) return 'I don’t see any music playing 🤫 I can check Spotify, Apple Music and YouTube tabs. (For a song playing around you, try Shazam in Control Center!)';
+  const where = s.where && s.where !== 'Spotify' ? ` on ${s.where}` : '';
+  const album = s.album && s.album !== s.song ? ` from the album “${s.album}”` : '';
+  const paused = s.paused ? ' (it’s paused)' : '';
+  if (!s.artist) return `🎵 It’s “${s.song}”${where}${paused}. I couldn’t tell who made it from the title 🤔`;
+  if (who) return `🎤 It’s by ${s.artist}! The song is “${s.song}”${album}${where}${paused}.`;
+  return `🎵 It’s “${s.song}” by ${s.artist}${album}${where}${paused}.`;
+}
+
 /** Pause, play, next, previous, volume, shuffle, what's playing. Returns what to say. */
 export async function control({ action, value }) {
   // Only when Spotify is open (so "next" or "stop" never launches it by surprise); "play" may open it.
