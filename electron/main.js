@@ -258,7 +258,7 @@ async function hideRealArrow() {
       for (const line of lines) {
         const shape = line.match(/^cursor:(\w+)/)?.[1];
         if (shape) cursorState({ shape });
-        if (/^ready hidden=false/.test(line) && settings.cursorHideArrow) console.log('Could not hide the arrow on this Mac; Bbokari is drawn around it instead.');
+        if (/^ready hidden=false/.test(line) && settings.cursorHideArrow) send('say', { text: 'My cursor trick can’t hide the normal arrow on this Mac 😕 so I’ll stay around it. (Pointer shapes still work.)', error: true });
       }
     });
     child.on('exit', () => {
@@ -268,6 +268,7 @@ async function hideRealArrow() {
     if (!settings.cursorMode) showRealArrow();
   } catch (err) {
     console.log('Cursor helper not available:', err.message);
+    send('say', { text: /xcrun|swiftc|developer tools|xcode/i.test(err.message) ? 'I need Apple’s developer tools for my cursor trick. Run “xcode-select --install” in Terminal, then try again.' : `My cursor trick didn’t build 😕 (${err.message.split('\n')[0].slice(0, 140)}) Send this to Claude!`, error: true });
   }
 }
 function showRealArrow() {
