@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Bbokari cursor</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  svg { position: absolute; left: 0; top: 0; width: 72px; height: 72px; overflow: visible; transform-origin: 8px 6px; animation: pop 0.5s cubic-bezier(.3, 1.6, .5, 1) both; }
+  .body { animation: bob 2.4s ease-in-out infinite; transform-origin: 8px 6px; }
+  .eyes { animation: blink 4.2s infinite; transform-origin: 18px 30px; transform-box: view-box; }
+  .hair { animation: wave 1.8s ease-in-out infinite; transform-origin: 12px 8px; transform-box: view-box; }
+  .badge { font: 13px -apple-system, system-ui; position: absolute; left: 34px; top: 44px; opacity: 0; transition: opacity .2s; }
+  .badge.on { opacity: 1; }
+  .dots { position: absolute; left: 40px; top: 12px; display: flex; gap: 2px; opacity: 0; transition: opacity .2s; }
+  .dots.on { opacity: 1; }
+  .dots i { width: 4px; height: 4px; border-radius: 50%; background: #3b2f14; animation: dot 1s infinite; }
+  .dots i:nth-child(2) { animation-delay: .15s; }
+  .dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes pop { from { transform: scale(0) rotate(-90deg); } to { transform: scale(1) rotate(0); } }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1px); } }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+  @keyframes wave { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
+  @keyframes dot { 0%, 100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-3px); opacity: 1; } }
+  body.bye svg { animation: bye .35s ease-in both; }
+  @keyframes bye { to { transform: scale(0) rotate(90deg); } }
+</style>
+</head>
+<body>
+<!-- Bbokari as a mouse pointer: the real arrow's tip is at (8, 6), so the real arrow sits inside his yellow body. -->
+<svg viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g class="body">
+    <!-- His wavy hair curl, on top of the arrow -->
+    <path class="hair" d="M9 8 C 9 -3, 24 -4, 23 5 C 22 11, 14 11, 15 5" fill="none" stroke="#E8A800" stroke-width="3.2" stroke-linecap="round"/>
+    <!-- Arrow-shaped body -->
+    <path d="M6 4 L6 52 L18 41.5 L26 60 L35 56 L27 38.5 L43 38.5 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M9 10 L9 44" stroke="#FFF2B0" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+    <!-- Face -->
+    <g class="eyes">
+      <ellipse cx="14" cy="29" rx="2.4" ry="2.8" fill="#1d1408"/>
+      <ellipse cx="22.5" cy="29" rx="2.4" ry="2.8" fill="#1d1408"/>
+      <circle cx="14.8" cy="28" r=".8" fill="#fff"/>
+      <circle cx="23.3" cy="28" r=".8" fill="#fff"/>
+    </g>
+    <ellipse cx="10.5" cy="33.5" rx="2.2" ry="1.3" fill="#FF9AA8" opacity=".85"/>
+    <ellipse cx="26.5" cy="33.5" rx="2.2" ry="1.3" fill="#FF9AA8" opacity=".85"/>
+    <!-- Beak -->
+    <path d="M16 32.2 Q18.2 30.6 20.6 32.2 Q18.3 35.4 16 32.2 Z" fill="#FF8A1F" stroke="#C25E00" stroke-width=".6"/>
+  </g>
+</svg>
+<div class="badge" id="notes">📝</div>
+<div class="dots" id="dots"><i></i><i></i><i></i></div>
+<script>
+  window.mobHost?.onCursorState?.((s) => {
+    if (s.bye) document.body.classList.add('bye');
+    document.getElementById('notes').classList.toggle('on', !!s.notes);
+    document.getElementById('dots').classList.toggle('on', !!s.typing);
+  });
+</script>
+</body>
+</html>

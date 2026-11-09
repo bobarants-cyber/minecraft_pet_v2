@@ -874,6 +874,15 @@
         visibility: visible;
         transition-delay: 0s;
       }
+      /* Pop-ups you can drag (see PanelStack.js) */
+      .panel-dragging,
+      .panel-dragging * {
+        cursor: grabbing !important;
+        user-select: none;
+      }
+      .chat.panel-nudged .chat__tail {
+        display: none;
+      }
       .chat__tail {
         position: absolute;
         bottom: -11px;

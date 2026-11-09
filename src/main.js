@@ -1,4 +1,4 @@
-import { Stage } from './core/Stage.js';
+import { Stage, PIXELS_PER_UNIT } from './core/Stage.js';
 import { Loop } from './core/Loop.js';
 import { ScreenSpace } from './core/ScreenSpace.js';
 import { connectSettings } from './core/Settings.js';
@@ -16,6 +16,7 @@ import { Voice } from './interaction/Voice.js';
 import { FocusBadge } from './interaction/FocusBadge.js';
 import { Wardrobe } from './character/Outfits.js';
 import { Toys } from './character/Toys.js';
+import { PanelStack } from './interaction/PanelStack.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -77,6 +78,7 @@ const menu = new MobMenu({
   onOutfit: (name) => save({ outfit: name }),
   onCheck: () => host?.checkWriting?.(),
   onQuit: () => host?.quit?.(),
+  onCursor: () => becomeCursor(),
   onHide: () => {
     chat.say('Hiding! 🙈 I’m still here and still working. Press ⌃⌥P or use the menu bar to bring me back.');
     setTimeout(() => save({ hidden: true }), 1200);
@@ -112,6 +114,63 @@ function updatePlacement() {
   stage.setShadowStrength(1 - character.lift / (1.2 * scale));
 }
 
+/**
+ * 🖱 "Be my cursor": the pet spins and shrinks into the spot where it stands, then hides while a tiny Bbokari pointer
+ * follows your mouse (the main process draws that one). Coming back, it grows out of the same spot.
+ */
+let shrinking = false;
+let wasCursor = !!settings.cursorMode;
+function petPoint() {
+  const c = character;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const x = W / 2 + c.loco.x * PIXELS_PER_UNIT;
+  const floor = H / 2 - c.placement.floorY * PIXELS_PER_UNIT;
+  return { x, y: floor - (c.mob.height * c.placement.scale * PIXELS_PER_UNIT) / 2 };
+}
+function becomeCursor() {
+  if (shrinking || settings.cursorMode) return;
+  shrinking = true;
+  game.stop();
+  chat.say('Watch this! ✨ I’ll be your cursor (I still take notes and do everything). Say “come back” or press ⌃⌥P to get me back.');
+  character.trigger('surprised', { then: 'idle' }, true);
+  const canvas = stage.renderer.domElement;
+  const { x, y } = petPoint();
+  setTimeout(() => {
+    canvas.style.transformOrigin = `${Math.round(x)}px ${Math.round(y)}px`;
+    canvas.style.transition = 'transform 0.9s cubic-bezier(.6,-0.2,.8,.4), opacity 0.9s ease-in';
+    canvas.style.transform = 'scale(0.02) rotate(540deg)';
+    canvas.style.opacity = '0';
+  }, 900);
+  setTimeout(() => {
+    wasCursor = true;
+    save({ cursorMode: true, hidden: true });
+    chat.close();
+    setTimeout(() => {
+      canvas.style.transition = 'none';
+      canvas.style.transform = '';
+      canvas.style.opacity = '';
+      shrinking = false;
+    }, 200);
+  }, 1850);
+}
+/** Back from being the cursor: grow out of the floor spot with a little spin. */
+function growBack() {
+  const canvas = stage.renderer.domElement;
+  const { x, y } = petPoint();
+  canvas.style.transition = 'none';
+  canvas.style.transformOrigin = `${Math.round(x)}px ${Math.round(y)}px`;
+  canvas.style.transform = 'scale(0.02) rotate(-360deg)';
+  canvas.style.opacity = '0';
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      canvas.style.transition = 'transform 0.7s cubic-bezier(.3,1.5,.5,1), opacity 0.4s ease-out';
+      canvas.style.transform = '';
+      canvas.style.opacity = '';
+    }),
+  );
+}
+
 /** Invisible mode: the pet keeps working (notes, captions, reminders, voice) but isn't drawn or clickable. */
 let wasHidden = null;
 function applyHidden() {
@@ -124,10 +183,15 @@ function applyHidden() {
     game.stop();
     menu.close();
   } else if (wasHidden !== null) {
+    if (wasCursor) growBack();
+    wasCursor = false;
     character.trigger('surprised', { then: 'idle' }, true);
     character.emote('sparkle', 0.4);
   }
 }
+
+// Pop-ups stack instead of covering each other, and can be dragged anywhere (most important first).
+const stack = new PanelStack(() => [chat.el, notesBadge.el, focusBadge.el, captions.el, classes.el, ...document.querySelectorAll('.game-panel, .pong-hud')]);
 
 const loop = new Loop((dt, t) => {
   if (settings.mob !== mobName) applyMob(settings.mob);
@@ -142,6 +206,7 @@ const loop = new Loop((dt, t) => {
   classes.update();
   notesBadge.update(chat.isOpen || character.hidden);
   focusBadge.update(chat.isOpen || character.hidden, notesBadge.visible);
+  stack.update();
   toys.update(dt);
   wardrobe.wear(character.mob, settings.outfit);
   if (!['typing', 'activity'].includes(character.stateName)) wardrobe.refresh();
@@ -239,6 +304,8 @@ host?.onCommand(({ type, name, surprised, prefill, ask }) => {
     if (ask) chat.ask(ask);
     else if (prefill) chat.prefill(prefill);
     else chat.open();
+  } else if (type === 'cursor') {
+    becomeCursor();
   } else if (type === 'classes') {
     classes.open();
   } else if (type === 'game') {

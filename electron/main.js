@@ -168,7 +168,75 @@ function createWindow() {
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 
-const send = (channel, payload) => win?.webContents.send(channel, payload);
+const send = (channel, payload) => {
+  win?.webContents.send(channel, payload);
+  // The little cursor Bbokari shows when he's working (…) or taking notes (📝).
+  if (channel === 'typing') cursorState({ typing: !!payload?.on });
+  if (channel === 'notes') cursorState({ notes: !!(payload?.active || payload?.writing) });
+};
+
+// ---------- 🖱 "Be my cursor": Bbokari shrinks into a tiny Bbokari pointer that follows your mouse ----------
+// macOS doesn't let apps replace the real pointer everywhere, so he's a tiny see-through window that sits right on
+// the real arrow (the arrow stays inside his body, so clicking works exactly as normal). He keeps working.
+let cursorWin = null;
+let cursorTimer = null;
+const cursorLook = { typing: false, notes: false };
+function cursorState(patch) {
+  Object.assign(cursorLook, patch);
+  if (cursorWin && !cursorWin.isDestroyed()) cursorWin.webContents.send('cursorState', cursorLook);
+}
+function startCursor() {
+  if (cursorWin && !cursorWin.isDestroyed()) return;
+  cursorWin = new BrowserWindow({
+    width: 72,
+    height: 72,
+    transparent: true,
+    frame: false,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    skipTaskbar: true,
+    show: false,
+    alwaysOnTop: true,
+    hiddenInMissionControl: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
+  });
+  cursorWin.setIgnoreMouseEvents(true);
+  cursorWin.setAlwaysOnTop(true, 'screen-saver');
+  cursorWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  cursorWin.loadFile(path.join(__dirname, 'cursor.html'));
+  let last = '';
+  const follow = () => {
+    if (!cursorWin || cursorWin.isDestroyed()) return;
+    const p = screen.getCursorScreenPoint();
+    const key = `${p.x},${p.y}`;
+    if (key === last) return;
+    last = key;
+    // The real arrow's tip sits on Bbokari's tip (8, 6 in the little window).
+    cursorWin.setPosition(p.x - 8, p.y - 6);
+  };
+  cursorWin.once('ready-to-show', () => {
+    follow();
+    cursorWin.showInactive();
+    cursorState({ notes: !!notes });
+  });
+  cursorTimer = setInterval(follow, 16);
+}
+function stopCursor() {
+  clearInterval(cursorTimer);
+  cursorTimer = null;
+  const w = cursorWin;
+  cursorWin = null;
+  if (!w || w.isDestroyed()) return;
+  w.webContents.send('cursorState', { bye: true });
+  setTimeout(() => !w.isDestroyed() && w.close(), 380);
+}
+/** On: the pet plays its shrink animation, then hides and the cursor appears. Off: the cursor goes, the pet grows back. */
+function setCursorMode(on) {
+  if (on && !settings.cursorMode) command('cursor', { on: true });
+  else if (!on && settings.cursorMode) applySettings({ cursorMode: false, hidden: false });
+}
 const command = (type, extra = {}) => send('command', { type, ...extra });
 
 function applySettings(patch) {
@@ -178,6 +246,7 @@ function applySettings(patch) {
   if (settings.petSize !== prevSize) win?.setBounds(stripBounds());
   if ('openAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
   if ('reactToActivity' in patch) syncActivity();
+  if ('cursorMode' in patch) (settings.cursorMode ? startCursor() : stopCursor());
   send('settings', settings);
   buildTray();
 }
@@ -211,6 +280,7 @@ function buildTray() {
     { label: '✨ Everything I can do…', accelerator: 'Control+Alt+Space', click: openHub },
     { type: 'separator' },
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
+    { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
@@ -888,6 +958,15 @@ async function newFeatures(said) {
   if (/^(?:what (?:else )?can you do|help|show me (?:what you can do|everything)|features|what are your features|everything you can do|qu[eé] puedes hacer|ayuda)\??$/i.test(said)) {
     openHub();
     return { ok: true, kind: 'action', text: 'Here’s everything I can do ✨ Click any card to try it! (Press ⌃⌥Space anytime to open it.)' };
+  }
+  // 🖱 "Be my cursor" / "come back".
+  if (/^(?:(?:can you\s+|please\s+)?(?:be|become|turn into)\s+my\s+(?:cursor|mouse|pointer)|cursor mode|s[eé] mi cursor)[.!?]*$/i.test(said)) {
+    setCursorMode(true);
+    return { ok: true, kind: 'action', text: 'Watch this! ✨' };
+  }
+  if (settings.cursorMode && /^(?:come back|stop being (?:my )?(?:the )?(?:cursor|mouse|pointer)|normal|be normal|vuelve)[.!?]*$/i.test(said)) {
+    setCursorMode(false);
+    return { ok: true, kind: 'action', text: 'I’m back! 🐥' };
   }
   // "Play ping pong", "let's play tic tac toe": Bbokari's own games.
   const game = said.match(/^(?:let'?s\s+|can we\s+|wanna\s+)?play\s+(?:a game of\s+)?(ping ?pong|tic[- ]?tac[- ]?toe|rock paper scissors|rps|cups|bubbles)(?:\s+with me)?[.!?]*$/i);
@@ -2044,7 +2123,8 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => setTimeout(syncActivity, 4000));
   // If the sound was left on the Multi-Output Device (volume keys off), put it back on your normal output.
   if (process.platform === 'darwin' && settings.autoSwitchAudio) setTimeout(() => audioSwitch.normalize(), 2500);
-  globalShortcut.register('Control+Alt+P', () => applySettings({ hidden: !settings.hidden }));
+  globalShortcut.register('Control+Alt+P', () => (settings.cursorMode ? setCursorMode(false) : applySettings({ hidden: !settings.hidden })));
+  if (settings.cursorMode) win.webContents.once('did-finish-load', () => setTimeout(startCursor, 1500));
   if (!globalShortcut.register('Control+Alt+Space', openHub)) console.log('Shortcut ⌃⌥Space is taken by another app.');
   // Tell you about the big update once.
   if (settings.seenUpdate !== 'hub-1') {

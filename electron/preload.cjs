@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('mobHost', {
   presentonKey: (key) => ipcRenderer.invoke('presenton:key', key),
   pixabayKey: (key) => ipcRenderer.invoke('pixabay:key', key),
   hubList: () => ipcRenderer.invoke('hub:list'),
+  onCursorState: (fn) => ipcRenderer.on('cursorState', (_e, s) => fn(s)),
   inboxAction: (id, action) => ipcRenderer.invoke('inbox:action', { id, action }),
   hubRun: (id) => ipcRenderer.invoke('hub:run', id),
   onQuiz: (fn) => ipcRenderer.on('quiz', (_e, q) => fn(q)),

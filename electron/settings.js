@@ -54,6 +54,8 @@ export const DEFAULTS = {
   pixabayKey: '',
   deckPhotos: true,
   seenUpdate: '',
+  // 🖱 Bbokari is your mouse pointer (the pet is hidden but keeps working).
+  cursorMode: false,
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

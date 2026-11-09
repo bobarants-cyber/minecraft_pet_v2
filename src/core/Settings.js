@@ -22,6 +22,7 @@ export const DEFAULTS = {
   normalOutput: '',
   checkWriting: true,
   hidden: false,
+  cursorMode: false,
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';
