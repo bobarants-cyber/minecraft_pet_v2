@@ -108,6 +108,7 @@ export async function play({ query, kind, mine }) {
   }
   // Look up the exact link while he types (your own private playlists aren't on the web, so not for "my …").
   const uriP = mine ? Promise.resolve(null) : findUri(query, kind);
+  const before = await trackId();
   await osascript(
     'tell application "Spotify" to activate\n' +
       'delay 1.2\n' +
@@ -117,19 +118,39 @@ export async function play({ query, kind, mine }) {
       'keystroke "a" using command down\n' +
       'delay 0.1\n' +
       `${typingScript(query)}\n` +
-      'delay 1.4\n' +
-      'key code 36\n' +
+      'delay 1.2\n' +
       'end tell',
     90_000,
   );
   const uri = await uriP;
   if (uri) {
-    await new Promise((r) => setTimeout(r, 900));
+    // Found the exact one: close the search (Enter would play Spotify's top result, which can be a different song).
+    await osascript('tell application "System Events" to key code 53');
     await osascript(`tell application "Spotify" to play track ${quote(uri)}`);
-    const now = await nowPlaying().catch(() => '');
-    return { ok: true, text: `🎵 ${now ? `Playing ${now}` : `Playing “${query}”`}!` };
+  } else {
+    // No exact link (e.g. your own playlist): Enter plays Spotify's top result for what he typed.
+    await osascript('tell application "System Events" to key code 36');
   }
-  return { ok: true, text: mine ? `I opened “${query}” in Spotify 🎵 Press the green ▶ button to start it!` : `I searched Spotify for “${query}” 🎵 Press ▶ on the one you want!` };
+  // Wait until Spotify has really switched songs before saying its name.
+  const now = await waitForChange(before, uri);
+  if (now) return { ok: true, text: `🎵 Playing ${now}!` };
+  return { ok: true, text: mine ? `I opened “${query}” in Spotify 🎵 If it didn’t start, press the green ▶ button!` : `I searched Spotify for “${query}” 🎵 If it didn’t start, press ▶ on the one you want!` };
+}
+
+/** The current track's Spotify id ('spotify:track:…'), or ''. */
+async function trackId() {
+  return osascript('tell application "Spotify"\nif player state is stopped then return ""\nreturn id of current track\nend tell', 5000).catch(() => '');
+}
+
+/** Waits (up to ~6 s) until the song is no longer `before` (or is `uri`), then returns its name, or ''. */
+async function waitForChange(before, uri) {
+  for (let i = 0; i < 12; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const id = await trackId();
+    const switched = id && (uri?.startsWith('spotify:track:') ? id === uri : id !== before);
+    if (switched) return nowPlaying().catch(() => '');
+  }
+  return '';
 }
 
 /** "Blinding Lights by The Weeknd" (or '' if nothing is playing). */
