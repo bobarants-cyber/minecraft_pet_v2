@@ -15,29 +15,47 @@ let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 let display = CGMainDisplayID()
 var hidden = false
+var hides = 0 // how many times we hid it (each hide needs a matching show)
 
-if wantHide {
-  typealias ConnectionFn = @convention(c) () -> UInt32
-  typealias SetPropertyFn = @convention(c) (UInt32, UInt32, CFString, CFTypeRef) -> Int32
-  let anywhere = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
-  if let connSym = dlsym(anywhere, "_CGSDefaultConnection") ?? dlsym(anywhere, "CGSMainConnectionID"),
-     let setSym = dlsym(anywhere, "CGSSetConnectionProperty") {
-    let conn = unsafeBitCast(connSym, to: ConnectionFn.self)()
-    _ = unsafeBitCast(setSym, to: SetPropertyFn.self)(conn, conn, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
-    hidden = CGDisplayHideCursor(display) == .success
+typealias ConnectionFn = @convention(c) () -> UInt32
+typealias SetPropertyFn = @convention(c) (UInt32, UInt32, CFString, CFTypeRef) -> Int32
+let anywhere = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
+let connSym = dlsym(anywhere, "_CGSDefaultConnection") ?? dlsym(anywhere, "CGSMainConnectionID")
+let setSym = dlsym(anywhere, "CGSSetConnectionProperty")
+
+func hideNow() {
+  guard let connSym, let setSym else { return }
+  let conn = unsafeBitCast(connSym, to: ConnectionFn.self)()
+  _ = unsafeBitCast(setSym, to: SetPropertyFn.self)(conn, conn, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
+  if CGDisplayHideCursor(display) == .success {
+    hides += 1
+    hidden = true
   }
 }
+func showAll() {
+  for _ in 0..<max(hides, 1) { CGDisplayShowCursor(display) }
+  hides = 0
+}
+
+if wantHide { hideNow() }
 print("ready hidden=\(hidden)")
 fflush(stdout)
 
 func bye() -> Never {
-  if hidden { CGDisplayShowCursor(display) }
+  if hidden { showAll() }
   exit(0)
 }
 for sig in [SIGTERM, SIGINT, SIGHUP] {
   signal(sig) { _ in
-    CGDisplayShowCursor(CGMainDisplayID())
+    for _ in 0..<64 { CGDisplayShowCursor(CGMainDisplayID()) }
     exit(0)
+  }
+}
+
+// Clicking another app (Chrome, Finder…) can bring the arrow back: hide it again straight away.
+if hidden {
+  Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { _ in
+    if CGCursorIsVisible() != 0 && hides < 60 { hideNow() }
   }
 }
 Thread.detachNewThread {

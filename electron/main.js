@@ -187,9 +187,13 @@ function cursorState(patch) {
 }
 function startCursor() {
   if (cursorWin && !cursorWin.isDestroyed()) return;
+  // One see-through, click-through layer over the whole screen the mouse is on (menu bar and Dock included);
+  // Bbokari's pointer moves inside it. (A small window that follows the mouse gets stuck near the Dock, because
+  // macOS won't let a window hang off the bottom of the screen.)
+  const onDisplay = () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds;
+  let area = onDisplay();
   cursorWin = new BrowserWindow({
-    width: 112,
-    height: 112,
+    ...area,
     transparent: true,
     frame: false,
     hasShadow: false,
@@ -199,8 +203,9 @@ function startCursor() {
     skipTaskbar: true,
     show: false,
     alwaysOnTop: true,
+    enableLargerThanScreen: true,
     hiddenInMissionControl: true,
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, backgroundThrottling: false },
   });
   cursorWin.setIgnoreMouseEvents(true);
   cursorWin.setAlwaysOnTop(true, 'screen-saver');
@@ -213,16 +218,21 @@ function startCursor() {
     const key = `${p.x},${p.y}`;
     if (key === last) return;
     last = key;
-    // The pointer's hot spot (the arrow's tip, the I-beam's middle…) is at (40, 40) in the little window.
-    cursorWin.setPosition(p.x - 40, p.y - 40);
+    // Moved to another screen: the layer moves with it.
+    if (p.x < area.x || p.y < area.y || p.x >= area.x + area.width || p.y >= area.y + area.height) {
+      area = onDisplay();
+      cursorWin.setBounds(area);
+    }
+    cursorWin.webContents.send('cursorPos', { x: p.x - area.x, y: p.y - area.y });
   };
   cursorWin.once('ready-to-show', () => {
+    cursorWin.setBounds(area); // again, in case macOS nudged it below the menu bar
     follow();
     cursorWin.showInactive();
     cursorState({ notes: !!notes });
     hideRealArrow();
   });
-  cursorTimer = setInterval(follow, 10); // ~100 times a second, so it feels like the real pointer
+  cursorTimer = setInterval(follow, 8); // ~120 times a second, so it feels like the real pointer
 }
 // The cursor helper (a tiny Swift program built once on this Mac with Xcode's tools): tells us which pointer macOS
 // shows (arrow, text, hand, grab…) so Bbokari's pointer matches, and hides the real arrow so only Bbokari shows.

@@ -5,7 +5,8 @@
 <title>Bbokari cursor</title>
 <style>
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
-  /* The pointer's hot spot (where clicks land) is at (40, 40) in this 112×112 window. */
+  /* This page covers the whole screen; #ptr moves to the mouse. Inside it, the hot spot (where clicks land) is at (40, 40). */
+  #ptr { position: absolute; left: 0; top: 0; width: 112px; height: 112px; will-change: transform; transform: translate(-200px, -200px); }
   svg { position: absolute; left: 0; top: 0; width: 112px; height: 112px; overflow: visible; transform-origin: 40px 40px; animation: pop 0.5s cubic-bezier(.3, 1.6, .5, 1) both; }
   .shape { display: none; }
   body[data-shape="arrow"] .s-arrow, body[data-shape="ibeam"] .s-ibeam, body[data-shape="hand"] .s-hand,
@@ -36,6 +37,7 @@
 </style>
 </head>
 <body data-shape="arrow">
+<div id="ptr">
 <svg viewBox="0 0 112 112" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <!-- Bbokari's little face, centred on (0, 0), for a head about 22 px wide -->
@@ -134,7 +136,12 @@
 </svg>
 <div class="badge" id="notes">📝</div>
 <div class="dots" id="dots"><i></i><i></i><i></i></div>
+</div>
 <script>
+  const ptr = document.getElementById('ptr');
+  window.mobHost?.onCursorPos?.(({ x, y }) => {
+    ptr.style.transform = `translate(${x - 40}px, ${y - 40}px)`;
+  });
   window.mobHost?.onCursorState?.((s) => {
     if (s.bye) document.body.classList.add('bye');
     if (s.shape) document.body.dataset.shape = s.shape;
