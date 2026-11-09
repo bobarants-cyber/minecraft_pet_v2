@@ -56,6 +56,7 @@ export const DEFAULTS = {
   seenUpdate: '',
   // 🖱 Bbokari is your mouse pointer (the pet is hidden but keeps working).
   cursorMode: false,
+  cursorHideArrow: true, // hide the real arrow too, so only the Bbokari pointer shows
 };
 
 const file = () => path.join(app.getPath('userData'), 'settings.json');

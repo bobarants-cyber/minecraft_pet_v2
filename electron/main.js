@@ -220,10 +220,55 @@ function startCursor() {
     follow();
     cursorWin.showInactive();
     cursorState({ notes: !!notes });
+    hideRealArrow();
   });
-  cursorTimer = setInterval(follow, 16);
+  cursorTimer = setInterval(follow, 10); // ~100 times a second, so it feels like the real pointer
 }
+// Hiding the real arrow too (so only Bbokari shows): a tiny Swift helper, built once on this Mac with Xcode's tools.
+let arrowHider = null;
+async function hideRealArrow() {
+  if (process.platform !== 'darwin' || arrowHider || !settings.cursorHideArrow) return;
+  const src = path.join(__dirname, 'hideCursor.swift');
+  const bin = path.join(app.getPath('userData'), 'bbokari-hidecursor');
+  try {
+    const stale = !fs.existsSync(bin) || fs.statSync(bin).mtimeMs < fs.statSync(src).mtimeMs;
+    if (stale) {
+      send('say', { text: 'Getting my cursor trick ready (only the first time, about 20 seconds)… ✨' });
+      await new Promise((resolve, reject) => execFile('xcrun', ['swiftc', '-O', src, '-o', bin], { timeout: 180_000 }, (err, _o, e) => (err ? reject(new Error(String(e || err.message).slice(0, 200))) : resolve())));
+    }
+    if (!settings.cursorMode) return; // turned off while it was building
+    const child = spawn(bin, [], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const ok = await new Promise((resolve) => {
+      const t = setTimeout(() => resolve(false), 4000);
+      child.stdout.on('data', (d) => {
+        clearTimeout(t);
+        resolve(/hidden/.test(String(d)));
+      });
+      child.on('exit', () => resolve(false));
+    });
+    if (!ok) {
+      child.kill();
+      return console.log('Could not hide the arrow on this Mac; Bbokari is drawn around it instead.');
+    }
+    arrowHider = child;
+    child.on('exit', () => {
+      if (arrowHider === child) arrowHider = null;
+    });
+    if (!settings.cursorMode) showRealArrow();
+  } catch (err) {
+    console.log('Arrow hider not available:', err.message);
+  }
+}
+function showRealArrow() {
+  const child = arrowHider;
+  arrowHider = null;
+  if (!child) return;
+  child.stdin.end(); // the helper shows the arrow and quits
+  setTimeout(() => child.kill(), 600);
+}
+
 function stopCursor() {
+  showRealArrow();
   clearInterval(cursorTimer);
   cursorTimer = null;
   const w = cursorWin;
@@ -281,6 +326,7 @@ function buildTray() {
     { type: 'separator' },
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
+    ...(settings.cursorMode ? [{ label: '   Hide the normal arrow (only Bbokari)', type: 'checkbox', checked: settings.cursorHideArrow, click: (i) => (applySettings({ cursorHideArrow: i.checked }), i.checked ? hideRealArrow() : showRealArrow()) }] : []),
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
@@ -2148,6 +2194,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
+  showRealArrow();
   diary?.activity(null);
   diary?.save();
   audioSwitch.restoreNow();
