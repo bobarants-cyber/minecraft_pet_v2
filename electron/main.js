@@ -34,6 +34,7 @@ import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
 import { findNotes, latestNotes, makeCards, parseQuiz } from './flashcards.js';
 import { FEATURES, hubData } from './features.js';
 import { findFeedback, looksLikeFeedback } from './feedback.js';
+import * as spotify from './spotify.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
 const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
@@ -887,6 +888,31 @@ async function newFeatures(said) {
   if (/^(?:what (?:else )?can you do|help|show me (?:what you can do|everything)|features|what are your features|everything you can do|qu[eé] puedes hacer|ayuda)\??$/i.test(said)) {
     openHub();
     return { ok: true, kind: 'action', text: 'Here’s everything I can do ✨ Click any card to try it! (Press ⌃⌥Space anytime to open it.)' };
+  }
+  // "Play ping pong", "let's play tic tac toe": Bbokari's own games.
+  const game = said.match(/^(?:let'?s\s+|can we\s+|wanna\s+)?play\s+(?:a game of\s+)?(ping ?pong|tic[- ]?tac[- ]?toe|rock paper scissors|rps|cups|bubbles)(?:\s+with me)?[.!?]*$/i);
+  if (game) {
+    const name = { pingpong: 'pingpong', tictactoe: 'tictactoe', rockpaperscissors: 'rps', rps: 'rps', cups: 'cups', bubbles: 'bubbles' }[game[1].toLowerCase().replace(/[\s-]/g, '')];
+    command('game', { name });
+    return { ok: true, kind: 'action', text: 'Let’s play! 🎮' };
+  }
+  // 🎵 "Play Blinding Lights", "play my study playlist", "pause", "next song", "louder", "what's playing?"
+  const song = spotify.parsePlay(said);
+  if (song) {
+    if (process.platform !== 'darwin') return { ok: true, kind: 'action', text: 'Spotify control only works on a Mac.' };
+    if (!selection.hasPermission(true)) return { ok: true, kind: 'action', text: selection.explain('not allowed') };
+    send('typing', { on: true });
+    spotify
+      .play(song)
+      .then((r) => send('say', { text: r.text, error: !r.ok }))
+      .catch((err) => send('say', { text: `Spotify didn’t work: ${selection.explain(err)}`, error: true }))
+      .finally(() => send('typing', { on: false }));
+    return { ok: true, kind: 'action', text: song.kind === 'resume' ? '🎵 Okay!' : `🎵 Okay! Typing “${song.query}” in Spotify…` };
+  }
+  const music = process.platform === 'darwin' ? spotify.parseControl(said) : null;
+  if (music) {
+    const r = await spotify.control(music).catch(() => null);
+    if (r) return { ok: r.ok, kind: 'skill', text: r.text };
   }
   // "What did my science teacher say about the atom model?": searches Classroom, private comments, your doc, your journal.
   if (looksLikeFeedback(said)) {

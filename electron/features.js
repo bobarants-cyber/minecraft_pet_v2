@@ -48,6 +48,7 @@ export const FEATURES = [
   { id: 'grades', cat: 'messages', emoji: '🎓', title: 'My grades', desc: 'When a teacher grades your exam, Bbokari tells you who, which class, which exam and your grade.', example: 'what grades did I get?', ask: 'what grades did I get?', isNew: true, keys: 'grade exam test score results nota calificacion corrected returned' },
   { id: 'junk', cat: 'messages', emoji: '🧹', title: 'Clean my inbox', desc: 'Finds ads and newsletters and clears them.', example: 'clean up my inbox', ask: 'clean up my inbox', keys: 'gmail junk spam' },
   // Mac helper
+  { id: 'spotify', cat: 'mac', emoji: '🎵', title: 'Play music on Spotify', desc: 'Opens Spotify, types the song or playlist like a person and plays it. Also pause, next, louder, what’s playing.', example: 'play Blinding Lights', prefill: 'play ', isNew: true, keys: 'music song playlist spotify pause next skip volume' },
   { id: 'open', cat: 'mac', emoji: '🚀', title: 'Open anything', desc: 'Apps, websites, files and folders.', example: 'open my math project file', prefill: 'open ', keys: 'app website file folder launch' },
   { id: 'class', cat: 'mac', emoji: '🎒', title: 'Open my class', desc: 'Opens your class link (and 2 minutes before class by itself).', example: 'open my math class', prefill: 'open my  class', keys: 'meet zoom link schedule' },
   { id: 'hide', cat: 'mac', emoji: '🙈', title: 'Hide Bbokari', desc: 'He disappears but keeps working (⌃⌥P).', example: '⌃⌥P', run: 'hide', keys: 'invisible' },
