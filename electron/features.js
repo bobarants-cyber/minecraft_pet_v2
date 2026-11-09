@@ -44,6 +44,7 @@ export const FEATURES = [
   { id: 'voice', cat: 'you', emoji: '🗣', title: '“Hey Bbokari” voice', desc: 'Talk instead of typing.', example: 'menu → Hey Bbokari', run: 'voice', keys: 'microphone speak talk' },
   // Messages
   { id: 'catchup', cat: 'messages', emoji: '📬', title: 'Catch me up', desc: 'New emails, Chat messages and Classroom posts, summed up with quick replies.', example: 'catch me up', ask: 'catch me up', keys: 'gmail email inbox google chat' },
+  { id: 'feedback', cat: 'school', emoji: '🔍', title: 'What did my teacher say?', desc: 'Finds the right homework from your details, then your teacher’s private comments, comments in your doc, and your class journal.', example: 'what did my science teacher say about the atom model?', prefill: 'what did my  teacher say about ', isNew: true, keys: 'feedback comments corrections private comment journal doc teacher said' },
   { id: 'grades', cat: 'messages', emoji: '🎓', title: 'My grades', desc: 'When a teacher grades your exam, Bbokari tells you who, which class, which exam and your grade.', example: 'what grades did I get?', ask: 'what grades did I get?', isNew: true, keys: 'grade exam test score results nota calificacion corrected returned' },
   { id: 'junk', cat: 'messages', emoji: '🧹', title: 'Clean my inbox', desc: 'Finds ads and newsletters and clears them.', example: 'clean up my inbox', ask: 'clean up my inbox', keys: 'gmail junk spam' },
   // Mac helper

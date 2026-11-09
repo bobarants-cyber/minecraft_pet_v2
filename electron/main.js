@@ -33,6 +33,7 @@ import { Diary } from './diary.js';
 import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
 import { findNotes, latestNotes, makeCards, parseQuiz } from './flashcards.js';
 import { FEATURES, hubData } from './features.js';
+import { findFeedback, looksLikeFeedback } from './feedback.js';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
 const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
@@ -87,6 +88,7 @@ let notes = null;
 let skills = null;
 let memory = null; // 🧠 facts you asked Bbokari to remember
 let diary = null; // 📓 time per activity and wins, per day
+let lastFeedbackLink = null; // the assignment or journal from "what did my teacher say…" (for "open it")
 const proof = { last: 0, lastHash: '', busy: false };
 const PROOF_EVERY_MS = 90_000;
 const audioSwitch = new AudioSwitcher({
@@ -885,6 +887,21 @@ async function newFeatures(said) {
   if (/^(?:what (?:else )?can you do|help|show me (?:what you can do|everything)|features|what are your features|everything you can do|qu[eé] puedes hacer|ayuda)\??$/i.test(said)) {
     openHub();
     return { ok: true, kind: 'action', text: 'Here’s everything I can do ✨ Click any card to try it! (Press ⌃⌥Space anytime to open it.)' };
+  }
+  // "What did my science teacher say about the atom model?": searches Classroom, private comments, your doc, your journal.
+  if (looksLikeFeedback(said)) {
+    if (!google?.connected) return { ok: true, kind: 'skill', text: notConnectedText() };
+    try {
+      const found = await findFeedback(gapi, said);
+      if (found.link) lastFeedbackLink = found.link;
+      return { ok: true, kind: 'skill', text: `${found.text}${found.link ? '\n(Say “open it” to see it.)' : ''}` };
+    } catch (err) {
+      return { ok: true, kind: 'skill', text: `I couldn’t look that up: ${inboxProblem('Google', err)}` };
+    }
+  }
+  if (lastFeedbackLink && /^(?:open it|open that|show me|ábrelo|abrelo)\.?$/i.test(said)) {
+    shell.openExternal(lastFeedbackLink);
+    return { ok: true, kind: 'action', text: 'Opening it! 📂' };
   }
   if (/\b(?:my grades?|what grades?|which grades?|what did i get on|did i get (?:my )?(?:\w+ )?(?:exam|test|quiz|grade)s? back|exam results?|test results?|my results|qu[eé] nota|mis notas|mis calificaciones)\b/i.test(said) && said.length < 90) {
     return { ok: true, kind: 'skill', text: await gradesReply() };

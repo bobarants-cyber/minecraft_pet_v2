@@ -19,6 +19,7 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
   'https://www.googleapis.com/auth/classroom.announcements.readonly',
   'https://www.googleapis.com/auth/classroom.rosters.readonly', // teachers' names, for "Ms. Lopez graded your exam"
+  'https://www.googleapis.com/auth/drive.readonly', // read teachers' comments in your docs and class journal (never changes files)
 ];
 
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

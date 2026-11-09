@@ -22,6 +22,7 @@ New in the big update:
 - 🧠 **Memory**: “remember that my math teacher is Ms. Lopez”, “what do you remember”, “forget 2”.
 - 🔁 **Repeating reminders**: “remind me every Monday and Wednesday at 4pm to practice piano”, “on weekdays at 7am…”.
 - 🎓 **Grades**: when a teacher returns graded work in Classroom, or emails that they corrected your exam, Bbokari tells you who corrected it, which class, which exam and your grade (and dances for good ones). Ask “what grades did I get?” anytime.
+- 🔍 **What did my teacher say?**: “what did my science teacher say about the atom model?” finds the matching assignment (not just the newest), then the teacher’s private comments (from Classroom’s emails), comments in the doc you handed in, and your class journal in Drive. “Open it” opens it.
 - 📓 **How was my day?**: time spent writing, reading, on videos and games today, plus your wins (focus sessions, to-dos, plans).
 
 ## Bbokari as a Mac app 🐥
