@@ -2186,6 +2186,11 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && settings.autoSwitchAudio) setTimeout(() => audioSwitch.normalize(), 2500);
   globalShortcut.register('Control+Alt+P', () => (settings.cursorMode ? setCursorMode(false) : applySettings({ hidden: !settings.hidden })));
   if (settings.cursorMode) win.webContents.once('did-finish-load', () => setTimeout(startCursor, 1500));
+  // ⌃⌥Q quits Bbokari right away (the cursor helper is stopped and the normal arrow comes back).
+  globalShortcut.register('Control+Alt+Q', () => {
+    showRealArrow();
+    setTimeout(() => app.quit(), 300);
+  });
   if (!globalShortcut.register('Control+Alt+Space', openHub)) console.log('Shortcut ⌃⌥Space is taken by another app.');
   // Tell you about the big update once.
   if (settings.seenUpdate !== 'hub-1') {
