@@ -91,7 +91,8 @@ function scaleRecipe(text) {
   const to = Number(m[2]);
   if (!from || !to) return null;
   const k = new Frac(to, from);
-  const items = m[3].split(/\s*(?:,|;|\n|\band\b)\s*/).map(splitItem).filter(Boolean);
+  // "1 1/2 cups rice" or "rice 1 1/2 cups" / "rice: 1 1/2 cups".
+  const items = m[3].split(/\s*(?:,|;|\n|\band\b)\s*/).map((x) => parseIngredient(x) ?? splitItem(x)).filter(Boolean);
   if (!items.length) return null;
   const lines = [`🧮 Scale factor = ${to} ÷ ${from} = ${fmt(k)}${k.d !== 1 || k.n !== to ? '' : ''}`];
   const mixed = items.some(({ qty }) => qty.d !== 1 && Math.abs(qty.n) > qty.d);

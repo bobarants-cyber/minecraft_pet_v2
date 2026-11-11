@@ -234,6 +234,7 @@ body.asleep{--sky-top:#0d1030;--sky-bot:#2a2558;--hill:#24452e;--hill-dark:#1c38
 <video id="floatVideo" muted loop playsinline webkit-playsinline preload="auto"></video>
 <script type="application/octet-stream" id="mp4">__MP4__</script>
 <script type="application/octet-stream" id="glb">__GLB__</script>
+<script>__BRAIN__</script>
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
@@ -847,14 +848,26 @@ function addMsg(text, who) { const m = document.createElement('div'); m.classNam
 $('chatForm').onsubmit = async (e) => {
   e.preventDefault();
   const text = $('chatInput').value.trim();
-  if (!text || chatCtl || !(sample || nativeChat)) return;
+  if (!text || chatCtl) return;
   $('chatInput').value = '';
   addMsg(text, 'me');
+  // Bbokari's skills first (reminders, planner, flashcards, recipe math, memory, Spotify…), then the AI.
+  const skill = await window.BbokariBrain?.handle(text).catch(() => null);
+  if (skill) {
+    const m = addMsg(skill.text, 'pet');
+    m.style.whiteSpace = 'pre-line';
+    if (skill.quiz) showQuiz(skill.quiz);
+    if (skill.open) { if (NATIVE) NATIVE.postMessage({ cmd: 'open', url: skill.open, fallback: skill.fallback }); else window.open(skill.fallback, '_blank'); }
+    say(skill.text.split('\n')[0].slice(0, 80), 5); bump('love', 1);
+    if (!S.asleep) play('wave', 1);
+    return;
+  }
+  if (!(sample || nativeChat)) { addMsg('I can’t chat here, but try “help” to see what I can do! 🐥', 'pet'); return; }
   turns.push({ role: 'user', content: text });
   const out = addMsg('…', 'pet');
   if (!S.asleep) play('think', 30);
   chatCtl = new AbortController();
-  const rules = RULES.replace('{LOVE}', Math.round(S.love)).replace('{FOOD}', Math.round(S.food)).replace('{ENERGY}', Math.round(S.energy));
+  const rules = RULES.replace('{LOVE}', Math.round(S.love)).replace('{FOOD}', Math.round(S.food)).replace('{ENERGY}', Math.round(S.energy)) + (window.BbokariBrain ? ' ' + window.BbokariBrain.memoryContext() : '');
   const msgs = [{ role: 'user', content: rules + '\n\n(Conversation starts now.)' }, { role: 'assistant', content: 'Bbok! Okay! 🐥' }, ...turns.slice(-12)];
   try {
     let r;
@@ -869,7 +882,7 @@ $('chatForm').onsubmit = async (e) => {
     if (!S.asleep) play('wave', 1);
   } catch (err) {
     turns.pop();
-    if (err?.code === 'not_granted' || err?.code === 'sampling_disabled') { out.textContent = 'Chat isn’t turned on here, but we can still play! 🐥'; $('bChat').hidden = true; }
+    if (err?.code === 'not_granted' || err?.code === 'sampling_disabled') { out.textContent = 'Chatting isn’t turned on here, but my skills still work! Say “help” 🐥'; }
     else if (err?.code === 'rate_limited') out.textContent = 'Bbok… I need a little break from talking. Try again in a bit! 😮‍💨';
     else if (err?.name !== 'AbortError') out.textContent = 'Oops, I got confused 😵 Try again?';
     if (!S.asleep) play('idle', 0);
@@ -1108,6 +1121,55 @@ function askNative(rules, history) {
   });
 }
 
+/* ---------------- Bbokari's skills on the phone (phone/brain.js) ---------------- */
+// One-off questions to Apple's on-device AI (flashcards, translations).
+const pendingAI = {};
+window.nativeAIReply = (id, text) => { pendingAI[id]?.(text || null); delete pendingAI[id]; };
+function askAIOnce(rules, prompt) {
+  if (NATIVE && CAPS.chat) return new Promise((res) => { const id = ++chatSeq; pendingAI[id] = res; NATIVE.postMessage({ cmd: 'ai', id, rules, prompt }); setTimeout(() => { if (pendingAI[id]) { delete pendingAI[id]; res(null); } }, 60000); });
+  if (sample) return sample([{ role: 'user', content: `${rules}\n\n${prompt}` }], { cache: false, modelTier: 'quick' }).then((r) => r.text).catch(() => null);
+  return Promise.resolve(null);
+}
+window.BbokariBrain?.setup({
+  native: NATIVE ? (m) => NATIVE.postMessage(m) : null,
+  askAI: askAIOnce,
+  aiReady: () => !!((NATIVE && CAPS.chat) || sample),
+  startFocus: (minutes) => NATIVE?.postMessage({ cmd: 'focusStart', minutes }),
+});
+/** 🃏 Flashcards in the chat: question → Show answer → 👍 Got it / 🔁 Again. */
+function showQuiz({ title, cards }) {
+  const deck = cards.map((c) => ({ ...c }));
+  const total = deck.length;
+  let right = 0;
+  const box = document.createElement('div');
+  box.className = 'msg pet quiz';
+  box.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  $('chatLog').appendChild(box);
+  const btn = (label, fn, main) => { const b = document.createElement('button'); b.textContent = label; b.className = 'btn' + (main ? ' main' : ''); b.style.cssText = 'font:inherit;padding:8px 12px;border-radius:12px;border:2px solid var(--line);background:' + (main ? '#ffd23f' : 'transparent') + ';color:inherit'; b.onclick = fn; return b; };
+  const next = () => {
+    box.replaceChildren();
+    const head = document.createElement('b'); head.textContent = `🃏 ${title} · ${deck.length ? `${deck.length} left` : 'done!'}`; box.appendChild(head);
+    if (!deck.length) {
+      const pct = Math.round((right / total) * 100);
+      const t = document.createElement('div'); t.textContent = `${pct >= 80 ? '🎉 Amazing!' : pct >= 50 ? '💪 Good job!' : '🌱 Nice try!'} You knew ${right} of ${total} on the first try.`; box.appendChild(t);
+      box.appendChild(btn('🔁 Again', () => showQuiz({ title, cards }), true));
+      if (pct >= 50) { bump('love', 5); buzz('success'); if (!S.asleep) play('dance', 2); }
+      $('chatLog').scrollTop = 1e9; return;
+    }
+    const card = deck[0];
+    const q = document.createElement('div'); q.style.fontWeight = '700'; q.textContent = card.q; box.appendChild(q);
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+    row.appendChild(btn('👀 Show answer', () => {
+      const a = document.createElement('div'); a.style.cssText = 'background:#fff3c4;color:#3b2f14;border-radius:10px;padding:6px 10px'; a.textContent = card.a; box.insertBefore(a, row);
+      row.replaceChildren(btn('👍 Got it', () => { if (!card.missed) right++; deck.shift(); next(); }, true), btn('🔁 Again', () => { card.missed = true; deck.push(deck.shift()); next(); }));
+      $('chatLog').scrollTop = 1e9;
+    }, true));
+    box.appendChild(row);
+    $('chatLog').scrollTop = 1e9;
+  };
+  next();
+}
+
 /* ---------------- more games ---------------- */
 const SNACKS = ['🍓', '🍪', '🍉', '🍙', '🍦', '🌽', '🍩', '🧁'];
 function gameOver(score, stars, unit, again, line) {
@@ -1233,7 +1295,7 @@ document.querySelectorAll('.tab').forEach((t) => (t.onclick = () => {
 }));
 $('bShare').onclick = sharePhoto;
 $('bOutfit').onclick = () => { renderOutfits(); showSheet('sheetOutfit'); };
-$('bChat').onclick = () => { showSheet('sheetChat'); if (!$('chatLog').children.length) addMsg('Hi! Talk to me! 🐥💬', 'pet'); };
+$('bChat').onclick = () => { showSheet('sheetChat'); if (!$('chatLog').children.length) addMsg('Hi! Talk to me! 🐥💬 I can plan homework, quiz you, set reminders and more. Say “help”!', 'pet'); };
 /* floating window: a looping video of Bbokari, shown picture-in-picture so it stays above other apps */
 const fv = $('floatVideo');
 let fvReady = false;
@@ -1316,7 +1378,7 @@ loadModel();
 addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => document.hidden && save());
 
-if (nativeChat) $('bChat').hidden = false;
+if (nativeChat || window.BbokariBrain) $('bChat').hidden = false;
 applyRoom(); renderSound(); renderChips();
 window.claude?.use?.('sample').then((s) => { if (s) { sample = s; $('bChat').hidden = false; } }).catch(() => {});
 </script>

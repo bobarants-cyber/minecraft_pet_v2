@@ -32,6 +32,29 @@ struct ContentView: View {
                         let text = await ChatBrain.reply(rules: rules, history: history)
                         web.call("nativeChatReply", [id, text ?? ""])
                     }
+                case "ai":
+                    // One-off questions to the on-device AI (flashcards, translations).
+                    let id = message["id"] as? Int ?? 0
+                    let rules = message["rules"] as? String ?? ""
+                    let prompt = message["prompt"] as? String ?? ""
+                    Task {
+                        let text = await ChatBrain.once(rules: rules, prompt: prompt)
+                        web.call("nativeAIReply", [id, text ?? ""])
+                    }
+                case "notify":
+                    // Reminders and timers → iPhone notifications (repeating ones too).
+                    if let id = message["id"] as? String, let at = message["at"] as? Double {
+                        Notifier.shared.schedule(id: id, at: at, title: message["title"] as? String ?? "⏰ Bbokari", body: message["body"] as? String ?? "", repeatDays: message["repeat"] as? [Int])
+                    }
+                case "unnotify":
+                    Notifier.shared.cancel(ids: message["ids"] as? [String] ?? [])
+                case "open":
+                    if let link = message["url"] as? String { Opener.open(link, fallback: message["fallback"] as? String) }
+                case "focusStart":
+                    let minutes = message["minutes"] as? Int ?? 25
+                    focus.start(minutes: minutes)
+                case "focusStop":
+                    focus.stop()
                 default: break
                 }
             }
