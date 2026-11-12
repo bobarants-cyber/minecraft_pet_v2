@@ -204,18 +204,40 @@ async function needsAccount(said) {
 }
 
 // ---------- flashcards with Apple's on-device AI ----------
-async function makeCards(source, topic) {
-  if (!env.askAI) return null;
-  const rules = 'You make study flashcards for a student. Reply with JSON only, no other words: {"cards":[{"q":"short question","a":"short correct answer"}]}. Make 6 cards. Each question has one correct answer of 1 to 12 words. No made-up facts.';
-  const prompt = source ? `Make the questions ONLY from these notes:\n"""\n${source.slice(0, 4000)}\n"""` : `The topic: ${topic}. Use facts a middle school student learns in class.`;
-  const out = await env.askAI(rules, prompt);
-  const json = String(out ?? '').match(/\{[\s\S]*\}/)?.[0];
-  try {
-    const cards = (JSON.parse(json).cards ?? []).map((c) => ({ q: String(c.q ?? c.question ?? '').trim(), a: String(c.a ?? c.answer ?? '').trim() })).filter((c) => c.q && c.a);
-    return cards.length ? cards.slice(0, 8) : null;
-  } catch {
-    return null;
+/** Flashcards out of whatever the AI wrote: "Q: … / A: …" lines, JSON (any key names), or "question? – answer". */
+export function cardsFrom(out) {
+  const text = String(out ?? '').replace(/\*\*|__|`/g, '');
+  const tidy = (x) => String(x ?? '').replace(/^["“\s]+|["”\s]+$/g, '').trim();
+  let cards = [];
+  // 1. Q: … / A: …
+  for (const m of text.matchAll(/(?:^|\n)\s*(?:[-•*]\s*)?(?:\d+[.)]\s*)?(?:Q(?:uestion)?|Front|Pregunta)\s*\d*\s*[:.)\-–]\s*(.+?)\s*\n+\s*(?:[-•*]\s*)?(?:A(?:nswer)?|Back|Respuesta)\s*\d*\s*[:.)\-–]\s*(.+)/gi)) cards.push({ q: tidy(m[1]), a: tidy(m[2]) });
+  // 2. JSON, with any of the usual key names.
+  if (!cards.length) {
+    const json = text.match(/[[{][\s\S]*[\]}]/)?.[0];
+    try {
+      const data = JSON.parse(json);
+      const list = Array.isArray(data) ? data : data.cards ?? data.flashcards ?? Object.values(data).find(Array.isArray) ?? [];
+      cards = list.map((c) => ({ q: tidy(c.q ?? c.question ?? c.front ?? c.term ?? c.prompt), a: tidy(c.a ?? c.answer ?? c.back ?? c.definition ?? c.response) }));
+    } catch {}
   }
+  // 3. "What is 1/2 + 1/4? – 3/4"
+  if (!cards.length) for (const m of text.matchAll(/^\s*(?:[-•*]\s*)?(?:\d+[.)]\s*)?(.+?\?)\s*[-–—:=]+\s*(.+)$/gm)) cards.push({ q: tidy(m[1]), a: tidy(m[2]) });
+  return cards.filter((c) => c.q.length > 3 && c.a).slice(0, 8);
+}
+
+/** { cards } or { error: 'noanswer' | 'unreadable' }. Asks twice if the first answer can't be read. */
+async function makeCards(source, topic) {
+  if (!env.askAI) return { error: 'noanswer' };
+  const rules = 'You make study flashcards for a middle school student. Write exactly 6 flashcards and nothing else, in this format:\nQ: a short question\nA: the short correct answer\n\nQ: ...\nA: ...\nEach answer is 1 to 12 words. Only true facts.';
+  const prompt = source ? `Make the flashcards ONLY from these notes:\n---\n${source.slice(0, 4000)}\n---` : `Make the flashcards about: ${topic}`;
+  let answered = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const out = await env.askAI(rules, attempt ? `${prompt}\n(Remember: only lines starting with "Q:" and "A:".)` : prompt);
+    if (out) answered = true;
+    const cards = cardsFrom(out);
+    if (cards.length) return { cards };
+  }
+  return { error: answered ? 'unreadable' : 'noanswer' };
 }
 
 const HELP = `Here’s what I can do on your phone ✨
@@ -329,8 +351,10 @@ export const BbokariBrain = {
         topic = `${t.course}: ${t.title}. ${t.text ?? ''}`.slice(0, 600);
         title = t.title;
       }
-      const cards = await makeCards(quiz.text, topic);
-      if (!cards) return { text: 'I couldn’t make good flashcards from that 😕 Try a clearer topic, like “quiz me on fractions”.' };
+      const made = await makeCards(quiz.text, topic);
+      if (made.error === 'noanswer') return { text: 'My on-device brain didn’t answer 😕 Check Settings → Apple Intelligence & Siri: it must be on and finished downloading. Then try again!' };
+      if (made.error) return { text: 'My brain answered in a way I couldn’t turn into cards 😕 Try once more, it often works the second time!' };
+      const { cards } = made;
       return { text: `🃏 ${cards.length} flashcards on “${title.slice(0, 40)}”!`, quiz: { title, cards } };
     }
 
