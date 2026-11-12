@@ -1130,7 +1130,23 @@ function askAIOnce(rules, prompt) {
   if (sample) return sample([{ role: 'user', content: `${rules}\n\n${prompt}` }], { cache: false, modelTier: 'quick' }).then((r) => r.text).catch(() => null);
   return Promise.resolve(null);
 }
+// Google on the phone: the app signs in and makes the requests (the page never sees a token).
+let googleOn = !!CAPS.googleConnected;
+const pendingGoogle = {};
+let googleDone = null;
+window.nativeGoogleApi = (id, status, body) => { pendingGoogle[id]?.({ status, body }); delete pendingGoogle[id]; };
+window.nativeGoogle = (r) => { if (r?.ok) googleOn = true; googleDone?.(r); googleDone = null; };
+function googleApi(url) {
+  return new Promise((res) => { const id = ++chatSeq; pendingGoogle[id] = res; NATIVE.postMessage({ cmd: 'googleApi', id, url }); setTimeout(() => { if (pendingGoogle[id]) { delete pendingGoogle[id]; res({ status: 504, body: '{"error":"timeout"}' }); } }, 30000); });
+}
+function googleConnect(clientId) {
+  return new Promise((res) => { googleDone = res; NATIVE.postMessage({ cmd: 'googleConnect', clientId }); setTimeout(() => { if (googleDone === res) { googleDone = null; res({ ok: false, error: 'it took too long' }); } }, 300000); });
+}
 window.BbokariBrain?.setup({
+  googleApi: NATIVE && CAPS.google ? googleApi : null,
+  googleConnect: NATIVE && CAPS.google ? googleConnect : null,
+  googleConnected: () => googleOn,
+  googleSignedOut: () => { googleOn = false; },
   native: NATIVE ? (m) => NATIVE.postMessage(m) : null,
   askAI: askAIOnce,
   aiReady: () => !!((NATIVE && CAPS.chat) || sample),

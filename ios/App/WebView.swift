@@ -32,7 +32,7 @@ struct PocketWebView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []
         config.userContentController.add(context.coordinator, name: "bbokari")
         // Tell the page what the app can do (before the page's own code runs).
-        let caps = "window.__nativeCaps = { chat: \(ChatBrain.available), share: true };"
+        let caps = "window.__nativeCaps = { chat: \(ChatBrain.available), share: true, google: true, googleConnected: \(GoogleLink.shared.connected) };"
         config.userContentController.addUserScript(WKUserScript(source: caps, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false

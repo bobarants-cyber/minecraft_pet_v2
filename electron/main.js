@@ -35,6 +35,9 @@ import { findNotes, latestNotes, makeCards, parseQuiz } from './flashcards.js';
 import { FEATURES, hubData } from './features.js';
 import { findFeedback, looksLikeFeedback } from './feedback.js';
 import * as spotify from './spotify.js';
+import http from 'node:http';
+import os from 'node:os';
+import crypto from 'node:crypto';
 
 /** Keyboard shortcuts for the highlighted-text commands (⌃⌥S, ⌃⌥H, ⌃⌥B). */
 const REWRITE_KEYS = { summarize: 'Control+Alt+S', humanize: 'Control+Alt+H', improve: 'Control+Alt+B' };
@@ -175,6 +178,89 @@ const send = (channel, payload) => {
   if (channel === 'notes') cursorState({ notes: !!(payload?.active || payload?.writing) });
 };
 
+// ---------- 📱 Phone link: Pocket Bbokari on your iPhone asks this Bbokari (same Wi-Fi, with a 6-digit code) ----------
+// Off until you turn it on in the menu bar. For what the phone can't do itself when it isn't signed in to Google.
+const PHONE_PORT = 4520;
+let phoneServer = null;
+let phoneBadTries = 0;
+let phoneLockedUntil = 0;
+function localIP() {
+  for (const list of Object.values(os.networkInterfaces())) for (const a of list ?? []) if (a.family === 'IPv4' && !a.internal) return a.address;
+  return '';
+}
+const phoneSentence = () => `link my mac ${localIP() || os.hostname()} ${settings.phoneCode}`;
+function newPhoneCode() {
+  applySettings({ phoneCode: String(crypto.randomInt(100000, 1000000)) });
+}
+function syncPhoneLink() {
+  if (settings.phoneLink && !phoneServer) {
+    if (!settings.phoneCode) newPhoneCode();
+    phoneServer = http.createServer(async (req, res) => {
+      const reply = (status, data) => {
+        res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Bbokari-Code', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' });
+        res.end(JSON.stringify(data));
+      };
+      if (req.method === 'OPTIONS') return reply(204, {});
+      // The code must match; after 10 wrong codes, everyone waits 10 minutes.
+      if (Date.now() < phoneLockedUntil) return reply(429, { error: 'too many tries' });
+      const code = String(req.headers['x-bbokari-code'] ?? '');
+      if (!settings.phoneCode || code.length !== settings.phoneCode.length || !crypto.timingSafeEqual(Buffer.from(code), Buffer.from(settings.phoneCode))) {
+        if (++phoneBadTries >= 10) {
+          phoneLockedUntil = Date.now() + 10 * 60_000;
+          phoneBadTries = 0;
+        }
+        return reply(401, { error: 'wrong code' });
+      }
+      phoneBadTries = 0;
+      const url = new URL(req.url, 'http://x');
+      try {
+        if (url.pathname === '/ping') return reply(200, { ok: true, name: os.hostname().replace(/\.local$/, '') });
+        if (url.pathname === '/next-test') {
+          const t = await nextTest('');
+          return reply(200, t ? { title: t.title, course: t.course, text: t.text ?? '', due: t.due } : {});
+        }
+        if (url.pathname === '/ask' && req.method === 'POST') {
+          let body = '';
+          for await (const chunk of req) {
+            body += chunk;
+            if (body.length > 20_000) return reply(413, { error: 'too long' });
+          }
+          const text = String(JSON.parse(body || '{}').text ?? '').slice(0, 6000);
+          const ask = ipcMain._invokeHandlers?.get('assistant:ask');
+          const r = ask ? await ask({}, { text, history: [], mob: settings.mob }) : null;
+          return reply(200, { text: r?.text ?? '' });
+        }
+        return reply(404, { error: 'not found' });
+      } catch (err) {
+        return reply(500, { error: String(err.message).slice(0, 200) });
+      }
+    });
+    phoneServer.on('error', (err) => {
+      phoneServer = null;
+      send('say', { text: err.code === 'EADDRINUSE' ? `Phone link can’t start: something else is using port ${PHONE_PORT}.` : `Phone link can’t start: ${err.message}`, error: true });
+    });
+    phoneServer.listen(PHONE_PORT, '0.0.0.0');
+  } else if (!settings.phoneLink && phoneServer) {
+    phoneServer.close();
+    phoneServer = null;
+  }
+}
+function phoneMenu() {
+  if (!settings.phoneLink) {
+    return [
+      { label: 'Use Bbokari’s Mac features from your iPhone (same Wi-Fi)', enabled: false },
+      { label: 'Turn on', click: () => (applySettings({ phoneLink: true }), send('say', { text: `📱 Phone link is on! On your phone, tell Bbokari: “${phoneSentence()}”` })) },
+    ];
+  }
+  return [
+    { label: 'On your phone, tell Bbokari:', enabled: false },
+    { label: `   “${phoneSentence()}”  (click to copy)`, click: () => clipboard.writeText(phoneSentence()) },
+    { type: 'separator' },
+    { label: 'New code (unlinks your phone)', click: () => newPhoneCode() },
+    { label: 'Turn off', click: () => applySettings({ phoneLink: false }) },
+  ];
+}
+
 // ---------- 🖱 "Be my cursor": Bbokari shrinks into a tiny Bbokari pointer that follows your mouse ----------
 // macOS doesn't let apps replace the real pointer everywhere, so he's a tiny see-through window that sits right on
 // the real arrow (the arrow stays inside his body, so clicking works exactly as normal). He keeps working.
@@ -304,6 +390,7 @@ function applySettings(patch) {
   if ('openAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
   if ('reactToActivity' in patch) syncActivity();
   if ('cursorMode' in patch) (settings.cursorMode ? startCursor() : stopCursor());
+  if ('phoneLink' in patch) syncPhoneLink();
   send('settings', settings);
   buildTray();
 }
@@ -343,6 +430,7 @@ function buildTray() {
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
     { label: '🎨 Canva', submenu: canvaMenu() },
+    { label: `📱 Phone link${settings.phoneLink ? ' (on)' : ''}`, submenu: phoneMenu() },
     { label: '🖼 Presentation maker', submenu: presentationMenu() },
     { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
     {
@@ -2156,6 +2244,7 @@ app.whenReady().then(() => {
   inboxState = new inbox.InboxState(path.join(app.getPath('userData'), 'inbox-state.json'));
   setTimeout(() => checkInbox(), 20_000);
   setInterval(() => checkInbox(), 3 * 60_000);
+  syncPhoneLink();
   memory = new Memory(path.join(app.getPath('userData'), 'memory.json'));
   diary = new Diary(path.join(app.getPath('userData'), 'diary.json'));
   setInterval(() => (diary.activity(activity), diary.save()), 5 * 60_000);

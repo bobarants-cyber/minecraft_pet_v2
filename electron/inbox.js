@@ -268,7 +268,9 @@ export function gradeText(g) {
 /** "Ms. Lopez corrected your Math exam “Unit 3 Test”: you got 18/20 (90%) 🏆" */
 export function gradeLine(g) {
   const who = g.teacher || 'Your teacher';
-  const what = `${g.course ? `${g.course} ` : ''}${g.exam ? `“${g.exam}”` : 'exam'}`;
+  // "EG Grade 7 Science - Samar El Hayek 26/27" → "Grade 7 Science".
+  const course = String(g.course ?? '').split(/\s+-\s+|-(?=[A-Z][a-z]+\s[A-Z])/)[0].replace(/^EG[-\s]+/i, '').trim();
+  const what = `${course ? `${course} ` : ''}${g.exam ? `“${g.exam}”` : 'exam'}`;
   const got = gradeText(g);
   if (!got) return `${who} corrected your ${what}! The grade isn’t in the message, so open it to see 👀`;
   const pct = g.letter ? { A: 95, B: 85, C: 75, D: 65, F: 40 }[g.letter[0]] : g.max ? (g.grade / g.max) * 100 : g.grade;

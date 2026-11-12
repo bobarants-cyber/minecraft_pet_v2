@@ -55,6 +55,27 @@ struct ContentView: View {
                     focus.start(minutes: minutes)
                 case "focusStop":
                     focus.stop()
+                case "googleConnect":
+                    // Sign in to Google on the phone (your own iOS client ID from Google Cloud).
+                    let id = (message["clientId"] as? String) ?? GoogleLink.shared.clientId ?? ""
+                    Task {
+                        do {
+                            let mail = try await GoogleLink.shared.connect(clientId: id)
+                            web.call("nativeGoogle", [["ok": true, "email": mail]])
+                        } catch {
+                            web.call("nativeGoogle", [["ok": false, "error": error.localizedDescription]])
+                        }
+                    }
+                case "googleDisconnect":
+                    GoogleLink.shared.disconnect()
+                case "googleApi":
+                    // The page asks for Google data; the app adds the sign-in (tokens never reach the page).
+                    let id = message["id"] as? Int ?? 0
+                    let url = message["url"] as? String ?? ""
+                    Task {
+                        let (status, body) = await GoogleLink.shared.api(url)
+                        web.call("nativeGoogleApi", [id, status, body])
+                    }
                 default: break
                 }
             }
