@@ -41,6 +41,7 @@ function playEffect(effect) {
   if (!effect) return;
   if (effect === 'confetti') toys.burst();
   else if (effect === 'sparkle') character.emote('sparkle', 0.5);
+  else if (effect === 'tada') character.trigger('tada', { then: 'idle' }, true);
   else if (effect.startsWith('weather:')) toys.weather(effect.slice(8));
 }
 host?.onEffect?.(({ effect }) => playEffect(effect));
@@ -220,7 +221,11 @@ host?.onReminder(({ text }) => chat.announce(text));
 host?.onRewrite((r) => chat.showRewrite(r));
 
 host?.onTyping(({ on }) => (on ? character.startTyping('type') : character.stopTyping()));
-host?.onSay(({ text, error }) => chat.say(text, { error }));
+host?.onSay(({ text, error }) => {
+  chat.say(text, { error });
+  // "I opened YouTube", "Done!", "Here's your…": a little ta-da.
+  if (!error && /\b(?:i(?:'|’)?ve opened|i opened|opening|opened|done!?|all set|here(?:'|’)s|ta-?da)\b/i.test(text)) character.trigger('tada', { then: 'idle' }, true);
+});
 host?.onInbox?.(({ items, intro }) => chat.showInbox(items, intro));
 host?.onInboxJunk?.((j) => chat.showJunk(j));
 host?.onInboxTodo?.((t) => chat.showTodo(t));

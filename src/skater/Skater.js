@@ -12,6 +12,7 @@ const ease = (t) => t * t * (3 - 2 * t);
 // ---------- The skateboard ----------
 // Strapped to his back: the deck's length runs up his back (slung diagonally), grip tape against him, wheels facing
 // out, and the top leaning back a little to clear his big head.
+const IDENTITY_Q = new THREE.Quaternion();
 const BACK_Q = new THREE.Quaternion()
   .setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.28)
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -0.45))
@@ -156,7 +157,7 @@ export class Skater extends Bbokari {
   constructor() {
     super(
       buildSculptRig({ name: 'skater', glb: skaterGlb, modelHeight: MODEL_HEIGHT, headStandIn: 0.52, eyes: false }),
-      { height: SKATER_HEIGHT, halfWidth: 0.42, emoteLift: 1.0, hand: [0.22, 0.0, 0.06], armScale: 0.35 },
+      { height: SKATER_HEIGHT, halfWidth: 0.42, emoteLift: 1.0, hand: [0.12, -0.2, 0.04], armScale: 1 },
     );
     this.outfitOffset = [0, -0.265, 0.02];
     this.outfitScale = 0.85;
@@ -166,6 +167,10 @@ export class Skater extends Bbokari {
     this.ride = 0; // 0 = board on his back, 1 = riding it
     this.speed = 0;
     this.wheelSpin = 0;
+    this.pushPhase = 0;
+    this.hemA = 0;
+    this.hemV = 0;
+    this.parts.ready.then(() => this.root.traverse((o) => { if (o.isBone && o.name === 'hem') this.hem = o; }));
   }
 
   /** The typing scene's glasses need bead eyes; his eyes are sculpted, so he skips them. */
@@ -177,44 +182,72 @@ export class Skater extends Bbokari {
     this.walkAmount = moving * (1 - this.ride);
     super.applyPose(p, breath);
     this.walkAmount = moving;
+    if (!this.parts.loaded) return;
     const j = this.joints;
     const r = ease(this.ride);
-    // Stand on the deck (wheels on the floor), with a little hop while getting on or off.
+    const [armR, armL] = this.parts.arms; // +x (his left) and −x (his right)
+    const [legR, legL] = this.parts.legs;
+
+    // His arms hang down at rest, so they can go all the way up (ta-da!, waving) instead of stopping at the shoulder.
+    const arm = (raise, swing, elbow, wrist) => [-swing * 0.8 - elbow * 0.25, 0, raise * 0.78 + wrist * 0.25];
+    let [rx, , rz] = arm(p.armRaiseR, p.armSwingR, p.elbowR, p.wristR);
+    let [lx, , lz] = arm(p.armRaiseL, p.armSwingL, p.elbowL, p.wristL);
+
+    // Riding: stand on the deck sideways, facing you, knees soft, and kick-push with the back foot now and then.
     j.hips.position.y += r * (BOARD.height - this.hover) + Math.sin(Math.PI * this.ride) * 0.12;
-    // Riding sideways, facing you, knees soft, leaning into the push.
     j.torso.rotation.y -= r * (this.root?.rotation.y ?? 0);
-    j.torso.rotation.z += r * clamp(-(this.speed ?? 0) * 0.12, -0.18, 0.18);
-    if (this.parts.loaded) {
-      const [legR, legL] = this.parts.legs;
-      legR.rotation.z += r * 0.12;
-      legL.rotation.z -= r * 0.12;
-    }
+    const v = this.speed ?? 0, dir = Math.sign(v) || 1;
+    const pushing = r > 0.9 && Math.abs(v) > 0.25;
+    const ph = this.pushPhase % (Math.PI * 2);
+    const stroke = pushing ? Math.max(0, Math.sin(ph)) : 0; // foot down and pushing back
+    const lift = pushing ? Math.max(0, -Math.sin(ph)) : 0; // foot coming back up to the board
+    // Lean into the way he's going, dipping over the front knee on each push.
+    j.torso.rotation.z += r * clamp(-v * 0.14, -0.22, 0.22) - dir * stroke * 0.06;
+    j.hips.position.y -= stroke * 0.035;
+    // Feet: front foot planted on the board, back foot reaches down behind and pushes, then swings back.
+    const front = dir > 0 ? legR : legL, back = dir > 0 ? legL : legR;
+    front.rotation.z += r * 0.13 * dir;
+    back.rotation.z += r * (-0.13 * dir) - dir * (stroke * 0.55 + lift * 0.15);
+    back.rotation.x += -lift * 0.35;
+    // Arms out a little for balance, swinging against the push.
+    rz += r * (0.55 + stroke * 0.2 * dir);
+    lz += r * (0.55 - stroke * 0.2 * dir);
+    armR.rotation.set(rx, 0, rz);
+    armL.rotation.set(lx, 0, -lz);
   }
 
   animate(dt) {
     super.animate(dt);
+    const p = this.pose;
     // Hop on when going somewhere, off again once it's been still for a moment.
     const go = this.walkAmount > 0.25 || Math.abs(this.speed ?? 0) > 0.15;
     this.stillFor = go ? 0 : (this.stillFor ?? 0) + dt;
     const target = go ? 1 : this.stillFor > 0.35 ? 0 : this.ride > 0.5 ? 1 : 0;
     this.ride = clamp(this.ride + Math.sign(target - this.ride) * dt * 2.6, 0, 1);
+    this.pushPhase += dt * (Math.abs(this.speed ?? 0) > 0.25 ? 5 : 0);
     const r = ease(this.ride);
     const b = this.board;
-    // On his back: upright, wheels out, slung a little diagonally. Riding: flat under his feet along the way he goes.
-    const back = { pos: new THREE.Vector3(0.02, 0.62, -0.3) };
-    const under = { pos: new THREE.Vector3(0, 0.006, 0.02), rot: new THREE.Euler(0, 0, 0) };
-    b.position.lerpVectors(back.pos, under.pos, r);
+    // On his back: upright, wheels out, slung diagonally. Riding: flat under his feet along the way he goes.
+    const back = new THREE.Vector3(0.02, 0.62, -0.3);
+    const under = new THREE.Vector3(0, 0.006, 0.02);
+    b.position.lerpVectors(back, under, r);
     b.position.y += Math.sin(Math.PI * this.ride) * 0.15; // it swings round in an arc
-    const qa = BACK_Q, qb = new THREE.Quaternion().setFromEuler(under.rot);
-    b.quaternion.slerpQuaternions(qa, qb, r);
-    // His big red tail is on his back now, so the board isn't carried there: it pops out under his feet when he
-    // rides and tucks away again when he stops.
-    b.position.copy(under.pos);
-    b.quaternion.identity();
-    b.scale.setScalar(Math.max(0.001, r));
-    b.visible = this.ride > 0.01;
+    b.quaternion.slerpQuaternions(BACK_Q, IDENTITY_Q, r);
     // Wheels roll with the distance travelled.
     this.wheelSpin += ((this.speed ?? 0) * dt) / BOARD.wheelR;
     for (const w of b.userData.wheels) w.rotation.z = -this.wheelSpin;
+
+    // The shirt moves like cloth: its lower half swings behind his movement on a spring, bounces a little, and lifts
+    // and flares out when he raises his arms.
+    if (this.hem && p) {
+      const goal = clamp(-(this.speed ?? 0) * 0.14, -0.22, 0.22) - (this.joints.torso.rotation.z ?? 0) * 0.5;
+      this.hemV += ((goal - this.hemA) * 70 - this.hemV * 7) * dt;
+      this.hemA += this.hemV * dt;
+      const up = clamp(Math.max(p.armRaiseL ?? 0, p.armRaiseR ?? 0) / 2.5, 0, 1);
+      this.hem.rotation.z = this.hemA;
+      this.hem.rotation.x = Math.sin(this.time * 1.3) * 0.015 - (this.lean ?? 0) * 0.2;
+      this.hem.position.y = 0.47 + up * 0.022;
+      this.hem.scale.set(1 + up * 0.06, 1 - up * 0.04, 1 + up * 0.03);
+    }
   }
 }

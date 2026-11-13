@@ -53,7 +53,7 @@ const scale = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const norm = (a) => scale(a, 1 / Math.hypot(...a));
-/** His pose, measured from the front screenshot: S = shoulder, W = wrist, n = which way the palm faces. */
+/** Arm layout: S = shoulder, W = wrist, n = which way the palm faces. */
 function arm(S, W, palm, thumb, hand) {
   const u = norm(sub(W, S));
   const hu = norm(hand ?? u);
@@ -61,8 +61,9 @@ function arm(S, W, palm, thumb, hand) {
   return { S, W, u, hu, n, thumb };
 }
 export const ARMS = [
-  arm([-0.105, 0.49, 0.0], [-0.29, 0.69, 0.06], [0.2, 1, 0.5], 1, [-1, 0.5, 0.25]), // his right arm: up and out, open palm up, fingers out
-  arm([0.115, 0.48, 0.0], [0.325, 0.47, 0.06], [0, 0.35, 1], 1, [1, -0.15, 0.15]), // his left arm: pointing out to the side
+  // Resting: arms hanging relaxed a little out from the body, palms facing in. (His ta-da pose is an animation.)
+  arm([-0.11, 0.49, 0.0], [-0.235, 0.325, 0.035], [1, 0.1, 0.25], 1, [-0.35, -1, 0.15]),
+  arm([0.115, 0.49, 0.0], [0.24, 0.325, 0.035], [-1, 0.1, 0.25], -1, [0.35, -1, 0.15]),
 ];
 /** Each boot (mirrored per side): its centre and how far the toe turns out. */
 export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
@@ -126,8 +127,9 @@ function parts(p) {
     const q = local(m, ec, -0.5, 0.35);
     // Leaf outline: wider at the bottom, rounded at the top.
     const shape = (s) => ellipsoid([q[0], q[1] - s * 0.01, q[2]], [0, 0.0, 0], [0.071 * (1 + s), 0.094 * (1 + s), 0.027]);
-    let ear = shape(0);
-    const hollow = ellipsoid([q[0], q[1] + 0.006, q[2] - 0.021], [0, 0, 0], [0.05, 0.071, 0.025]);
+    void shape;
+    let ear = smin(ellipsoid(q, [0.008, 0.014, 0], [0.074, 0.078, 0.027]), ellipsoid(q, [-0.008, -0.048, 0], [0.056, 0.05, 0.024]), 0.022);
+    const hollow = smin(ellipsoid(q, [0.008, 0.018, 0.021], [0.054, 0.058, 0.022]), ellipsoid(q, [-0.006, -0.032, 0.02], [0.038, 0.034, 0.02]), 0.016);
     d.earHollow = hollow;
     ear = ssub(ear, hollow, 0.01);
     d.ear = ear;
@@ -152,8 +154,8 @@ function parts(p) {
     d.mouthCut = Math.max(inside2d, faceZ(x, y) - 0.024 - z);
     d.lip = 1e3;
     const ty = cy - 0.036;
-    const t = ellipsoid(p, [cx, ty, faceZ(cx, ty) - 0.012], [0.024, 0.03, 0.016]);
-    d.tongue = ssub(t, len(x - cx, 0, z - faceZ(cx, ty) - 0.004) - 0.0022, 0.003);
+    const t = ellipsoid(p, [cx, ty + 0.008, faceZ(cx, ty) - 0.024], [0.026, 0.02, 0.02]);
+    d.tongue = ssub(t, len(x - cx, 0, z - faceZ(cx, ty) + 0.006) - 0.002, 0.003);
     let tooth = 1e3;
     for (const sg of [-1, 1]) tooth = Math.min(tooth, roundCone(p, [cx + sg * 0.021, cy + 0.006, fz - 0.006], [cx + sg * 0.02, cy - 0.01, fz - 0.003], 0.0075, 0.003));
     d.tooth = tooth;
@@ -224,9 +226,13 @@ function parts(p) {
       const v = norm(cross(A.n, A.hu));
       const q = [dot(sub(p, H), A.hu), dot(sub(p, H), v), dot(sub(p, H), A.n)];
       let h = ellipsoid(q, [0, 0, 0], [0.056, 0.054, 0.024]);
-      for (const [ang, l] of [[-0.6, 0.05], [-0.2, 0.064], [0.2, 0.064], [0.6, 0.054]]) {
+      for (const [ang, l] of [[-0.55, 0.05], [-0.18, 0.06], [0.18, 0.06], [0.55, 0.05]]) {
         const b = [0.036 * Math.cos(ang), 0.04 * Math.sin(ang), 0.002];
-        h = smin(h, roundCone(q, b, [b[0] + l * Math.cos(ang), b[1] + l * Math.sin(ang), 0.006], 0.016, 0.0135), 0.011);
+        const dir = [Math.cos(ang), Math.sin(ang), 0];
+        const mid = [b[0] + dir[0] * l * 0.55, b[1] + dir[1] * l * 0.55, 0.008];
+        const c = 0.75; // curl
+        const tip = [mid[0] + dir[0] * l * 0.5 * Math.cos(c), mid[1] + dir[1] * l * 0.5 * Math.cos(c), mid[2] + l * 0.5 * Math.sin(c)];
+        h = smin(h, smin(roundCone(q, b, mid, 0.016, 0.0145), roundCone(q, mid, tip, 0.0145, 0.0125), 0.006), 0.011);
       }
       const ta = A.thumb;
       h = smin(h, roundCone(q, [-0.008, 0.042 * Math.sign(ta), 0.004], [0.024, 0.086 * Math.sign(ta), 0.012], 0.016, 0.013), 0.01);
@@ -255,7 +261,7 @@ function parts(p) {
       const [ax, ay, az, ar] = pts[i], [bx, by, bz, br] = pts[i + 1];
       tail = smin(tail, roundCone(p, [ax, ay, az], [bx, by, bz], ar, br), 0.04);
     }
-    d.tail = tail;
+    d.tail = 1e3 + 0 * tail; // (no tail: his skateboard goes on his back)
   }
   return d;
 }

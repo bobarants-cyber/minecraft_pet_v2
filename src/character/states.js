@@ -324,6 +324,30 @@ export const STATES = {
     },
   },
 
+  // "Ta-da!": when it opens something or finishes a job. One arm flung up high, the other out to the side, fingers
+  // spread, with a little hop.
+  tada: {
+    priority: 2,
+    enter(c) {
+      c.face.setExpression(pick(['excited', 'joy', 'happy']));
+      c.emote('sparkle', 0.5);
+    },
+    update(c, dt, t, s, p) {
+      c.poseRate = 12;
+      const up = env(t, 0, 1.7, 0.18);
+      c.target.armRaiseL = 2.5 * up;
+      c.target.armRaiseR = 1.35 * up;
+      c.target.armSwingL = 0.15 * up;
+      c.target.armSwingR = 0.25 * up;
+      c.overlay.bodyY = Math.max(0, Math.sin(Math.min(1, t / 0.4) * Math.PI)) * 0.06;
+      c.overlay.wristL = Math.sin(t * 22) * 0.12 * up;
+      c.overlay.wristR = Math.sin(t * 22 + 1) * 0.12 * up;
+      c.target.headRoll = 0.12 * up;
+      c.target.torsoRoll = -0.05 * up;
+      if (t > 1.9) return then(p);
+    },
+  },
+
   pet: {
     priority: 2,
     enter(c, p, s) {
@@ -820,4 +844,4 @@ STATES.umbrella = {
   },
 };
 
-export const ACTIONS = ['idle', 'happy', 'sad', 'sleepy', 'sleep', 'wake', 'curious', 'surprised', 'excited', 'wave', 'dance', 'pet'];
+export const ACTIONS = ['idle', 'happy', 'sad', 'sleepy', 'sleep', 'wake', 'curious', 'surprised', 'excited', 'wave', 'dance', 'pet', 'tada'];

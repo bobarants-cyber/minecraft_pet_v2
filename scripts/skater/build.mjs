@@ -98,7 +98,7 @@ for (let i = 0; i < n; i++) { const c = colorAt(v(i), [N[3 * i], N[3 * i + 1], N
 
 // One skinned mesh with a small skeleton: body → head, arms, legs. Each vertex follows its nearest bones and blends
 // smoothly across the joints, so moving a limb bends the surface instead of opening a seam.
-const BONES = ['body', 'head', 'arm_R', 'arm_L', 'leg_R', 'leg_L'];
+const BONES = ['body', 'head', 'arm_R', 'arm_L', 'leg_R', 'leg_L', 'hem'];
 const J = new Uint16Array(n * 4);
 const W = new Float32Array(n * 4);
 for (let i = 0; i < n; i++) {

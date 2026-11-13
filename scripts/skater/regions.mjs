@@ -2,9 +2,9 @@
 // Colours from the original drawing: tan-orange fur on top of the head, ears, hands and around his sleepy eye; white
 // face; one white eye stitched with a black X, one half-closed purple eye; pink tongue; white shirt with a grey tear;
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
-import { partAt, XEYE, SLEEPY, BOOT } from './model.mjs';
+import { partAt, XEYE, SLEEPY, BOOT, ARMS, NOSE as NOSE_AT } from './model.mjs';
 
-export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.48, 0], arm_L: [-0.105, 0.49, 0], leg_R: [0.045, 0.3, 0], leg_L: [-0.045, 0.3, 0] };
+export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.49, 0], arm_L: [-0.11, 0.49, 0], leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0] };
 
 const GROUP = {
   head: 'head', lip: 'head', ear: 'head', earFold: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
@@ -14,11 +14,30 @@ const GROUP = {
   leg: 'leg', cuff: 'leg', shoe: 'leg', tail: 'body',
 };
 
-/** Each part follows one bone (the joins are hidden by the collar, the sleeves and the shirt hem). */
+/**
+ * Each part follows its bone, except the clothes, which move like cloth: the lower part of the shirt (and the tie)
+ * gradually follows a "hem" bone that sways and lifts as he moves, and the sleeves blend from the shoulder (half body,
+ * half arm) to their ends (all arm), so they stretch with the arm instead of looking glued on.
+ */
 export function weightsAt(p) {
-  const g = GROUP[partAt(p).name] ?? 'body';
-  const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0 };
-  if (g === 'arm') w[p[0] > 0 ? 'arm_R' : 'arm_L'] = 1;
+  const { name: nearest, d } = partAt(p);
+  // Clothes win where the arm hangs close beside them, so no bit of shirt gets dragged along by the arm.
+  const name = Math.abs(d.shirt) < 0.004 ? 'shirt' : Math.abs(d.sleeve) < 0.004 ? 'sleeve' : nearest;
+  const g = GROUP[name] ?? 'body';
+  const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0 };
+  const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';
+  if (name === 'shirt' || name === 'tie') {
+    const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
+    w.hem = h;
+    w.body = 1 - h;
+  } else if (name === 'sleeve') {
+    const A = ARMS[p[0] > 0 ? 1 : 0];
+    const along = (p[0] - A.S[0]) * A.u[0] + (p[1] - A.S[1]) * A.u[1] + (p[2] - A.S[2]) * A.u[2];
+    // Only the very top of the sleeve, tucked into the shoulder, eases between body and arm.
+    const a = Math.min(1, Math.max(0.8, 0.8 + (along + 0.01) / 0.03 * 0.2));
+    w[armKey] = a;
+    w.body = 1 - a;
+  } else if (g === 'arm') w[armKey] = 1;
   else if (g === 'leg') w[p[0] > 0 ? 'leg_R' : 'leg_L'] = 1;
   else w[g] = 1;
   return w;
@@ -59,6 +78,15 @@ function isWhiteFace([x, y, z]) {
     const e = Math.sqrt((dx / 0.13) ** 2 + (dy / (dy > 0 ? 0.17 : 0.125)) ** 2) - 1;
     w *= soft(e * 0.12);
   }
+  // Between the eyes the tan forehead comes down in a narrowing, softly curved point that ends just above the nose.
+  if (z > 0.05) {
+    const top = 0.8, tipY = NOSE_AT.c[1] + 0.022;
+    if (y > tipY && y < top) {
+      const k = (y - tipY) / (top - tipY);
+      const half = 0.052 * Math.sin(k * Math.PI * 0.5) ** 1.3 + 0.004; // curved sides, rounded tip
+      w *= 1 - soft(half - Math.abs(x - NOSE_AT.c[0]), 0.01);
+    }
+  }
   return w;
 }
 
@@ -69,10 +97,10 @@ export function colorAt(p, n) {
   const { name } = partAt(p);
   switch (name) {
     case 'xcross': return BLACK;
-    case 'xeye': return Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry) > 0.92 ? BLACK : WHITE;
+    case 'xeye': return Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry) > 0.955 ? BLACK : WHITE;
     case 'sleepy': {
       const r = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
-      if (r > 0.93) return BLACK;
+      if (r > 0.96) return BLACK;
       // A white eye with a big purple iris peeking out under the lid, and a darker pupil.
       const ir = Math.hypot(x - SLEEPY.c[0] + 0.01, y - (SLEEPY.c[1] - 0.012));
       return ir < 0.026 ? PUPIL : ir < 0.058 ? PURPLE : WHITE;
@@ -96,13 +124,13 @@ export function colorAt(p, n) {
       // The dark outline all the way round each eye (where the socket meets the eye).
       if (z > 0.05) {
         const rx = Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry);
-        if (rx > 0.9 && rx < 1.12) return BLACK;
-        if (rx <= 0.9) return WHITE;
+        if (rx > 0.95 && rx < 1.06) return BLACK;
+        if (rx <= 0.95) return WHITE;
         const rs = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
-        if (rs < 1.14) {
+        if (rs < 1.07) {
           // Above the lid line it's the lid's skin (no outline there); below, the outline and the purple eye.
           if (y > SLEEPY.c[1] + 0.006) return TAN;
-          return rs > 0.9 ? BLACK : WHITE;
+          return rs > 0.95 ? BLACK : WHITE;
         }
       }
       return blend(TAN, WHITE, isWhiteFace(p));
