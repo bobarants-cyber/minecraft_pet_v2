@@ -682,7 +682,7 @@ STATES.activity = {
     c.loco.stop();
     c.restLift = 0;
     c.sceneParts ??= {};
-    s.parts = c.sceneParts[s.kind] ??= s.scene.build();
+    s.parts = c.sceneParts[`${s.kind}:${c.mob.root.name}`] ??= s.scene.build(c.mob);
     s.placed = attachScene(c, s.parts);
     // Coming straight back to the same scene (after a pat, say) skips the big entrance.
     s.quick = c.lastScene?.kind === s.kind && performance.now() - c.lastScene.at < 6000;

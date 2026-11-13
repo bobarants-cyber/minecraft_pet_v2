@@ -105,33 +105,54 @@ function popcornPiece() {
   return g;
 }
 
-function headphones({ mic = false } = {}) {
+/** Where headphones sit on Bbokari's head (head-local, model units); other sculpts pass their own (`mob.headFit`). */
+const BBOKARI_HEAD = { side: 0.325, cupY: 0.22, cupZ: -0.02, top: 0.64, bandZ: -0.02, square: 0.8, mouth: [0, 0.15, 0.31] };
+
+function headphones({ mic = false, fit = BBOKARI_HEAD } = {}) {
+  const f = { ...BBOKARI_HEAD, ...fit };
   const g = new THREE.Group();
   const band = mat(0x2b2f36, { roughness: 0.5 });
   const cup = mat(mic ? 0x3b4252 : 0xff5fa2, { roughness: 0.45 });
   const pad = mat(0x1d1f24, { roughness: 0.9 });
-  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.028, 10, 32, Math.PI), band);
-  arc.position.set(0, 0.25, -0.02);
+  const cupX = f.side + 0.035; // the cups sit just outside the head, the soft pads touching it
+  // The band hugs the head: a rounded arch from one cup over the top to the other, tilting back to bandZ (Wolf Chan
+  // wears it behind his ears). `square` < 1 makes the arch boxier so it clears a wide head's shoulders.
+  const arch = [];
+  for (let i = 0; i <= 32; i++) {
+    const a = (i / 32) * Math.PI;
+    const c = Math.cos(a), sn = Math.sin(a);
+    arch.push(new THREE.Vector3(
+      (cupX + 0.01) * Math.sign(c) * Math.abs(c) ** f.square,
+      f.cupY + 0.06 + (f.top + 0.03 - f.cupY - 0.06) * sn ** f.square,
+      f.cupZ + (f.bandZ - f.cupZ) * sn,
+    ));
+  }
+  const arc = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arch), 48, 0.026, 10), band);
   arc.castShadow = true;
   g.add(arc);
   for (const s of [-1, 1]) {
     const c = cyl(0.1, 0.1, 0.07, cup);
     c.rotation.z = Math.PI / 2;
-    c.position.set(s * 0.36, 0.22, -0.02);
+    c.position.set(s * cupX, f.cupY, f.cupZ);
     const p = cyl(0.085, 0.085, 0.02, pad);
     p.rotation.z = Math.PI / 2;
-    p.position.set(s * 0.325, 0.22, -0.02);
-    const link = box(0.05, 0.07, 0.04, band);
-    link.position.set(s * 0.395, 0.27, -0.02);
-    g.add(c, p, link);
+    p.position.set(s * (cupX - 0.042), f.cupY, f.cupZ);
+    g.add(c, p);
   }
   if (mic) {
-    const boom = cyl(0.011, 0.011, 0.36, band, 8);
-    boom.position.set(0.25, 0.11, 0.16);
-    boom.rotation.set(1.05, 0, 0.75);
-    const tip = sphere(0.032, pad);
-    tip.position.set(0.12, 0.05, 0.3);
-    g.add(boom, tip);
+    // The boom comes out of the front of the right cup and curves round to the mouth; the foam ball caps its end.
+    const [mx, my, mz] = f.mouth;
+    const end = new THREE.Vector3(mx + 0.09, my - 0.01, mz + 0.03);
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(cupX + 0.02, f.cupY - 0.03, f.cupZ + 0.06),
+      new THREE.Vector3(cupX + 0.01, f.cupY - 0.08, f.cupZ + 0.17),
+      new THREE.Vector3((cupX + end.x) / 2 + 0.03, (f.cupY + end.y) / 2 - 0.07, end.z - 0.02),
+      end,
+    ]);
+    const boom = new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.011, 8), band);
+    const foam = sphere(0.032, pad);
+    foam.position.copy(end).addScaledVector(curve.getTangent(1), 0.022);
+    g.add(boom, foam);
   }
   return g;
 }
@@ -424,8 +445,8 @@ export const SCENES = {
   music: {
     label: 'music',
     seated: false,
-    build() {
-      return { head: headphones() };
+    build(mob) {
+      return { head: headphones({ fit: mob?.headFit }) };
     },
     pose(c, t, s) {
       const beat = t * Math.PI * 1.8; // ~108 bpm
@@ -448,10 +469,10 @@ export const SCENES = {
   meeting: {
     label: 'in a call',
     seated: true,
-    build() {
+    build(mob) {
       const office = buildOffice();
       office.userData.desk.children.at(-1).visible = false; // no mug in meetings
-      return { root: office, head: headphones({ mic: true }) };
+      return { root: office, head: headphones({ mic: true, fit: mob?.headFit }) };
     },
     pose(c, t, s) {
       c.target.armSwingL = c.target.armSwingR = 0.9;

@@ -19,12 +19,14 @@ export class WolfChan extends Bbokari {
         glb: wolfGlb,
         modelHeight: MODEL_HEIGHT,
         headStandIn: 0.25,
-        eyes: { headY: 0.25, eye: { x: 0.091, y: 0.455, r: 0.024 }, cheek: { x: 0.133, y: 0.361 } },
+        eyes: { headY: 0.25, eye: { x: 0.091, y: 0.455, r: 0.024 }, cheek: { x: 0.112, y: 0.37 } },
       }),
-      { height: WOLF_HEIGHT, halfWidth: 0.37, emoteLift: 1.05, hand: [0.06, -0.095, 0.03] },
+      { height: WOLF_HEIGHT, halfWidth: 0.37, emoteLift: 1.05, hand: [0.06, -0.095, 0.03], armScale: 0.4 },
     );
     // Hats sit on his head between the ears (lower than on Bbokari).
     this.outfitOffset = [0, -0.13, 0.02];
     this.outfitScale = 0.95;
+    // Headphones: a narrower head, and the band goes behind his tall ears.
+    this.headFit = { side: 0.262, cupY: 0.2, cupZ: -0.01, top: 0.47, bandZ: -0.15, square: 0.6, mouth: [0, 0.11, 0.24] };
   }
 }

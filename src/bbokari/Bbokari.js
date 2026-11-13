@@ -23,6 +23,8 @@ export class Bbokari {
     this.hover = sizes.hover ?? HOVER;
     /** Where the hands are, from the shoulder joint (model units). */
     this.hand = sizes.hand ?? [0.1, -0.13, 0.05];
+    /** How far the arms swing (sculpts with arms fused to the body need small moves or the side stretches). */
+    this.armScale = sizes.armScale ?? 1;
 
     this.time = Math.random() * 10;
     this.bobPhase = Math.random() * 10;
@@ -99,7 +101,8 @@ export class Bbokari {
     // head), and brings them a little forward so a wave stays in view. Swing brings them forward; wrist wiggles.
     const arm = (raise, swing, elbow, wrist, twist) => {
       const up = Math.min(1.1, raise * 0.5) + wrist * 0.22 + flap + 0.45 * this.airborne;
-      return [-swing * 0.8 - elbow * 0.2 - Math.min(1, raise * 0.5) * 0.45, twist * 0.3, 0.06 + up];
+      const k = this.armScale;
+      return [(-swing * 0.8 - elbow * 0.2 - Math.min(1, raise * 0.5) * 0.45) * k, twist * 0.3 * k, (0.06 + up) * k];
     };
     const [rx, ry, rz] = arm(p.armRaiseR, p.armSwingR, p.elbowR, p.wristR, p.armTwistR);
     armR.rotation.set(rx, ry, rz);

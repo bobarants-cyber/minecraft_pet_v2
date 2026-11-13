@@ -25,6 +25,33 @@ function surface(head, mesh, x, y, headY = HEAD_Y) {
   return { point, normal };
 }
 
+/**
+ * A soft oval painted onto the cheek: each point of the oval is dropped onto the head along the cheek's normal, so it
+ * follows the curve of the face instead of sticking out past it as a flat disc would.
+ */
+function cheekDecal(head, mesh, cheek, rx, ry) {
+  const geo = new THREE.CircleGeometry(1, 24);
+  const n = cheek.normal.clone();
+  const u = new THREE.Vector3(0, 1, 0).cross(n).normalize(); // sideways along the face
+  const v = n.clone().cross(u).normalize(); // up along the face
+  const pos = geo.attributes.position;
+  const ray = new THREE.Raycaster();
+  const o = new THREE.Vector3();
+  const d = n.clone().transformDirection(head.matrixWorld).negate();
+  for (let i = 0; i < pos.count; i++) {
+    const p = cheek.point.clone().addScaledVector(u, pos.getX(i) * rx).addScaledVector(v, pos.getY(i) * ry);
+    o.copy(p).addScaledVector(n, 0.05);
+    head.localToWorld(o);
+    ray.set(o, d);
+    const hit = ray.intersectObject(mesh, true)[0];
+    if (hit) p.copy(head.worldToLocal(hit.point.clone()));
+    p.addScaledVector(n, 0.003);
+    pos.setXYZ(i, p.x, p.y, p.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function material(color, extra = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0, ...extra });
 }
@@ -76,10 +103,7 @@ export class BbokariEyes {
       this.eyes.push({ eye, open, closed, happy, sparkle, side });
 
       const cheek = surface(head, headMesh, side * CHEEK.x, CHEEK.y, headY);
-      const blush = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 24), pink);
-      blush.position.copy(cheek.point).addScaledVector(cheek.normal, 0.003);
-      blush.lookAt(blush.position.clone().add(cheek.normal));
-      blush.scale.set(1.3, 0.75, 1);
+      const blush = new THREE.Mesh(cheekDecal(head, headMesh, cheek, r * 1.2, r * 0.7), pink);
       head.add(blush);
       this.blush.push(blush);
 
