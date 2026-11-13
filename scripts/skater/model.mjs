@@ -47,16 +47,17 @@ function local(p, c, rz = 0, ry = 0, rx = 0) {
   return [x, y, z];
 }
 
-export const HEAD = { c: [0, 0.688, 0], r: [0.25, 0.178, 0.205] };
+export const HEAD = { c: [0, 0.695, 0], r: [0.245, 0.185, 0.215] };
 /** Where the head's front surface is, for laying the face on it. */
 export function faceZ(x, y) {
   const u = 1 - (x / HEAD.r[0]) ** 2 - ((y - HEAD.c[1]) / HEAD.r[1]) ** 2;
-  return HEAD.r[2] * Math.sqrt(Math.max(0, u));
+  const j = 1 - (x / 0.238) ** 2 - ((y - 0.632) / 0.115) ** 2; // the full lower face (jowls)
+  return Math.max(HEAD.r[2] * Math.sqrt(Math.max(0, u)), 0.015 + 0.19 * Math.sqrt(Math.max(0, j))) + 0.006;
 }
-export const XEYE = { c: [-0.112, 0.69], r: 0.092 };
-export const SLEEPY = { c: [0.15, 0.69], r: 0.088 };
-export const NOSE = { c: [0.022, 0.628] };
-export const MOUTH = { c: [0.022, 0.59], w: 0.05, h: 0.044 };
+export const XEYE = { c: [-0.104, 0.705], r: 0.097 };
+export const SLEEPY = { c: [0.112, 0.705], r: 0.093 };
+export const NOSE = { c: [0.004, 0.64] };
+export const MOUTH = { c: [0.006, 0.597], w: 0.044, h: 0.04 };
 
 function parts(p) {
   const [x, y, z] = p;
@@ -64,7 +65,7 @@ function parts(p) {
   const d = {};
 
   // --- head ---
-  let head = ellipsoid(p, HEAD.c, HEAD.r);
+  let head = smin(ellipsoid(p, HEAD.c, HEAD.r), ellipsoid(p, [0, 0.632, 0.015], [0.238, 0.115, 0.19]), 0.05);
   // A soft brow groove arcing over the big eye.
   {
     const cx = XEYE.c[0], cy = XEYE.c[1];
@@ -80,7 +81,7 @@ function parts(p) {
     const [cx, cy] = XEYE.c, fz = faceZ(cx, cy);
     const socket = ellipsoid(p, [cx, cy, fz + 0.01], [XEYE.r + 0.008, XEYE.r + 0.008, 0.028]);
     head = ssub(head, socket, 0.01);
-    d.xeye = ellipsoid(p, [cx, cy, fz - 0.035], [XEYE.r, XEYE.r, 0.045]);
+    d.xeye = ellipsoid(p, [cx, cy, fz - 0.04], [XEYE.r, XEYE.r, 0.042]);
     // The raised cross, tilted.
     const q = local(p, [cx + 0.004, cy - 0.004, fz + 0.006], 0.35);
     d.xcross = Math.min(box(q, [0.056, 0.017, 0.01], 0.006), box(q, [0.017, 0.056, 0.01], 0.006));
@@ -90,8 +91,8 @@ function parts(p) {
     const [cx, cy] = SLEEPY.c, fz = faceZ(cx, cy);
     const socket = ellipsoid(p, [cx, cy, fz + 0.006], [SLEEPY.r + 0.006, SLEEPY.r + 0.006, 0.026]);
     head = ssub(head, socket, 0.008);
-    d.sleepy = ellipsoid(p, [cx, cy, fz - 0.035], [SLEEPY.r, SLEEPY.r, 0.05]);
-    const lidShell = ellipsoid(p, [cx, cy - 0.004, fz - 0.03], [SLEEPY.r + 0.016, SLEEPY.r + 0.014, 0.074]);
+    d.sleepy = ellipsoid(p, [cx, cy, fz - 0.042], [SLEEPY.r, SLEEPY.r, 0.05]);
+    const lidShell = ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.01, SLEEPY.r + 0.009, 0.066]);
     const q = local(p, [cx, cy, 0], 0.08);
     d.lid = Math.max(lidShell, -(q[1] + 0.006)); // only above the lid line (slightly tilted); its edge juts out
   }
@@ -152,8 +153,8 @@ function parts(p) {
     // Front seam: a faint crease down the middle.
     shirt = ssub(shirt, len(x, 0, z - rz) - 0.004, 0.003);
     // Short, wide sleeves sticking out from the shoulders: crisp tubes, open at the end.
-    const sa = [0.1, 0.505, 0], sb = [0.2, 0.43, 0.012];
-    const sleeveOuter = roundCone(m, sa, sb, 0.058, 0.056);
+    const sa = [0.112, 0.505, 0], sb = [0.178, 0.462, 0.006];
+    const sleeveOuter = roundCone(m, sa, sb, 0.05, 0.06);
     const cut = (() => { // cut the sleeve off flat at its end
       const ax = sb[0] - sa[0], ay = sb[1] - sa[1], az = sb[2] - sa[2], l = Math.hypot(ax, ay, az);
       return ((m[0] - sb[0]) * ax + (m[1] - sb[1]) * ay + (m[2] - sb[2]) * az) / l;
@@ -195,10 +196,12 @@ function parts(p) {
   {
     const sc = [0.118, 0.075, 0.05];
     const q = local(m, sc, 0, -0.28);
-    const toe = ellipsoid(q, [0, 0, 0], [0.11, 0.078, 0.18]);
+    const toe = ellipsoid(q, [0, 0, 0.01], [0.112, 0.074, 0.175]);
     const heel = ellipsoid(q, [0, 0.03, -0.06], [0.072, 0.062, 0.085]);
-    d.shoe = Math.max(smin(toe, heel, 0.04), -y);
-    d.cuff = torusY(m, [0.072, 0.148, -0.004], 0.044, 0.022);
+    const upper = Math.max(smin(toe, heel, 0.045), 0.012 - y);
+    const sole = Math.max(smin(toe, heel, 0.045) - 0.007, Math.abs(y - 0.008) - 0.008);
+    d.shoe = Math.min(upper, sole);
+    d.cuff = smin(torusY(m, [0.07, 0.15, -0.006], 0.044, 0.026), torusY(m, [0.07, 0.172, -0.006], 0.04, 0.02), 0.01);
   }
   return d;
 }

@@ -99,7 +99,16 @@ export function colorAt(p, n) {
       }
       return TAN;
     }
-    case 'head': return isWhiteFace(p) ? WHITE : TAN;
+    case 'head': {
+      // The dark outline all the way round each eye (where the socket meets the eye).
+      if (z > 0.05) {
+        const rx = Math.hypot(x - XEYE.c[0], y - XEYE.c[1]);
+        if (rx > XEYE.r * 0.9 && rx < XEYE.r * 1.12) return BLACK;
+        const rs = Math.hypot(x - SLEEPY.c[0], y - SLEEPY.c[1]);
+        if (rs > SLEEPY.r * 0.9 && rs < SLEEPY.r * 1.1) return BLACK;
+      }
+      return isWhiteFace(p) ? WHITE : TAN;
+    }
     case 'shirt': case 'collar': return SHIRT;
     case 'tie': return TIE;
     case 'arm': case 'hand': return TAN;
