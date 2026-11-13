@@ -52,7 +52,7 @@ export function colorAt([x, y, z], [nx, ny, nz]) {
   if (ax > 0.321 && y > 0.405 && y < 0.532) return WHISKER;
   // …and where they come out of the cheek (only the rod itself, not the cheek around it: the rod faces up, down or forward).
   const onRod = Math.abs(y - 0.511) < 0.017 || Math.abs(y - (0.455 - (ax - 0.27) * 0.3)) < 0.016;
-  if (ax > 0.272 && z > 0.095 && Math.abs(nx) < 0.55 && onRod) return WHISKER;
+  if (ax > 0.268 && z > 0.085 && Math.abs(nx) < 0.75 && onRod) return WHISKER;
   // Inner ears: the ring on the front of each round ear (the thin ears sit behind the head, z < 0.06).
   if (nz > 0.2 && z < 0.06 && y > 0.76 && (ax - 0.196) ** 2 + (y - 0.857) ** 2 < 0.085 ** 2) return PINK;
   // Paw pads under the feet.

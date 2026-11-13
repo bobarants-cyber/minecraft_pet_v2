@@ -5,8 +5,57 @@ import { KHRMeshQuantization, EXTMeshoptCompression } from '@gltf-transform/exte
 import { MeshoptEncoder } from 'meshoptimizer';
 import { colorAt, weightsAt, PIVOTS } from './regions.mjs';
 
-const { P } = JSON.parse(fs.readFileSync(process.env.WORK + '/norm.json'));
-const { idx } = JSON.parse(fs.readFileSync(process.env.WORK + '/simp.json'));
+const { P: P0 } = JSON.parse(fs.readFileSync(process.env.WORK + '/norm.json'));
+const { idx: idx0 } = JSON.parse(fs.readFileSync(process.env.WORK + '/simp.json'));
+
+// Crisp colour edges: vertex colours blend across a triangle, so where a colour edge crosses big triangles it looks
+// jagged and flickers. Split only the triangles that straddle a colour edge (and, to keep the surface watertight, the
+// edges they share with their neighbours) a few times over, so every border follows the drawing closely.
+function vertexNormals(P, idx) {
+  const N = new Float32Array(P.length);
+  for (let t = 0; t < idx.length; t += 3) {
+    const [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]];
+    const e1 = [0, 1, 2].map((k) => P[3 * b + k] - P[3 * a + k]), e2 = [0, 1, 2].map((k) => P[3 * c + k] - P[3 * a + k]);
+    const f = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    for (const i of [a, b, c]) for (let k = 0; k < 3; k++) N[3 * i + k] += f[k];
+  }
+  for (let i = 0; i < N.length; i += 3) { const l = Math.hypot(N[i], N[i + 1], N[i + 2]) || 1; N[i] /= l; N[i + 1] /= l; N[i + 2] /= l; }
+  return N;
+}
+function refine(P, idx, rounds) {
+  P = Array.from(P); idx = Array.from(idx);
+  for (let r = 0; r < rounds; r++) {
+    const N = vertexNormals(P, idx);
+    const col = [];
+    for (let i = 0; i < P.length / 3; i++) col.push(colorAt([P[3 * i], P[3 * i + 1], P[3 * i + 2]], [N[3 * i], N[3 * i + 1], N[3 * i + 2]], 0).map((x) => x.toFixed(4)).join());
+    const ek = (a, b) => (a < b ? a * 4194304 + b : b * 4194304 + a);
+    const marked = new Map();
+    for (let t = 0; t < idx.length; t += 3) {
+      const [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]];
+      if (col[a] !== col[b] || col[b] !== col[c]) for (const [x, y] of [[a, b], [b, c], [c, a]]) marked.set(ek(x, y), -1);
+    }
+    const mid = (a, b) => {
+      const k = ek(a, b);
+      let m = marked.get(k);
+      if (m === -1) { m = P.length / 3; for (let q = 0; q < 3; q++) P.push((P[3 * a + q] + P[3 * b + q]) / 2); marked.set(k, m); }
+      return m;
+    };
+    const out = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      let [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]];
+      let m = [marked.has(ek(a, b)), marked.has(ek(b, c)), marked.has(ek(c, a))];
+      const count = m.filter(Boolean).length;
+      if (count === 0) { out.push(a, b, c); continue; }
+      if (count === 3) { const ab = mid(a, b), bc = mid(b, c), ca = mid(c, a); out.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca); continue; }
+      // Rotate so the pattern starts at edge a–b.
+      while (!(count === 1 ? m[0] : m[0] && m[1])) { [a, b, c] = [b, c, a]; m = [m[1], m[2], m[0]]; }
+      if (count === 1) { const ab = mid(a, b); out.push(a, ab, c, ab, b, c); } else { const ab = mid(a, b), bc = mid(b, c); out.push(ab, b, bc, a, ab, bc, a, bc, c); }
+    }
+    idx = out;
+  }
+  return { P, idx };
+}
+const { P, idx } = refine(P0, idx0, 3);
 const n = P.length / 3;
 const v = (i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]];
 
@@ -19,6 +68,22 @@ for (let t = 0; t < idx.length; t += 3) {
   for (const i of [idx[t], idx[t + 1], idx[t + 2]]) { N[3 * i] += nx; N[3 * i + 1] += ny; N[3 * i + 2] += nz; }
 }
 for (let i = 0; i < n; i++) { const l = Math.hypot(N[3 * i], N[3 * i + 1], N[3 * i + 2]) || 1; N[3 * i] /= l; N[3 * i + 1] /= l; N[3 * i + 2] /= l; }
+// The source sculpt is faceted on its big smooth areas (head, body): soften the shading by averaging each normal with
+// its neighbours a few times. Only normals change, so the shape and the carved details stay where they are.
+{
+  const nb = Array.from({ length: n }, () => new Set());
+  for (let t = 0; t < idx.length; t += 3) for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) { nb[idx[t + a]].add(idx[t + b]); nb[idx[t + b]].add(idx[t + a]); }
+  for (let pass = 0; pass < 4; pass++) {
+    const M = new Float32Array(N);
+    for (let i = 0; i < n; i++) {
+      let x = N[3 * i], y = N[3 * i + 1], z = N[3 * i + 2];
+      for (const j of nb[i]) { x += N[3 * j]; y += N[3 * j + 1]; z += N[3 * j + 2]; }
+      const l = Math.hypot(x, y, z) || 1;
+      M[3 * i] = x / l; M[3 * i + 1] = y / l; M[3 * i + 2] = z / l;
+    }
+    N.set(M);
+  }
+}
 
 // "Bump": how far a vertex sticks out past its neighbours along its normal (finds the little sculpted freckles).
 const sum = new Float64Array(P.length), cnt = new Uint32Array(n);
