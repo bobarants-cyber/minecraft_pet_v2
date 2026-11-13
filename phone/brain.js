@@ -18,6 +18,7 @@ import { parseQuiz } from '../electron/flashcards.js';
 import { parsePlay, parseControl, songQuestion } from '../electron/spotify.js';
 import { fetchGrades, formatDue, gradeLine, parseFrom, upcomingWork } from '../electron/inbox.js';
 import { findFeedback, looksLikeFeedback } from '../electron/feedback.js';
+import { CHECKLIST, findSaleLinks, looksLikeTickets, parseTicketSale, salePlan } from '../electron/tickets.js';
 
 // The Mac code reads emails with Node's Buffer; a tiny phone version (base64 ↔ text).
 if (!globalThis.Buffer) {
@@ -303,6 +304,22 @@ export const BbokariBrain = {
     // Recipe math.
     const math = recipeMath(said);
     if (math) return { text: math };
+
+    // 🎟 Ticket sales: notifications the day before, 15 and 2 minutes before, and at the start.
+    if (looksLikeTickets(said)) {
+      const sale = parseTicketSale(said);
+      if (sale?.at && !sale.question) {
+        const plan = salePlan(sale);
+        if (!plan.length) return { text: 'That time has already passed 😕 If they’re on sale now, go!' };
+        for (const st of plan) addReminder({ kind: 'reminder', at: st.at, label: st.step === 'open' && sale.link ? `${st.label} ${sale.link}` : st.label });
+        return { text: `🎟 Ready for ${sale.event}: ${sale.at.toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })}! I’ll buzz you the day before, 15 and 2 minutes before, and at the start.\n\n${CHECKLIST}`, open: sale.link ?? undefined, fallback: sale.link ?? undefined };
+      }
+      if (sale && (sale.question || sale.event !== 'the concert')) {
+        const [tm] = findSaleLinks(sale.event);
+        return { text: `🔎 Opening Ticketmaster for “${sale.event}”: look for the sale date and presale sign-ups. Then tell me “tickets for ${sale.event} go on sale on Nov 20 at 10am” 🎟`, open: tm, fallback: tm };
+      }
+      if (/how (?:do i|to|can i) (?:get|buy) tickets|ticket tips|c[oó]mo (?:consigo|compro) entradas/i.test(said)) return { text: CHECKLIST };
+    }
 
     // Reminders and timers.
     const cmd = parseCommand(said);

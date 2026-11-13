@@ -37,6 +37,7 @@ import { findFeedback, looksLikeFeedback } from './feedback.js';
 import * as spotify from './spotify.js';
 import * as computer from './computer.js';
 import * as fun from './fun.js';
+import * as tickets from './tickets.js';
 import http from 'node:http';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -1165,6 +1166,45 @@ function classByName(said) {
   return name.includes(want) || want.includes(name.trim()) ? m[1] : null;
 }
 
+/** 🎟 Ticket sales: reminders, a checklist, and the official page opening 2 minutes before. */
+let lastSale = null;
+async function ticketHelper(said) {
+  // "ticket link https://…": the page for the sale you just set up.
+  const linkOnly = said.match(/^(?:the\s+)?(?:ticket|tickets|entradas)\s+(?:link|page|enlace|web)\s*:?\s*(https:\/\/\S+)$/i);
+  if (linkOnly && lastSale) {
+    const r = reminders.items.find((x) => x.label?.startsWith(`🎟 ${lastSale.event}: 2 minutes`));
+    if (r) {
+      r.url = linkOnly[1];
+      r.label = r.label.replace('Open the ticket page now.', 'I’m opening the ticket page now.');
+      reminders.save();
+    }
+    return `Got it! I’ll open that page 2 minutes before ${lastSale.event} tickets go on sale 🎟`;
+  }
+  if (!tickets.looksLikeTickets(said)) return null;
+  if (/^(?:(?:hey|ok)\s+\w+[,!]?\s*)?(?:how (?:do i|to|can i) (?:get|buy) tickets(?: fast| quickly)?|ticket tips|tips for (?:getting|buying) tickets|c[oó]mo (?:consigo|compro) entradas(?: r[aá]pido)?)\??$/i.test(said)) {
+    return `${tickets.CHECKLIST}\n\nTell me when they go on sale (like “tickets for Stray Kids go on sale on Nov 20 at 10am” + the link) and I’ll get you ready on time!`;
+  }
+  const sale = tickets.parseTicketSale(said);
+  if (!sale) return null;
+  if (sale.question || !sale.at) {
+    if (sale.event === 'the concert' && !sale.question) return null;
+    for (const u of tickets.findSaleLinks(sale.event)) await shell.openExternal(u);
+    return `🔎 I opened Ticketmaster and a search for “${sale.event}” tickets: look for the sale date and any presale sign-up (register for those early!).\nWhen you know the date, tell me: “tickets for ${sale.event} go on sale on Nov 20 at 10am” and paste the ticket page link 🎟`;
+  }
+  const plan = tickets.salePlan(sale);
+  if (!plan.length) return `That time has already passed 😕 If they’re on sale now, go! ${sale.link ? '' : '(Send me the link and I’ll open it.)'}`;
+  for (const st of plan) reminders.add({ kind: 'reminder', at: st.at, label: st.label, url: st.url, effect: st.effect });
+  lastSale = { event: sale.event, at: sale.at };
+  const when = sale.at.toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+  return [
+    `🎟 Ready for ${sale.event}: ${when}!`,
+    ...plan.map((st) => `⏰ ${new Date(st.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}: ${{ day: 'checklist (sign in, card, bank app, presale code)', checks: 'last checks', open: sale.link ? 'I open the ticket page' : 'open the ticket page (send me the link and I’ll do it)', go: 'GO! 🎉' }[st.step]}`),
+    sale.link ? '' : '👉 Send me the ticket page link (“ticket link https://…”) and I’ll open it 2 minutes before.',
+    '',
+    tickets.CHECKLIST,
+  ].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
+}
+
 /** Memory, planner, flashcards, "plan my day", "how was my day", and "what can you do". Returns a reply or null. */
 async function newFeatures(said) {
   if (/^(?:what (?:else )?can you do|help|show me (?:what you can do|everything)|features|what are your features|everything you can do|qu[eé] puedes hacer|ayuda)\??$/i.test(said)) {
@@ -1226,6 +1266,8 @@ async function newFeatures(said) {
   if (/\b(?:my grades?|what grades?|which grades?|what did i get on|did i get (?:my )?(?:\w+ )?(?:exam|test|quiz|grade)s? back|exam results?|test results?|my results|qu[eé] nota|mis notas|mis calificaciones)\b/i.test(said) && said.length < 90) {
     return { ok: true, kind: 'skill', text: await gradesReply() };
   }
+  const tix = await ticketHelper(said);
+  if (tix) return { ok: true, kind: 'skill', text: tix };
   // 🖥 "search youtube for…", "change my wallpaper to…", "delete my screenshots", "volume 30", "dark mode"…
   const comp = computer.parseComputer(said);
   if (comp) return { ok: true, kind: 'action', text: await doComputer(comp) };
@@ -2315,6 +2357,9 @@ function fireReminder(r, text) {
     new Notification({ title: `${name} says…`, body: text.replace(/^⏰\s*/, ''), silent: false }).show();
   }
   send('reminder', { text, kind: r.kind });
+  // Ticket sales: open the official page (not if the Mac was asleep and it's long past).
+  if (r.url && /^https:\/\//.test(r.url) && Date.now() - r.at < 10 * 60_000) shell.openExternal(r.url);
+  if (r.effect) setTimeout(() => command('trigger', { name: r.effect }), 800);
 }
 
 ipcMain.on('state', (_e, name) => {

@@ -251,8 +251,9 @@ export class ReminderStore {
     this.onChange(this.items);
   }
 
-  add({ kind, at, duration = null, label = null, repeat = null }) {
-    const r = { id: this.nextId++, kind, at, duration, label, created: Date.now(), ...(repeat ? { repeat } : {}) };
+  add({ kind, at, duration = null, label = null, repeat = null, url = null, effect = null }) {
+    // url: a page to open when it fires (ticket sales); effect: an animation (a dance when tickets open).
+    const r = { id: this.nextId++, kind, at, duration, label, created: Date.now(), ...(repeat ? { repeat } : {}), ...(url ? { url } : {}), ...(effect ? { effect } : {}) };
     this.items.push(r);
     this.items.sort((a, b) => a.at - b.at);
     this.save();
