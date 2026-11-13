@@ -141,7 +141,10 @@ export function colorAt(p, n) {
         if (rx > 0.95 && rx < 1.06) return BLACK;
         if (rx <= 0.95) return WHITE;
         const rs = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
-        if (rs > 0.95 && rs < 1.06) return BLACK; // the full outline, same as the X eye
+        // The outline round the top half is drawn on the lid itself (it sticks out), so the face behind it stays plain
+        // there; otherwise you'd see two rings.
+        if (y > SLEEPY.c[1] + 0.004 && rs < 1.16) return blend(TAN, WHITE, isWhiteFace(p));
+        if (rs > 0.95 && rs < 1.06) return BLACK; // the outline round the bottom, same as the X eye
         if (rs <= 0.95) return y > SLEEPY.c[1] + 0.006 ? LID : WHITE;
       }
       return blend(TAN, WHITE, isWhiteFace(p));

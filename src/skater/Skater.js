@@ -222,8 +222,12 @@ export class Skater extends Bbokari {
     // Arms out a little for balance, swinging against the push.
     rz += r * (0.55 + stroke * 0.2 * dir);
     lz += r * (0.55 - stroke * 0.2 * dir);
-    armR.rotation.set(rx, 0, rz);
-    armL.rotation.set(lx, 0, -lz);
+    // Raised arms stop out to the side of his big head (never through it), and turn so the open palm faces you.
+    const cap = 1.5 + r * 0.3;
+    const tw = (raise) => clamp(raise / 1.4, 0, 1) * 1.45 * (1 - r);
+    armR.rotation.order = armL.rotation.order = 'ZYX'; // twist about the arm first, then raise
+    armR.rotation.set(rx, tw(p.armRaiseR), Math.min(rz, cap));
+    armL.rotation.set(lx, -tw(p.armRaiseL), -Math.min(lz, cap));
   }
 
   animate(dt) {
