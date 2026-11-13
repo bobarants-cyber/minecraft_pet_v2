@@ -981,9 +981,36 @@ async function checkWritingNow() {
 ipcMain.on('proofread:now', () => checkWritingNow());
 ipcMain.on('app:quit', () => app.quit());
 
-function checkClasses() {
-  if (!classes) return;
-  for (const c of classes.due()) openClass(c, { late: c.late });
+let checkingClasses = false;
+async function checkClasses() {
+  if (!classes || checkingClasses) return;
+  const due = classes.due();
+  if (!due.length) return;
+  checkingClasses = true;
+  try {
+    // Already in a meeting (you joined without me, or started me during class)? Don't open it again.
+    const inMeeting = await meetingRunning();
+    for (const c of due) {
+      if (inMeeting) {
+        classes.markOpened(c);
+        if (settings.autoNotes) startNotes({ title: c.name, endAt: c.endAt ?? classes.times(c, new Date()).end, auto: true });
+        send('say', { text: `📚 You’re already in ${c.name} 👍 ${settings.autoNotes ? 'I’ll take notes for you!' : ''}`.trim() });
+      } else openClass(c, { late: c.late });
+    }
+  } finally {
+    checkingClasses = false;
+  }
+}
+
+/** Is a video meeting open right now (Zoom, Google Meet, Teams, Webex)? */
+async function meetingRunning() {
+  if (activity === 'meeting') return true;
+  if (process.platform !== 'darwin') return false;
+  // Zoom's meeting window runs as "CptHost" only while you're in a meeting.
+  const zoom = await new Promise((r) => execFile('pgrep', ['-x', 'CptHost'], (err, out) => r(!err && String(out).trim().length > 0)));
+  if (zoom) return true;
+  const tab = await findBrowserTab(/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}|teams\.microsoft\.com\/.*(?:meetup-join|calling)|zoom\.us\/(?:wc|j)\/|webex\.com\/meet/i).catch(() => '');
+  return !!tab;
 }
 
 /** Open a website or app by having the pet type it (see opener.js), with the typing animation while it does. */
@@ -1864,6 +1891,20 @@ ipcMain.handle('inbox:action', async (_e, { id, action }) => {
       case 'slides':
       case 'doc':
         return { ok: true, text: await runAction(templateFor(item, a.id === 'slides' ? 'slides' : 'doc')), next: true };
+      case 'slide': {
+        // Their presentation already exists: write the one slide, copy it, and open their deck.
+        const slide = await inbox.writeSlide(item, settings.aiModel);
+        clipboard.writeText(slide);
+        const deck = (item.links ?? []).find((u) => /docs\.google\.com\/presentation/.test(u));
+        if (deck) await shell.openExternal(deck);
+        return { ok: true, text: `✍️ Your slide (copied!):\n${slide}\n\n${deck ? 'I opened their presentation: press ⌘M (or Ctrl+M) for a new slide and ⌘V to paste.' : 'Open their presentation, add a new slide and press ⌘V to paste.'}`, stay: true };
+      }
+      case 'speech':
+        return {
+          ok: true,
+          text: await runAction({ type: 'create', kind: 'doc', template: false, topic: String(title).slice(0, 100), place: 'gdocs', request: `Write a short speech (about one minute, simple words) that the student can practice and change, for this: ${String(item.text ?? item.summary ?? title).slice(0, 800)}` }),
+          next: true,
+        };
       case 'quiz':
         startQuiz({ topic: `${item.course ? `${item.course}: ` : ''}${title}${item.text ? `. ${String(item.text).slice(0, 500)}` : ''}` });
         return { ok: true, text: 'Making your flashcards… 🃏', next: true };
@@ -1959,7 +2000,9 @@ ipcMain.handle('inbox:send', async (_e, { id, text } = {}) => {
 ipcMain.on('inbox:done', (_e, id) => markHandled(id));
 ipcMain.on('inbox:open', (_e, id) => {
   markHandled(id);
-  const link = inboxItems.get(id)?.link;
+  // The real thing (Classroom post, doc, form) when the email links to it; otherwise the email.
+  const it = inboxItems.get(id);
+  const link = it?.links?.[0] ?? it?.link;
   if (link && /^https:\/\//.test(link)) shell.openExternal(link);
 });
 ipcMain.on('inbox:check', () => checkInbox({ manual: true }));
