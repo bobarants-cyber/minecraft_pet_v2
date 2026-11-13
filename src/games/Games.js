@@ -3,9 +3,11 @@ import { TicTacToe } from './TicTacToe.js';
 import { RockPaperScissors } from './RockPaperScissors.js';
 import { Cups } from './Cups.js';
 import { Bubbles } from './Bubbles.js';
+import { SkateRun } from './SkateRun.js';
 
 /** The games you can play with the pet, in menu order. */
 export const GAME_LIST = [
+  { id: 'skate', label: '🛹 Skate run (Gliddy)' },
   { id: 'pingpong', label: '🏓 Ping pong' },
   { id: 'tictactoe', label: '⭕ Tic-tac-toe' },
   { id: 'rps', label: '✊ Rock paper scissors' },
@@ -22,6 +24,7 @@ export class Games {
       rps: new RockPaperScissors(opts),
       cups: new Cups(opts),
       bubbles: new Bubbles(opts),
+      skate: new SkateRun(opts),
     };
     this.current = null;
   }

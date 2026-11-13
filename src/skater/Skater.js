@@ -257,7 +257,16 @@ export class Skater extends Bbokari {
     // Riding: stand on the deck sideways, facing you, knees soft, and kick-push with the back foot now and then.
     j.hips.position.y += r * (BOARD.height - this.hover) + Math.sin(Math.PI * this.ride) * 0.12;
     j.torso.rotation.y -= r * (this.root?.rotation.y ?? 0);
-    const v = this.speed ?? 0, dir = Math.sign(v) || 1;
+    const v = this.skate ? (this.skate.air > 0.005 || this.skate.grinding || this.skate.duck > 0.3 ? 0.001 : this.skate.speed) : this.speed ?? 0, dir = Math.sign(v) || 1;
+    // The skate game: jump height, ducking, and crashing are on top of the riding pose.
+    if (this.skate) {
+      const sk = this.skate;
+      j.hips.position.y += sk.air;
+      j.torso.scale.y *= 1 - sk.duck * 0.28;
+      j.torso.rotation.x += sk.duck * 0.25;
+      if (sk.grab > 0) { legR.rotation.x -= sk.grab * 0.9; legL.rotation.x -= sk.grab * 0.9; }
+      if (sk.bail > 0) j.torso.rotation.z += Math.sin(sk.bail * Math.PI) * 1.2;
+    }
     const pushing = r > 0.9 && Math.abs(v) > 0.25;
     const ph = this.pushPhase % (Math.PI * 2);
     const stroke = pushing ? Math.max(0, Math.sin(ph)) : 0; // foot down and pushing back
@@ -288,11 +297,12 @@ export class Skater extends Bbokari {
     super.animate(dt);
     const p = this.pose;
     // Hop on when going somewhere, off again once it's been still for a moment.
-    const go = this.walkAmount > 0.25 || Math.abs(this.speed ?? 0) > 0.15;
+    const go = !!this.skate || this.walkAmount > 0.25 || Math.abs(this.speed ?? 0) > 0.15;
     this.stillFor = go ? 0 : (this.stillFor ?? 0) + dt;
     const target = go ? 1 : this.stillFor > 0.35 ? 0 : this.ride > 0.5 ? 1 : 0;
     this.ride = clamp(this.ride + Math.sign(target - this.ride) * dt * 2.6, 0, 1);
-    this.pushPhase += dt * (Math.abs(this.speed ?? 0) > 0.25 ? 5 : 0);
+    const spd = this.skate ? (this.skate.air > 0.005 || this.skate.grinding ? 0 : this.skate.speed) : this.speed ?? 0;
+    this.pushPhase += dt * (Math.abs(spd) > 0.25 ? 5 : 0);
     const r = ease(this.ride);
     const b = this.board;
     // On his back: upright, wheels out, slung diagonally. Riding: flat under his feet along the way he goes.
@@ -301,8 +311,17 @@ export class Skater extends Bbokari {
     b.position.lerpVectors(back, under, r);
     b.position.y += Math.sin(Math.PI * this.ride) * 0.15; // it swings round in an arc
     b.quaternion.slerpQuaternions(BACK_Q, IDENTITY_Q, r);
+    // Tricks: the board flips under his feet (kickflip/heelflip spin it along its length, a shove-it turns it flat,
+    // a 360 flip does both) and drops a little away from his feet while it spins.
+    if (this.skate) {
+      const sk = this.skate;
+      b.rotateX(sk.flip * Math.PI * 2);
+      b.rotateY(sk.shuv * Math.PI * 2);
+      b.position.y -= Math.sin(Math.min(1, Math.max(Math.abs(sk.flip % 1), Math.abs(sk.shuv % 1))) * Math.PI) * 0.09;
+      if (sk.bail > 0) { b.position.x += sk.bail * 0.6; b.rotateZ(sk.bail * 3); }
+    }
     // Wheels roll with the distance travelled.
-    this.wheelSpin += ((this.speed ?? 0) * dt) / BOARD.wheelR;
+    this.wheelSpin += ((this.skate ? this.skate.speed : this.speed ?? 0) * dt) / BOARD.wheelR;
     for (const w of b.userData.wheels) w.rotation.z = -this.wheelSpin;
 
     // Hands: they open wide for big moves (waving, ta-da, dancing, cheering, riding for balance), and otherwise rest

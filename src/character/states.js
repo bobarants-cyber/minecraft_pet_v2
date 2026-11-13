@@ -581,6 +581,28 @@ STATES.pingpong = {
   },
 };
 
+// Gliddy's skate run (src/games/SkateRun.js): riding his board in place while the street scrolls by. The game poses
+// his jumps, tricks and crashes through mob.skate; here he keeps his arms out for balance and looks where he's going.
+STATES.skate = {
+  priority: 8,
+  attentive: true,
+  autoLook: false,
+  enter(c) {
+    c.face.setExpression('happy');
+  },
+  update(c, dt, t) {
+    if (!c.game?.active) return 'idle';
+    c.poseRate = 12;
+    const sk = c.mob.skate;
+    const air = sk ? Math.min(1, sk.air / 0.3) : 0;
+    c.target.armRaiseL = 0.5 + air * 0.9 + Math.sin(t * 3) * 0.05;
+    c.target.armRaiseR = 0.5 + air * 0.9 + Math.sin(t * 3 + 1) * 0.05;
+    c.target.headYaw = 0.35; // looking ahead, down the street
+    c.target.crouch = 0.02 + (sk?.grinding ? 0.04 : 0);
+    c.lookHint = [0.8, 0];
+  },
+};
+
 // Playing one of the small games (src/games): stand still beside the board and look lively.
 STATES.minigame = {
   priority: 3,

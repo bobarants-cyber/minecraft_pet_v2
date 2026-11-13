@@ -288,14 +288,17 @@ function parts(p) {
 
   // --- thin legs (navy) going into big chunky black boots: a fat rounded toe turned OUT (like the drawing), and an
   // upright ankle shaft with a rolled top that the leg disappears into ---
-  d.leg = roundCone(m, [0.048, 0.31, 0], [0.058, 0.2, 0], 0.026, 0.025);
+  d.leg = Math.max(roundCone(m, [0.048, 0.31, 0], [0.058, 0.2, 0], 0.026, 0.025), 0.006 - Math.abs(x));
   {
     const q = local(m, BOOT.c, 0, BOOT.ry);
     const toe = ellipsoid(q, [0, -0.004, 0.06], [0.108, 0.084, 0.15]);
     const heel = ellipsoid(q, [0.004, 0.022, -0.045], [0.088, 0.086, 0.088]);
     const shaft = roundCone(m, [0.066, 0.07, -0.006], [0.062, 0.212, -0.004], 0.06, 0.05);
-    d.shoe = Math.max(smin(smin(toe, heel, 0.05), shaft, 0.035), -y);
-    d.cuff = torusY(m, [0.062, 0.222, -0.004], 0.047, 0.017);
+    // Each boot stays on its own side of the middle: where the two boots met they fused into one blob, which then
+    // stretched into a streak between his feet when they moved apart.
+    const gap = 0.006 - Math.abs(x);
+    d.shoe = Math.max(smin(smin(toe, heel, 0.05), shaft, 0.035), -y, gap);
+    d.cuff = Math.max(torusY(m, [0.062, 0.222, -0.004], 0.047, 0.017), gap);
   }
   // --- the big red tail behind him: thick at the base low on his back, sweeping up and out to a rounded tip ---
   {
