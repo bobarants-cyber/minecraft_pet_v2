@@ -7,7 +7,7 @@ import { ReminderStore, parseCommand, formatClock } from './reminders.js';
 import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText } from './ai.js';
 import { Whisper } from './captions.js';
 import * as opener from './opener.js';
-import { ClassSchedule, LEAD_MINUTES } from './schedule.js';
+import { ClassSchedule, LEAD_MINUTES, classDecision } from './schedule.js';
 import { NOTES_DIR, NotesSession } from './notes.js';
 import { ActivityWatcher } from './activity.js';
 import { Skills } from './skills.js';
@@ -825,7 +825,12 @@ ipcMain.on('classes:join', (_e, id) => {
 function openClass(c, { late = false, now = false } = {}) {
   if (!c.link) return;
   classes.markOpened(c);
-  if (settings.autoNotes) startNotes({ title: c.name, endAt: c.endAt ?? classes.times(c, new Date()).end, auto: true });
+  if (settings.autoNotes) {
+    const begin = () => startNotes({ title: c.name, endAt: c.endAt ?? classes.times(c, new Date()).end, auto: true });
+    // Notes from the class before (back-to-back): finish those first, then start new ones.
+    if (notes && notes.title !== c.name) stopNotes().then(begin);
+    else begin();
+  }
   const text = now ? `📚 Opening ${c.name}…` : late ? `📚 ${c.name} already started. Opening it now!` : `📚 ${c.name} starts in ${LEAD_MINUTES} minutes! Opening your class…`;
   if (!now && Notification.isSupported()) new Notification({ title: `${personaFor(settings.mob).name}: class time!`, body: text.replace(/^📚\s*/, ''), silent: false }).show();
   send('classTime', { text });
@@ -996,13 +1001,20 @@ async function checkClasses() {
   if (!due.length) return;
   checkingClasses = true;
   try {
-    // Already in a meeting (you joined without me, or started me during class)? Don't open it again.
-    const inMeeting = await meetingRunning();
+    const now = new Date();
+    const meeting = await meetingInfo();
     for (const c of due) {
-      if (inMeeting) {
+      const { what, previous } = classDecision(c, meeting, classes.today(now), now);
+      if (what === 'already') {
         classes.markOpened(c);
-        if (settings.autoNotes) startNotes({ title: c.name, endAt: c.endAt ?? classes.times(c, new Date()).end, auto: true });
+        if (settings.autoNotes) startNotes({ title: c.name, endAt: c.endAt ?? classes.times(c, now).end, auto: true });
         send('say', { text: `📚 You’re already in ${c.name} 👍 ${settings.autoNotes ? 'I’ll take notes for you!' : ''}`.trim() });
+      } else if (what === 'later') {
+        // Still in the previous class: open the next one right when it starts.
+        classes.markOpened(c);
+        const wait = c.startAt.getTime() - now.getTime();
+        send('say', { text: `📚 ${c.name} starts at ${clock(c.startAt)}. I’ll open it then, right after ${previous.name} 👍` });
+        setTimeout(() => openClass(c, { now: true }), wait);
       } else openClass(c, { late: c.late });
     }
   } finally {
@@ -1010,15 +1022,29 @@ async function checkClasses() {
   }
 }
 
-/** Is a video meeting open right now (Zoom, Google Meet, Teams, Webex)? */
-async function meetingRunning() {
-  if (activity === 'meeting') return true;
-  if (process.platform !== 'darwin') return false;
+/** Open video meetings: { any, meetCodes: ['abc-defg-hij', …] } (Zoom, Google Meet, Teams, Webex). */
+async function meetingInfo() {
+  const info = { any: activity === 'meeting', meetCodes: [] };
+  if (process.platform !== 'darwin') return info;
   // Zoom's meeting window runs as "CptHost" only while you're in a meeting.
   const zoom = await new Promise((r) => execFile('pgrep', ['-x', 'CptHost'], (err, out) => r(!err && String(out).trim().length > 0)));
-  if (zoom) return true;
-  const tab = await findBrowserTab(/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}|teams\.microsoft\.com\/.*(?:meetup-join|calling)|zoom\.us\/(?:wc|j)\/|webex\.com\/meet/i).catch(() => '');
-  return !!tab;
+  // Every browser tab with a meeting open.
+  const tabs = await allBrowserTabs().catch(() => []);
+  info.meetCodes = tabs.map((u) => u.match(/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i)?.[1]?.toLowerCase()).filter(Boolean);
+  const other = tabs.some((u) => /teams\.microsoft\.com\/.*(?:meetup-join|calling)|zoom\.us\/(?:wc|j)\/|webex\.com\/meet/i.test(u));
+  info.any = info.any || zoom || other || info.meetCodes.length > 0;
+  return info;
+}
+
+/** The addresses of all open tabs in the browsers that are running. */
+async function allBrowserTabs() {
+  const out = [];
+  for (const [id, kind] of [['com.google.Chrome', 'chromium'], ['company.thebrowser.Browser', 'chromium'], ['com.brave.Browser', 'chromium'], ['com.microsoft.edgemac', 'chromium'], ['com.apple.Safari', 'safari']]) {
+    const script = `if application id "${id}" is running then\ntell application id "${id}"\nset out to ""\nrepeat with w in windows\nrepeat with t in tabs of w\nset out to out & (URL of t) & linefeed\nend repeat\nend repeat\nreturn out\nend tell\nend if\nreturn ""`;
+    const got = await new Promise((r) => execFile('osascript', ['-e', script], { timeout: 6000 }, (err, o) => r(err ? '' : String(o))));
+    out.push(...got.split('\n').map((x) => x.trim()).filter(Boolean));
+  }
+  return out;
 }
 
 /** Open a website or app by having the pet type it (see opener.js), with the typing animation while it does. */

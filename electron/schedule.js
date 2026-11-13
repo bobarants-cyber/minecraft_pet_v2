@@ -138,3 +138,19 @@ export class ClassSchedule {
     this.opened.add(`${cls.id}@${dayKey(now)}`);
   }
 }
+
+/**
+ * A class is due (2 minutes before it starts): what to do, given the meetings that are open.
+ *   'already' – you're in this class's meeting (Google Meet code matches, or a meeting is open and no other class is going)
+ *   'later'   – you're still in the class before (back-to-back): open this one when it starts
+ *   'open'    – open it now
+ * meeting: { any, meetCodes }, today: today's classes with startAt/endAt.
+ */
+export function classDecision(c, meeting, today, now = new Date()) {
+  const code = c.link?.match(/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i)?.[1]?.toLowerCase();
+  const previous = today.find((x) => x.id !== c.id && x.startAt < c.startAt && x.endAt.getTime() > now.getTime() - 60_000) ?? null;
+  const inThisOne = code ? meeting.meetCodes.includes(code) : meeting.any && !previous;
+  if (inThisOne) return { what: 'already', previous };
+  if (meeting.any && previous && now < c.startAt) return { what: 'later', previous };
+  return { what: 'open', previous };
+}
