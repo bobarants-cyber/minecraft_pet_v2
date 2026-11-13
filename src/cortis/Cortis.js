@@ -3,199 +3,302 @@ import { FaceDisplay } from '../bee/face/FaceDisplay.js';
 import { furry } from './fur.js';
 
 /**
- * The CORTIS plushies: fuzzy little balls with pom-pom bumps, one big embroidered eye and one small dot eye, a tiny
- * nose, an open mouth and a party hat. They start in an egg that wobbles, cracks open, and out they pop.
- * Colours come from the official plush photos (yellow, white, blue, pink); green was asked for on top.
+ * The CORTIS plushies: long-haired fuzzy balls with pom-pom bumps and a party hat, hatching out of a soft egg.
+ * Face (the same on every colour, traced from the official plush photos): one big embroidered eye, a white patch of
+ * an uneven rounded shape with a brown pupil; one tiny brown eye, half hidden in the fur; and an open mouth, an uneven
+ * pink shape. No nose. The face is embroidered into the fur, so the fur around it overlaps its edges.
  */
 export const CORTIS_COLORS = {
-  yellow: { fur: 0xf3e23c, tip: 0xfbee70, bobble: 0xf2a443, bobbleTip: 0xf8bd68, mouth: 0xf59a2c, sclera: 0xfbf7ee, pupil: 0x1d1a1a, hat: 0xf0a24a },
-  white: { fur: 0xe6e6ea, tip: 0xf7f7f9, bobble: 0xc4c5cb, bobbleTip: 0xd8d9de, mouth: 0x9fa0a8, sclera: 0xeee6d8, pupil: 0x1d1a1a, hat: 0x5fbf7c },
-  blue: { fur: 0x86aeea, tip: 0xa9c6f3, bobble: 0x4a80e0, bobbleTip: 0x6d9aea, mouth: 0x3c6fd8, sclera: 0xfbf7ee, pupil: 0x4a2c1c, hat: 0x5b74cc },
-  pink: { fur: 0xf0b1bf, tip: 0xf8cdd6, bobble: 0xe07890, bobbleTip: 0xeb97a9, mouth: 0xf59ab2, sclera: 0xfbf7ee, pupil: 0x4a2c1c, hat: 0xd8466a },
-  green: { fur: 0x9fd88e, tip: 0xc0e8b0, bobble: 0x52b45e, bobbleTip: 0x74c77c, mouth: 0x3f9e4e, sclera: 0xfbf7ee, pupil: 0x1d1a1a, hat: 0xf2c94c },
+  yellow: { fur: '#f2df3a', bobble: '#f0a03e', mouth: '#f39a2e', rim: '#d97c1c', sclera: '#fbf8ef', pupil: '#2a201c', tiny: '#2a201c', hat: '#f0a24a' },
+  white: { fur: '#e4e4e8', bobble: '#c2c3c9', mouth: '#a3a4ac', rim: '#86878f', sclera: '#efe7d8', pupil: '#2a201c', tiny: '#2a201c', hat: '#5cbd78' },
+  blue: { fur: '#86ade9', bobble: '#4a7fdf', mouth: '#3b6ed6', rim: '#2c58b4', sclera: '#fbf8ef', pupil: '#5a3422', tiny: '#5a3422', hat: '#5a72cb' },
+  pink: { fur: '#f2b5c2', bobble: '#d9758b', mouth: '#f597b0', rim: '#e0718f', sclera: '#fdfaf3', pupil: '#6a3a22', tiny: '#6a3a22', hat: '#cf3f63' },
+  green: { fur: '#9fd78f', bobble: '#4fb05c', mouth: '#46a656', rim: '#2f8a40', sclera: '#fbf8ef', pupil: '#2a201c', tiny: '#2a201c', hat: '#f2c94c' },
 };
 
-const R = 0.4; // the ball
-const FUR = 0.065; // how long its fur is
-const SKIN = R + FUR + 0.004; // where the embroidered face sits (on top of the fur)
-const HOVER = 0.04;
+const R = 0.4;
+const FUR = 0.075;
+const HOVER = 0.03;
 export const CORTIS_HEIGHT = HOVER + 2 * (R + FUR) + 0.12;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const popIn = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 + 2.4 * (t - 1) ** 3 + 1.4 * (t - 1) ** 2);
 
-const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
+// ---------- The face, drawn into the fur's colour map ----------
+// Laid out by direction: the front of the ball is the middle of the canvas, 1 unit = 1 radian of arc on the ball
+// (x right, y up). Traced from the full-size photo of the pink one (measured in pixels, turned into angles on the
+// ball and re-centred, because the photo's plush is turned to one side).
+const BIG_AT = [0.13, 0.43];
+const BIG_EYE = [[-0.2, 0.08], [-0.12, 0.19], [0.0, 0.215], [0.12, 0.18], [0.21, 0.06], [0.2, -0.09], [0.12, -0.19], [-0.02, -0.215], [-0.15, -0.17], [-0.215, -0.05]];
+const PUPIL = { x: -0.05, y: 0.0, r: 0.088 };
+const TINY = { x: -0.29, y: 0.17, rx: 0.105, ry: 0.09 };
+const MOUTH = [[-0.13, -0.06], [0.09, 0.047], [0.29, 0.027], [0.407, -0.003], [0.4, -0.092], [0.237, -0.229], [-0.033, -0.352], [-0.123, -0.32], [-0.14, -0.194]];
+const MOUTH_TOP = 0.047;
+/** Arc units → canvas units (a degree of longitude is shorter away from the middle, so widen to keep shapes true). */
+const P = ([x, y]) => [x / Math.cos(y), y];
 
-/** A flat shape (in a plane facing +z) wrapped onto the ball's surface at the spot `at` = [x, y] on the front. */
-function onBall(geometry, [x, y], lift = 0) {
-  const dir = new THREE.Vector3(x, y, Math.sqrt(Math.max(0.05, 1 - x * x - y * y))).normalize();
-  const up = new THREE.Vector3(0, 1, 0);
-  const right = new THREE.Vector3().crossVectors(up, dir).normalize();
-  const upT = new THREE.Vector3().crossVectors(dir, right).normalize();
-  const pos = geometry.attributes.position;
-  const p = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    p.copy(dir).multiplyScalar(SKIN).addScaledVector(right, pos.getX(i)).addScaledVector(upT, pos.getY(i));
-    p.setLength(SKIN + lift + pos.getZ(i));
-    pos.setXYZ(i, p.x, p.y, p.z);
+/** A rounded closed curve through the points (Catmull-Rom as Bézier pieces). */
+function smoothPath(ctx, pts) {
+  const n = pts.length;
+  ctx.beginPath();
+  ctx.moveTo(...pts[0]);
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]);
   }
-  geometry.computeVertexNormals();
-  return geometry;
+  ctx.closePath();
 }
 
-/** The tangent frame at a front spot, for small parts that move (the pupil, the closed-eye lines). */
-function frameAt([x, y], lift = 0) {
-  const dir = new THREE.Vector3(x, y, Math.sqrt(Math.max(0.05, 1 - x * x - y * y))).normalize();
-  const g = new THREE.Group();
-  g.position.copy(dir).multiplyScalar(SKIN + lift);
-  g.lookAt(dir.clone().multiplyScalar(10));
+class FaceCanvas {
+  constructor(C) {
+    this.C = C;
+    this.W = 1024;
+    this.H = 512;
+    const mk = () => { const c = document.createElement('canvas'); c.width = this.W; c.height = this.H; return c; };
+    this.color = mk();
+    this.mask = mk();
+    const tex = (c) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.wrapS = THREE.RepeatWrapping; return t; };
+    this.colorTex = tex(this.color);
+    this.maskTex = tex(this.mask);
+    this.key = '';
+  }
+  frame(ctx) {
+    const k = this.H / Math.PI;
+    ctx.setTransform(k, 0, 0, -k, this.W / 2, this.H / 2);
+  }
+  draw(s) {
+    const key = JSON.stringify(s);
+    if (key === this.key) return;
+    this.key = key;
+    const { C } = this;
+    const ctx = this.color.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = C.fur;
+    ctx.fillRect(0, 0, this.W, this.H);
+    const m = this.mask.getContext('2d');
+    m.setTransform(1, 0, 0, 1, 0, 0);
+    m.filter = 'none';
+    m.fillStyle = '#fff';
+    m.fillRect(0, 0, this.W, this.H);
+    this.frame(ctx);
+    this.frame(m);
+    m.filter = 'blur(1.5px)';
+    m.fillStyle = '#000';
+
+    // Blush, in the fur (so it stays fuzzy).
+    if (s.blush > 0.05) {
+      for (const [x, y] of [[-0.48, -0.05], [0.5, 0.12]]) {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 0.13);
+        g.addColorStop(0, `rgba(255,120,150,${0.5 * s.blush})`);
+        g.addColorStop(1, 'rgba(255,120,150,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 0.14, y - 0.14, 0.28, 0.28);
+      }
+    }
+
+    // The big eye: an embroidered white patch with a stitched edge, and the pupil.
+    const eye = BIG_EYE.map(([x, y]) => P([BIG_AT[0] + x, BIG_AT[1] + y]));
+    smoothPath(ctx, eye);
+    ctx.fillStyle = C.sclera;
+    ctx.fill();
+    ctx.lineWidth = 0.012;
+    ctx.strokeStyle = 'rgba(120,110,100,0.35)';
+    ctx.stroke();
+    smoothPath(m, eye);
+    m.fill();
+    const py = BIG_AT[1] + PUPIL.y + s.lookY * 0.035, px = (BIG_AT[0] + PUPIL.x + s.lookX * 0.04) / Math.cos(py), wide = 1 / Math.cos(py);
+    ctx.fillStyle = C.pupil;
+    ctx.strokeStyle = C.pupil;
+    ctx.lineCap = 'round';
+    if (s.happy) {
+      ctx.lineWidth = 0.026;
+      ctx.beginPath();
+      ctx.arc(px, py - 0.035, 0.08, 0.25, Math.PI - 0.25);
+      ctx.stroke();
+    } else if (s.big < 0.25) {
+      ctx.lineWidth = 0.022;
+      ctx.beginPath();
+      ctx.moveTo(px - 0.085, py);
+      ctx.lineTo(px + 0.085, py);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(px, py, PUPIL.r * s.size * wide, PUPIL.r * s.size * s.big, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // The tiny eye.
+    ctx.fillStyle = C.tiny;
+    ctx.strokeStyle = C.tiny;
+    if (s.happy) {
+      ctx.lineWidth = 0.022;
+      ctx.beginPath();
+      ctx.arc(TINY.x / Math.cos(TINY.y), TINY.y - 0.03, 0.07, 0.3, Math.PI - 0.3);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(TINY.x / Math.cos(TINY.y), TINY.y, TINY.rx / Math.cos(TINY.y), Math.max(0.01, TINY.ry * s.small), 0, 0, Math.PI * 2);
+      ctx.fill();
+      m.beginPath();
+      m.ellipse(TINY.x / Math.cos(TINY.y), TINY.y, (TINY.rx * 0.85) / Math.cos(TINY.y), Math.max(0.008, TINY.ry * s.small * 0.85), 0, 0, Math.PI * 2);
+      m.fill();
+    }
+
+    // The mouth grows from its top edge as it opens (and shrinks when it's sad).
+    const k = s.mouth;
+    const mouth = MOUTH.map(([x, y]) => P([x, MOUTH_TOP - (MOUTH_TOP - y) * k]));
+    smoothPath(ctx, mouth);
+    ctx.fillStyle = C.mouth;
+    ctx.fill();
+    ctx.lineWidth = 0.014;
+    ctx.strokeStyle = C.rim;
+    ctx.stroke();
+    // A softer, lighter tongue inside.
+    ctx.save();
+    smoothPath(ctx, mouth);
+    ctx.clip();
+    const ty = MOUTH_TOP - 0.25 * k;
+    const tg = ctx.createRadialGradient(0.05, ty, 0, 0.05, ty, 0.16);
+    tg.addColorStop(0, 'rgba(255,255,255,0.28)');
+    tg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = tg;
+    ctx.fillRect(-0.3, -0.6, 0.9, 0.8);
+    ctx.restore();
+    smoothPath(m, mouth);
+    m.fill();
+
+    this.colorTex.needsUpdate = true;
+    this.maskTex.needsUpdate = true;
+  }
+}
+
+// ---------- Shapes ----------
+/** A slightly squashed, lumpy ball, like a stuffed plush. */
+function plushBall() {
+  const g = new THREE.SphereGeometry(R, 96, 72);
+  const p = g.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const n = v.clone().normalize();
+    v.multiplyScalar(1 + 0.025 * Math.sin(n.x * 5 + n.y * 3) * Math.sin(n.z * 4 - n.y * 2) + 0.015 * Math.sin(n.y * 9 + n.x * 7));
+    v.y *= 0.96;
+    v.x *= 1.03;
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
   return g;
 }
 
-function sprinkleTexture(base) {
+function sprinkles(base) {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
+  c.width = c.height = 256;
   const x = c.getContext('2d');
-  x.fillStyle = `#${new THREE.Color(base).getHexString()}`;
-  x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = 'rgba(255,255,255,0.9)';
-  x.lineWidth = 3;
+  x.fillStyle = base;
+  x.fillRect(0, 0, 256, 256);
+  x.strokeStyle = 'rgba(255,255,255,0.95)';
+  x.lineWidth = 5;
   x.lineCap = 'round';
-  for (let i = 0; i < 40; i++) {
-    const px = Math.random() * 128, py = Math.random() * 128, a = Math.random() * Math.PI;
+  for (let i = 0; i < 70; i++) {
+    const px = Math.random() * 256, py = Math.random() * 256, a = Math.random() * Math.PI;
     x.beginPath();
     x.moveTo(px, py);
-    x.lineTo(px + Math.cos(a) * 6, py + Math.sin(a) * 6);
+    x.lineTo(px + Math.cos(a) * 11, py + Math.sin(a) * 11);
     x.stroke();
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
 
+/** The party hat: a soft velvety cone with sprinkles and a fuzzy pom-pom. */
 function partyHat(color) {
   const g = new THREE.Group();
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.2, 24, 1, true), flat(0xffffff, { map: sprinkleTexture(color), side: THREE.DoubleSide }));
+  const cone = furry(new THREE.ConeGeometry(0.085, 0.2, 40, 6, false), { map: sprinkles(color), length: 0.007, shells: 7, density: 260, bend: 0.2, swirl: 0.3, seed: 5 });
   cone.position.y = 0.1;
-  cone.castShadow = true;
-  const pom = furry(new THREE.SphereGeometry(0.026, 16, 12), { color: 0xc9c9cf, tip: 0xeeeeF2, length: 0.016, shells: 8, density: 40, seed: 3 });
-  pom.position.y = 0.205;
+  const pom = furry(new THREE.SphereGeometry(0.028, 20, 14), { color: 0xc8c8ce, tip: 0xf2f2f5, length: 0.018, shells: 10, density: 70, seed: 3, bend: 0.3 });
+  pom.position.y = 0.21;
   g.add(cone, pom);
   return g;
 }
 
-/** The egg: a soft white shell in two halves, split by a zigzag crack. */
+/** One half of the egg: a thick, soft terry-cloth shell with a zigzag crack. */
 function eggHalf(top) {
-  const U = 72, V = 24, H = 1.12, W = 0.56;
-  const crack = (u) => 0.52 + 0.06 * (1 - Math.abs(((u * 9) % 1) * 2 - 1)) * 2 - 0.06;
-  // A real egg: round, widest a bit below the middle, a gentler dome on top.
+  const U = 90, V = 20, H = 1.12, W = 0.58, T = 0.05;
+  const crack = (u) => 0.425 + 0.15 * (1 - Math.abs(((u * 8) % 1) * 2 - 1));
   const radius = (v) => { const m = 0.42, d = (v - m) / (v < m ? m : 1 - m); return W * Math.sqrt(Math.max(0, 1 - d * d)) ** 0.9; };
   const pos = [], index = [];
-  for (let i = 0; i <= U; i++) {
-    const u = i / U, a = u * Math.PI * 2, c = crack(u);
-    for (let j = 0; j <= V; j++) {
-      const v = top ? c + (1 - c) * (j / V) : c * (j / V);
-      const r = radius(v);
-      pos.push(Math.cos(a) * r, v * H, Math.sin(a) * r);
+  const grid = (inset, flip) => {
+    const start = pos.length / 3;
+    for (let i = 0; i <= U; i++) {
+      const u = i / U, c = crack(u), a = u * Math.PI * 2;
+      for (let j = 0; j <= V; j++) {
+        const v = top ? c + (1 - c) * (j / V) : c * (j / V);
+        const r = Math.max(0, radius(v) - inset);
+        pos.push(Math.cos(a) * r, v * H + (inset && !top && j === 0 ? inset : 0), Math.sin(a) * r);
+      }
     }
-  }
-  for (let i = 0; i < U; i++) for (let j = 0; j < V; j++) {
-    const a = i * (V + 1) + j, b = (i + 1) * (V + 1) + j;
-    index.push(a, a + 1, b, b, a + 1, b + 1);
+    for (let i = 0; i < U; i++) for (let j = 0; j < V; j++) {
+      const a = start + i * (V + 1) + j, b = start + (i + 1) * (V + 1) + j;
+      if (flip) index.push(a, b, a + 1, b, b + 1, a + 1);
+      else index.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+    return start;
+  };
+  const outer = grid(0, false);
+  const inner = grid(T, true);
+  // The rim along the crack joins the outside to the inside, so the shell has a thickness.
+  const edge = top ? 0 : V;
+  for (let i = 0; i < U; i++) {
+    const a = outer + i * (V + 1) + edge, b = outer + (i + 1) * (V + 1) + edge;
+    const c = inner + i * (V + 1) + edge, d = inner + (i + 1) * (V + 1) + edge;
+    if (top) index.push(a, b, c, b, d, c);
+    else index.push(a, c, b, b, c, d);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setIndex(index);
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, flat(0xfbfbf8, { roughness: 1, side: THREE.DoubleSide }));
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
+  geo.translate(0, -0.42 * H, 0); // centred, so the terry fur grows outwards evenly
+  const g = new THREE.Group();
+  const fur = furry(geo, { color: 0xf3f2ee, tip: 0xffffff, length: 0.012, shells: 7, density: 150, bend: 0.15, swirl: 0.5, seed: 9 });
+  fur.position.y = 0.42 * H;
+  g.add(fur);
+  return g;
 }
 
 export class Cortis {
   constructor(color = 'yellow') {
     const C = CORTIS_COLORS[color] ?? CORTIS_COLORS.yellow;
-    this.colorName = color;
     this.root = new THREE.Group();
     this.root.name = `cortis_${color}`;
     const hips = new THREE.Group();
     const torso = new THREE.Group();
     this.root.add(hips);
     hips.add(torso);
-    // Everything that hatches lives in `body` (centred on the ball), so the hatch never fights the poses.
     const body = new THREE.Group();
-    body.position.y = R + FUR;
+    body.position.y = R + FUR * 0.6;
     torso.add(body);
     this.body = body;
 
-    // The fuzzy ball and its pom-pom bumps.
-    body.add(furry(new THREE.SphereGeometry(R, 72, 54), { color: C.fur, tip: C.tip, length: FUR, shells: 22, density: 70, seed: 1 }));
-    const bobbleGeo = new THREE.SphereGeometry(0.062, 24, 18);
-    for (const [x, y, z, s] of [[-0.62, 0.62, 0.2, 1], [-0.3, 0.88, 0.1, 0.95], [0.22, 0.9, 0.05, 1], [0.6, 0.66, 0.08, 1.05], [0.86, 0.3, 0.05, 0.95], [0.92, -0.08, 0.05, 0.9], [-0.86, 0.32, 0.1, 0.9], [0.0, 0.7, -0.6, 0.9], [-0.55, 0.5, -0.55, 0.85], [0.55, 0.45, -0.6, 0.85]]) {
-      const b = furry(bobbleGeo, { color: C.bobble, tip: C.bobbleTip, length: 0.03, shells: 12, density: 34, seed: 2 });
-      b.position.copy(new THREE.Vector3(x, y, z).normalize().multiplyScalar(R + FUR * 0.4));
+    // The ball, with the face drawn into its fur.
+    this.faceCanvas = new FaceCanvas(C);
+    this.faceCanvas.draw({ big: 1, small: 1, size: 1, happy: false, mouth: 1.0, blush: 0, lookX: 0, lookY: 0 });
+    body.add(furry(plushBall(), { length: FUR, shells: 30, density: 85, seed: 1, bend: 0.6, swirl: 0.7, colorMap: this.faceCanvas.colorTex, maskMap: this.faceCanvas.maskTex }));
+
+    // Pom-pom bumps, sunk a little into the fur.
+    const bobbleGeo = new THREE.SphereGeometry(0.06, 28, 20);
+    for (const [x, y, z, s] of [[-0.62, 0.62, 0.22, 1], [-0.3, 0.9, 0.12, 0.95], [0.25, 0.9, 0.06, 1], [0.62, 0.64, 0.1, 1.05], [0.88, 0.28, 0.06, 0.95], [0.93, -0.1, 0.05, 0.9], [-0.88, 0.3, 0.12, 0.9], [0.0, 0.7, -0.6, 0.9], [-0.55, 0.5, -0.55, 0.85], [0.55, 0.45, -0.6, 0.85]]) {
+      const b = furry(bobbleGeo, { color: C.bobble, length: 0.028, shells: 14, density: 46, seed: 2 + x, bend: 0.35 });
+      b.position.copy(new THREE.Vector3(x, y, z).normalize().multiplyScalar(R + FUR * 0.25));
       b.scale.setScalar(s);
       body.add(b);
     }
 
-    // The embroidered face (on the front, +z). Big eye on its right (the viewer's right), small dot eye on the left.
-    const face = new THREE.Group();
-    body.add(face);
-    const BIG = [0.34, 0.26];
-    const SMALL = [-0.22, 0.27];
-    const outline = new THREE.Mesh(onBall(new THREE.CircleGeometry(0.112, 40), BIG, 0), flat(new THREE.Color(C.sclera).multiplyScalar(0.8)));
-    const sclera = new THREE.Mesh(onBall(new THREE.CircleGeometry(0.1, 40), BIG, 0.002), flat(C.sclera));
-    this.bigEye = new THREE.Group();
-    this.bigEye.add(outline, sclera);
-    face.add(this.bigEye);
-    this.pupilFrame = frameAt(BIG, 0.004);
-    this.pupil = new THREE.Mesh(new THREE.CircleGeometry(0.036, 28), flat(C.pupil, { roughness: 1 }));
-    this.pupilFrame.add(this.pupil);
-    face.add(this.pupilFrame);
-    this.smallFrame = frameAt(SMALL, 0.002);
-    this.smallEye = new THREE.Mesh(new THREE.CircleGeometry(0.03, 24), flat(C.pupil, { roughness: 1 }));
-    this.smallFrame.add(this.smallEye);
-    face.add(this.smallFrame);
-    const nose = new THREE.Mesh(onBall(new THREE.CircleGeometry(0.024, 20), [-0.05, 0.07], 0.002), flat(0x2a1d18));
-    nose.scale.set(1, 1, 1);
-    face.add(nose);
-    // The open mouth: a soft rounded shape, flat on top.
-    const mouthShape = new THREE.Shape();
-    // Like the plush: a wide open mouth, flat and a little slanted on top, round at the bottom.
-    mouthShape.moveTo(-0.075, 0.035);
-    mouthShape.quadraticCurveTo(0, 0.05, 0.08, 0.03);
-    mouthShape.bezierCurveTo(0.098, -0.035, 0.055, -0.085, 0.002, -0.085);
-    mouthShape.bezierCurveTo(-0.055, -0.085, -0.095, -0.03, -0.075, 0.035);
-    this.mouthFrame = frameAt([0.1, -0.12], 0.002);
-    this.mouth = new THREE.Mesh(new THREE.ShapeGeometry(mouthShape, 16), flat(C.mouth));
-    this.mouth.rotation.z = -0.12;
-    this.mouthFrame.add(this.mouth);
-    face.add(this.mouthFrame);
-    // Closed and happy eyes (shown instead of the open ones).
-    const lineMat = flat(C.pupil);
-    this.closedBig = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.1, 4, 8), lineMat);
-    this.closedBig.rotation.z = Math.PI / 2;
-    this.happyBig = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.01, 8, 24, Math.PI), lineMat);
-    const bigFrame = frameAt(BIG, 0.006);
-    bigFrame.add(this.closedBig, this.happyBig);
-    face.add(bigFrame);
-    this.happySmall = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 8, 20, Math.PI), lineMat);
-    this.smallFrame.add(this.happySmall);
-    // Blush that shows when it's flustered or happy.
-    this.blush = [];
-    for (const at of [[-0.38, 0.06], [0.5, 0.05]]) {
-      const b = new THREE.Mesh(onBall(new THREE.CircleGeometry(0.06, 24), at, 0.001), new THREE.MeshBasicMaterial({ color: 0xff7a9c, transparent: true, opacity: 0, depthWrite: false }));
-      b.scale.set(1, 1, 1);
-      face.add(b);
-      this.blush.push(b);
-    }
-
-    // Party hat, tilted on top (hidden while it wears an outfit or headphones).
+    // Party hat, tilted on top (it steps aside for outfits and headphones).
     this.hat = partyHat(C.hat);
-    this.hat.position.copy(new THREE.Vector3(-0.18, 0.95, 0.12).normalize().multiplyScalar(R + FUR * 0.5));
-    this.hat.rotation.set(0.12, 0, 0.28);
+    this.hat.position.copy(new THREE.Vector3(-0.2, 0.95, 0.12).normalize().multiplyScalar(R + FUR * 0.35));
+    this.hat.rotation.set(0.12, 0, 0.3);
     body.add(this.hat);
 
     // Outfits and headphones are made for Bbokari's head; this holder scales and places them onto the ball.
@@ -204,10 +307,8 @@ export class Cortis {
     this.headHolder.scale.setScalar(s);
     this.headHolder.position.y = -0.28 * s;
     body.add(this.headHolder);
-    // In that holder's units the ball is ~0.33 across from its centre at y ≈ 0.28: hats sit a touch higher, and the
-    // headphones hug the ball with the band tucked behind the top pom-poms.
     this.outfitOffset = [0, 0.04, 0];
-    this.headFit = { side: 0.33, cupY: 0.3, cupZ: -0.01, top: 0.6, bandZ: -0.13, square: 0.75, mouth: [0.03, 0.24, 0.33] };
+    this.headFit = { side: 0.34, cupY: 0.3, cupZ: -0.01, top: 0.6, bandZ: -0.13, square: 0.75, mouth: [0.05, 0.26, 0.33] };
 
     this.joints = { hips, torso, head: body };
     this.parts = { loaded: true };
@@ -242,12 +343,10 @@ export class Cortis {
     const j = this.joints;
     const hop = Math.abs(Math.sin(this.walkPhase)) * 0.11 * this.walkAmount;
     j.hips.position.y = HOVER + p.bodyY + hop - p.crouch * 0.4;
-    // Squash when it lands from a hop, and a little breathing.
     const land = this.walkAmount * Math.max(0, Math.cos(this.walkPhase * 2)) * 0.06;
     const squash = 1 - p.crouch * 1.2 - land;
     j.torso.scale.set(1 / Math.sqrt(squash) + breath * 0.006, squash + breath * 0.01, 1 / Math.sqrt(squash));
     j.torso.rotation.set(p.torsoPitch * 0.6 + p.headPitch * 0.5 + this.lean * 0.5, p.torsoYaw + p.headYaw * 0.5, p.torsoRoll + p.headRoll * 0.6);
-    this.pose = p;
   }
 
   animate(dt) {
@@ -255,27 +354,20 @@ export class Cortis {
     if (!this.hatched) this.#hatch(dt);
     const c = this.face.current;
     const blink = this.face.blinkFactor;
-    const happy = Math.max(c.happy ?? 0, c.squeeze ?? 0, c.cat ?? 0) > 0.5;
-    const openBig = clamp(c.eyeOpen[1] * blink, 0, 1.2);
-    const openSmall = clamp(c.eyeOpen[0] * blink, 0, 1.2);
-    const closedBig = !happy && openBig < 0.22;
-    this.bigEye.visible = this.pupil.visible = !happy && !closedBig;
-    this.closedBig.visible = closedBig;
-    this.happyBig.visible = happy;
-    this.happySmall.visible = happy;
-    this.smallEye.visible = !happy;
-    const size = Math.min(c.eyeScale[1] ?? 1, 1.12);
-    this.bigEye.scale.set(1, 1, 1);
-    this.pupil.scale.set(size, size * Math.max(0.15, openBig), 1);
-    this.smallEye.scale.set(1, Math.max(0.15, openSmall), 1);
-    // The pupil wanders a little with the gaze (and sits a bit towards the middle, like on the plush).
-    this.pupil.position.set(-0.022 + this.face.look.x * 0.03, 0.006 + this.face.look.y * 0.025, 0);
-    const open = clamp(0.85 + (c.mouthOpen ?? 0) * 0.35, 0.5, 1.2);
-    this.mouth.scale.set(1, (c.mouthCurve ?? 0) < -0.3 ? -open * 0.6 : open, 1);
-    for (const b of this.blush) b.material.opacity = clamp((c.blush ?? 0) * 0.55, 0, 0.5);
-    // The party hat steps aside for outfits and headphones.
+    // Redraw the embroidered face only when it visibly changes (quantised, so it isn't every frame).
+    const q = (x, n) => Math.round(x * n) / n;
+    const sad = (c.mouthCurve ?? 0) < -0.3;
+    this.faceCanvas.draw({
+      big: q(clamp(c.eyeOpen[1] * blink, 0, 1), 6),
+      small: q(clamp(c.eyeOpen[0] * blink, 0, 1), 6),
+      size: q(Math.min(c.eyeScale[1] ?? 1, 1.12), 10),
+      happy: Math.max(c.happy ?? 0, c.squeeze ?? 0, c.cat ?? 0) > 0.5,
+      mouth: q(sad ? 0.5 : clamp(1 + (c.mouthOpen ?? 0) * 0.25, 0.7, 1.2), 10),
+      blush: q(clamp(c.blush ?? 0, 0, 1), 5),
+      lookX: q(this.face.look.x, 4),
+      lookY: q(this.face.look.y, 4),
+    });
     this.hat.visible = this.headHolder.children.length === 0;
-    // A gentle wobble, like a plush being jiggled, and fuzz that sways a touch as it hops.
     this.body.rotation.z = Math.sin(this.time * 1.7) * 0.025 + Math.sin(this.walkPhase) * 0.05 * this.walkAmount;
   }
 
@@ -284,30 +376,23 @@ export class Cortis {
     const t = (this.hatchT += dt);
     const egg = this.egg;
     egg.scale.setScalar(popIn(t / 0.4));
-    const wob = t < 1.75 ? Math.sin(t * 20) * 0.12 * ease((t - 0.4) / 1.2) * (t > 0.4 ? 1 : 0) : 0;
-    egg.rotation.z = wob;
+    egg.rotation.z = t > 0.4 && t < 1.75 ? Math.sin(t * 20) * 0.12 * ease((t - 0.4) / 1.2) : 0;
     egg.position.y = t > 0.9 && t < 1.75 ? Math.abs(Math.sin(t * 10)) * 0.03 : 0;
     if (t > 1.75) {
       const k = t - 1.75;
       this.eggTop.position.set(-k * 0.5, k * 1.6 - k * k * 2.2, 0);
       this.eggTop.rotation.z = k * 2.4;
-      this.eggTop.material.transparent = true; // only while it fades (a see-through egg lets fur specks show)
-      this.eggTop.material.opacity = clamp(1 - k / 0.7, 0, 1);
+      this.eggTop.scale.setScalar(Math.max(0.001, 1 - ease(k / 0.7)));
       this.body.visible = true;
       const g = popIn((t - 1.8) / 0.5);
       this.body.scale.setScalar(Math.max(0.001, 0.35 + 0.65 * g));
-      this.body.position.y = R + FUR + (1 - g) * -0.2;
+      this.body.position.y = R + FUR * 0.6 - (1 - g) * 0.2;
     }
-    if (t > 2.7) {
-      const k = clamp((t - 2.7) / 0.6, 0, 1);
-      this.eggBottom.scale.setScalar(1 - ease(k) * 0.999);
-      this.eggBottom.material.transparent = true;
-      this.eggBottom.material.opacity = 1 - k;
-    }
+    if (t > 2.7) this.eggBottom.scale.setScalar(Math.max(0.001, 1 - ease((t - 2.7) / 0.6)));
     if (t > 3.35) {
       this.egg.removeFromParent();
       this.body.scale.setScalar(1);
-      this.body.position.y = R + FUR;
+      this.body.position.y = R + FUR * 0.6;
       this.hatched = true;
     }
   }
