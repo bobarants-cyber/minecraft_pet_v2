@@ -75,7 +75,8 @@ export function buildSculptRig({ name, glb, modelHeight, eyes = {}, headStandIn 
     // they land where the model was a frame ago (e.g. mid pop-in) and the blush floats off the cheek.
     model.updateWorldMatrix(true, true);
     mesh.skeleton.update();
-    parts.eyes = new BbokariEyes(bones.head, mesh, eyes);
+    // eyes: false = the eyes are sculpted and painted on the model (no blinking bead eyes).
+    parts.eyes = eyes === false ? { eyes: [], apply() {} } : new BbokariEyes(bones.head, mesh, eyes);
     parts.loaded = true;
     return parts;
   });
