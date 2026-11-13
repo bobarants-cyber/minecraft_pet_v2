@@ -7,8 +7,8 @@ import { partAt, XEYE, SLEEPY } from './model.mjs';
 export const PIVOTS = { head: [0, 0.52, 0], arm_R: [0.14, 0.47, 0], arm_L: [-0.14, 0.47, 0], leg_R: [0.06, 0.3, 0], leg_L: [-0.06, 0.3, 0] };
 
 const GROUP = {
-  head: 'head', ear: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head', nose: 'head', tongue: 'head', mouth: 'head',
-  shirt: 'body', collar: 'body', charm: 'body',
+  head: 'head', lip: 'head', earFold: 'head', ear: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head', nose: 'head', tongue: 'head', mouth: 'head',
+  shirt: 'body', collar: 'body', tie: 'body',
   arm: 'arm', hand: 'arm',
   leg: 'leg', cuff: 'leg', shoe: 'leg',
 };
@@ -46,40 +46,62 @@ const NOSE = lin('#c7773f');
 const MOUTH = lin('#5b1e2a');
 const TONGUE = lin('#f28aa2');
 const SHIRT = lin('#f6f5f2');
-const TEAR = lin('#9b9ba3');
+const TIE = lin('#3b4566');
+const LINE = lin('#5b3a2a');
 const NAVY = lin('#252a4a');
 const SOLE = lin('#f2f2ef');
+
+/**
+ * Where the white face mask is. The borders are smooth curves that follow the head round (by angle), never a straight
+ * cut: white over the X eye and the whole lower face, wrapping a little round the cheeks; tan on the forehead, over
+ * the top and back of the head, and in a rounded patch round the sleepy eye that flows into the tan on top.
+ */
+function isWhiteFace([x, y, z]) {
+  const a = Math.atan2(x, z); // 0 = straight ahead, ±π = the back
+  const side = Math.abs(a);
+  // The top edge of the white: high over the X eye (+ a soft wave), lower on the other side, dropping smoothly
+  // to the cheeks as it wraps round, and gone well before the back.
+  const top = 0.8 - 0.02 * Math.sin(a * 2.2) - 0.16 * Math.max(0, side - 0.9) ** 1.5;
+  if (side > 2.1 || y > top) return false;
+  // The tan patch round the sleepy eye (a soft oval, joined to the forehead).
+  const dx = x - SLEEPY.c[0], dy = y - SLEEPY.c[1];
+  if (z > 0 && (dx / 0.125) ** 2 + (dy / (dy > 0 ? 0.16 : 0.118)) ** 2 < 1) return false;
+  return true;
+}
 
 export function colorAt(p, n) {
   const [x, y, z] = p;
   const { name } = partAt(p);
   switch (name) {
     case 'xcross': return BLACK;
-    case 'xeye': return Math.hypot(x - XEYE.c[0], y - XEYE.c[1]) > XEYE.r * 0.9 ? BLACK : WHITE;
+    case 'xeye': return Math.hypot(x - XEYE.c[0], y - XEYE.c[1]) > XEYE.r * 0.92 ? BLACK : WHITE;
     case 'sleepy': {
       const r = Math.hypot(x - SLEEPY.c[0], y - SLEEPY.c[1]);
-      if (r > SLEEPY.r * 0.9) return BLACK;
-      return Math.hypot(x - SLEEPY.c[0], y - (SLEEPY.c[1] - 0.012)) < 0.03 ? PUPIL : PURPLE;
+      if (r > SLEEPY.r * 0.93) return BLACK;
+      return Math.hypot(x - SLEEPY.c[0] + 0.008, y - (SLEEPY.c[1] - 0.03)) < 0.034 ? PUPIL : PURPLE;
     }
-    case 'lid': return TAN;
+    case 'lid': {
+      // The lid's lower edge is a dark line.
+      return y < SLEEPY.c[1] + 0.012 ? BLACK : TAN;
+    }
     case 'nose': return NOSE;
+    case 'lip': return LINE;
     case 'mouth': return MOUTH;
     case 'tongue': return TONGUE;
     case 'tuft': return TAN;
     case 'ear': {
-      // The cupped front of the ear is pale, the rim and back are tan.
       const ax = Math.abs(x);
-      return n[2] > 0.25 && Math.hypot(ax - 0.19, y - 0.895) < 0.058 ? INNER_EAR : TAN;
+      // Pale in the cupped front of the ear, with a little tan fold at the bottom inside.
+      if (n[2] > 0.2 && z > -0.04 && Math.hypot((ax - 0.19) / 0.8, y - 0.88) < 0.058) {
+        const fx = ax - 0.172, fy = y - 0.84;
+        if (Math.abs(fx + fy * 0.25) < 0.008 && fy > -0.02 && fy < 0.03) return TAN;
+        return INNER_EAR;
+      }
+      return TAN;
     }
-    case 'head': {
-      // Tan cap on top and over the back of the head, and a tan patch round the sleepy eye; white face below.
-      if (z < -0.03 && y > 0.6) return TAN;
-      if (y > 0.795 - 0.03 * Math.cos(x * 9)) return TAN;
-      if (z > 0.04 && Math.hypot(x - SLEEPY.c[0], y - SLEEPY.c[1]) < 0.118) return TAN;
-      return WHITE;
-    }
+    case 'head': return isWhiteFace(p) ? WHITE : TAN;
     case 'shirt': case 'collar': return SHIRT;
-    case 'charm': return TEAR;
+    case 'tie': return TIE;
     case 'arm': case 'hand': return TAN;
     case 'leg': return NAVY;
     case 'cuff': return BLACK;
