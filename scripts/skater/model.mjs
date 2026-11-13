@@ -93,6 +93,7 @@ function parts(p) {
 
   // --- head ---
   let head = smin(ellipsoid(p, HEAD.c, HEAD.r), ellipsoid(p, JOWL.c, JOWL.r), 0.05);
+  const headRaw = head;
   // A soft brow groove arcing over the big eye.
   {
     const cx = XEYE.c[0], cy = XEYE.c[1];
@@ -106,19 +107,18 @@ function parts(p) {
   // Big sunken eye with a rim (the socket is pressed in, the eye sits inside it).
   {
     const [cx, cy] = XEYE.c, fz = faceZ(cx, cy);
-    const socket = ellipsoid(p, [cx, cy, fz + 0.01], [XEYE.r + 0.008, XEYE.ry + 0.008, 0.028]);
-    head = ssub(head, socket, 0.01);
-    d.xeye = ellipsoid(p, [cx, cy, fz - 0.04], [XEYE.r, XEYE.ry, 0.042]);
+    // The eye is a thin cap that follows the curve of his head, standing just proud of it (no socket, so turning
+    // him never shows a second ring, and it can't bulge out past its outline at the sides).
+    d.xeye = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [XEYE.r, XEYE.ry, 0.2]), headRaw - 0.004);
     // The raised cross, tilted.
     const q = local(p, [cx + 0.004, cy - 0.004, fz + 0.006], 0.35);
-    d.xcross = Math.min(box(q, [0.056, 0.017, 0.01], 0.006), box(q, [0.017, 0.056, 0.01], 0.006));
+    // (clipped to a thin layer over the head, so from the side it doesn't stick out past his face)
+    d.xcross = Math.max(Math.min(box(q, [0.056, 0.017, 0.03], 0.006), box(q, [0.017, 0.056, 0.03], 0.006)), headRaw - 0.011);
   }
   // The sleepy eye: a big eyeball, and a heavy lid over its top half whose edge sticks out.
   {
     const [cx, cy] = SLEEPY.c, fz = faceZ(cx, cy);
-    const socket = ellipsoid(p, [cx, cy, fz + 0.006], [SLEEPY.r + 0.006, SLEEPY.ry + 0.006, 0.026]);
-    head = ssub(head, socket, 0.008);
-    d.sleepy = ellipsoid(p, [cx, cy, fz - 0.042], [SLEEPY.r, SLEEPY.ry, 0.05]);
+    d.sleepy = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [SLEEPY.r, SLEEPY.ry, 0.2]), headRaw - 0.004);
     const lidShell = ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.01, SLEEPY.ry + 0.009, 0.066]);
     const q = local(p, [cx, cy, 0], 0.08);
     d.lid = Math.max(lidShell, -(q[1] + 0.006)); // only above the lid line (slightly tilted); its edge juts out
