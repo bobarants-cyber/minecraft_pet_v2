@@ -54,9 +54,9 @@ export function faceZ(x, y) {
   const j = 1 - (x / 0.238) ** 2 - ((y - 0.632) / 0.115) ** 2; // the full lower face (jowls)
   return Math.max(HEAD.r[2] * Math.sqrt(Math.max(0, u)), 0.015 + 0.19 * Math.sqrt(Math.max(0, j))) + 0.006;
 }
-export const XEYE = { c: [-0.104, 0.705], r: 0.097 };
-export const SLEEPY = { c: [0.112, 0.705], r: 0.093 };
-export const NOSE = { c: [0.004, 0.64] };
+export const XEYE = { c: [-0.122, 0.708], r: 0.088, ry: 0.102 }; // oval, a bit taller than wide
+export const SLEEPY = { c: [0.128, 0.708], r: 0.085, ry: 0.098 };
+export const NOSE = { c: [0.004, 0.655] };
 export const MOUTH = { c: [0.006, 0.597], w: 0.044, h: 0.04 };
 
 function parts(p) {
@@ -72,16 +72,16 @@ function parts(p) {
     const a = Math.atan2(y - cy, x - cx);
     if (a > 0.5 && a < 2.6) {
       const r = Math.hypot(x - cx, y - cy);
-      const groove = len(r - (XEYE.r + 0.022), z - faceZ(x, y) - 0.003, 0) - 0.005;
+      const groove = len(r - (XEYE.ry + 0.02), z - faceZ(x, y) - 0.003, 0) - 0.005;
       head = ssub(head, groove, 0.006);
     }
   }
   // Big sunken eye with a rim (the socket is pressed in, the eye sits inside it).
   {
     const [cx, cy] = XEYE.c, fz = faceZ(cx, cy);
-    const socket = ellipsoid(p, [cx, cy, fz + 0.01], [XEYE.r + 0.008, XEYE.r + 0.008, 0.028]);
+    const socket = ellipsoid(p, [cx, cy, fz + 0.01], [XEYE.r + 0.008, XEYE.ry + 0.008, 0.028]);
     head = ssub(head, socket, 0.01);
-    d.xeye = ellipsoid(p, [cx, cy, fz - 0.04], [XEYE.r, XEYE.r, 0.042]);
+    d.xeye = ellipsoid(p, [cx, cy, fz - 0.04], [XEYE.r, XEYE.ry, 0.042]);
     // The raised cross, tilted.
     const q = local(p, [cx + 0.004, cy - 0.004, fz + 0.006], 0.35);
     d.xcross = Math.min(box(q, [0.056, 0.017, 0.01], 0.006), box(q, [0.017, 0.056, 0.01], 0.006));
@@ -89,10 +89,10 @@ function parts(p) {
   // The sleepy eye: a big eyeball, and a heavy lid over its top half whose edge sticks out.
   {
     const [cx, cy] = SLEEPY.c, fz = faceZ(cx, cy);
-    const socket = ellipsoid(p, [cx, cy, fz + 0.006], [SLEEPY.r + 0.006, SLEEPY.r + 0.006, 0.026]);
+    const socket = ellipsoid(p, [cx, cy, fz + 0.006], [SLEEPY.r + 0.006, SLEEPY.ry + 0.006, 0.026]);
     head = ssub(head, socket, 0.008);
-    d.sleepy = ellipsoid(p, [cx, cy, fz - 0.042], [SLEEPY.r, SLEEPY.r, 0.05]);
-    const lidShell = ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.01, SLEEPY.r + 0.009, 0.066]);
+    d.sleepy = ellipsoid(p, [cx, cy, fz - 0.042], [SLEEPY.r, SLEEPY.ry, 0.05]);
+    const lidShell = ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.01, SLEEPY.ry + 0.009, 0.066]);
     const q = local(p, [cx, cy, 0], 0.08);
     d.lid = Math.max(lidShell, -(q[1] + 0.006)); // only above the lid line (slightly tilted); its edge juts out
   }
@@ -107,7 +107,9 @@ function parts(p) {
     // Leaf outline: wider at the bottom, rounded at the top.
     const shape = (s) => ellipsoid([q[0], q[1] - s * 0.01, q[2]], [0, 0.0, 0], [0.078 * (1 + s), 0.105 * (1 + s), 0.028]);
     let ear = shape(0);
-    ear = ssub(ear, ellipsoid([q[0], q[1] + 0.006, q[2] - 0.022], [0, 0, 0], [0.056, 0.08, 0.026]), 0.01);
+    const hollow = ellipsoid([q[0], q[1] + 0.006, q[2] - 0.022], [0, 0, 0], [0.056, 0.08, 0.026]);
+    d.earHollow = hollow;
+    ear = ssub(ear, hollow, 0.01);
     d.ear = ear;
     d.earFold = 1e3; // (the small fold inside the ear is painted, not sculpted)
   }
@@ -118,34 +120,30 @@ function parts(p) {
     0.035,
   );
 
-  // --- mouth: a raised "w" lip line, the open mouth just below it, the tongue resting inside ---
+  // --- mouth: one Pikachu mouth. Its top edge IS the "w" (two little scallops meeting in a point in the middle),
+  // the rest hangs below, round at the bottom, with the tongue resting inside. ---
   {
     const [cx, cy] = MOUTH.c, fz = faceZ(cx, cy);
     const u = x - cx, v = y - cy, W = MOUTH.w, H = MOUTH.h;
-    // The open mouth: flat-ish on top (a slight curve), round at the bottom.
-    const top = 0.004 - 0.004 * (u / W) ** 2;
+    const a = Math.abs(u), R = W / 2;
+    const top = 0.016 - Math.sqrt(Math.max(0, R * R - (a - R) ** 2)) * 0.55;
     const bottom = -H * Math.sqrt(Math.max(0, 1 - (u / W) ** 2));
-    const inside2d = Math.max(v - top, bottom - v);
-    d.mouthCut = Math.max(inside2d, faceZ(x, y) - 0.024 - z); // a hollow that follows the face, not a flat slot
-    // The "w": two little arcs (lower halves of circles) meeting in the middle, raised from the face.
-    let w = 1e3;
-    for (const sgn of [-1, 1]) {
-      const ax = cx + sgn * 0.026, ay = cy + 0.03;
-      if (y < ay) w = Math.min(w, len(Math.hypot(x - ax, y - ay) - 0.026, z - faceZ(x, y), 0) - 0.0042);
-    }
-    d.lip = w;
-    // Tongue: inside the open mouth, its front just behind the lip.
-    const ty = cy - 0.032;
-    const t = ellipsoid(p, [cx + 0.003, ty, faceZ(cx, ty) - 0.026], [0.03, 0.024, 0.024]);
-    d.tongue = ssub(t, len(x - cx - 0.003, 0, z - faceZ(cx, ty) + 0.002) - 0.0025, 0.003);
+    const inside2d = Math.max(v - top, bottom - v, a - W);
+    d.mouthCut = Math.max(inside2d, faceZ(x, y) - 0.024 - z);
+    d.lip = 1e3;
+    const ty = cy - 0.03;
+    const t = ellipsoid(p, [cx, ty, faceZ(cx, ty) - 0.026], [0.03, 0.022, 0.022]);
+    d.tongue = ssub(t, len(x - cx, 0, z - faceZ(cx, ty) + 0.004) - 0.0025, 0.003);
     d.lipCut = 1e3;
   }
 
   // --- shirt: hollow A-line with a rolled hem, front seam, collar, short wide sleeves ---
   {
     const t = clamp((y - 0.3) / 0.24, 0, 1);
-    const rx = mix(0.21, 0.118, t ** 0.8), rz = mix(0.13, 0.092, t);
-    const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz);
+    const rx = mix(0.175, 0.118, t ** 0.9), rz = mix(0.122, 0.092, t);
+    // Soft cloth folds that fade out towards the chest.
+    const fold = 0.0035 * Math.sin(Math.atan2(x, z) * 9 + 0.6) * (1 - t) ** 1.5;
+    const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz) + fold;
     const solid = Math.max(outer, 0.3 - y, y - 0.54);
     let shirt = Math.max(Math.abs(outer + 0.006) - 0.006, 0.3 - y, y - 0.545); // a cloth shell, open at the bottom
     shirt = Math.min(shirt, Math.max(Math.abs(outer) - 0.012, Math.abs(y - 0.303) - 0.008)); // rolled hem
@@ -195,13 +193,10 @@ function parts(p) {
   d.leg = roundCone(m, [0.06, 0.32, 0], [0.068, 0.14, 0], 0.036, 0.032);
   {
     const sc = [0.118, 0.075, 0.05];
-    const q = local(m, sc, 0, -0.28);
-    const toe = ellipsoid(q, [0, 0, 0.01], [0.112, 0.074, 0.175]);
-    const heel = ellipsoid(q, [0, 0.03, -0.06], [0.072, 0.062, 0.085]);
-    const upper = Math.max(smin(toe, heel, 0.045), 0.012 - y);
-    const sole = Math.max(smin(toe, heel, 0.045) - 0.007, Math.abs(y - 0.008) - 0.008);
-    d.shoe = Math.min(upper, sole);
-    d.cuff = smin(torusY(m, [0.07, 0.15, -0.006], 0.044, 0.026), torusY(m, [0.07, 0.172, -0.006], 0.04, 0.02), 0.01);
+    const q = local(m, [0.1, 0.07, 0.035], 0, -0.12);
+    const body = ellipsoid(q, [0, 0, 0], [0.1, 0.07, 0.155]);
+    d.shoe = Math.max(body, -y) - 0.002;
+    d.cuff = torusY(m, [0.068, 0.142, -0.008], 0.042, 0.024);
   }
   return d;
 }
