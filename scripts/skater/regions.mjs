@@ -45,6 +45,7 @@ export function weightsAt(p) {
 
 const lin = (h) => [0, 2, 4].map((i) => (parseInt(h.slice(1 + i, 3 + i), 16) / 255) ** 2.2);
 const TAN = lin('#eeb27a');
+const LID = lin('#d98a48'); // the sleepy eye's lid is a darker orange in the drawing
 const WHITE = lin('#fbf8f2');
 const INNER_EAR = lin('#fcefe4');
 const BLACK = lin('#1b1a1e');
@@ -68,26 +69,18 @@ const SHINE = lin('#d6d9e0');
  */
 const soft = (d, w = 0.012) => Math.min(1, Math.max(0, 0.5 + d / w)); // 1 inside, 0 outside, a soft band between
 function isWhiteFace([x, y, z]) {
-  const a = Math.atan2(x, z); // 0 = straight ahead, ±π = the back
-  const side = Math.abs(a);
-  const top = 0.8 - 0.02 * Math.sin(a * 2.2) - 0.16 * Math.max(0, side - 0.9) ** 1.5;
-  let w = soft(top - y) * soft((2.1 - side) * 0.2);
-  // The tan patch round the sleepy eye (a soft oval, joined to the forehead).
-  const dx = x - SLEEPY.c[0], dy = y - SLEEPY.c[1];
-  if (z > 0) {
-    const e = Math.sqrt((dx / 0.13) ** 2 + (dy / (dy > 0 ? 0.17 : 0.125)) ** 2) - 1;
-    w *= soft(e * 0.12);
-  }
-  // Between the eyes the tan forehead comes down in a narrowing, softly curved point that ends just above the nose.
-  if (z > 0.05) {
-    const top = 0.8, tipY = NOSE_AT.c[1] + 0.022;
-    if (y > tipY && y < top) {
-      const k = (y - tipY) / (top - tipY);
-      const half = 0.052 * Math.sin(k * Math.PI * 0.5) ** 1.3 + 0.004; // curved sides, rounded tip
-      w *= 1 - soft(half - Math.abs(x - NOSE_AT.c[0]), 0.01);
-    }
-  }
-  return w;
+  // Traced from the drawing: the tan forehead comes down to eye level, hugs over the top of each eye, and runs down
+  // between the eyes in a narrow channel that ends at the nose. Everything below that (both cheeks, round the sides
+  // of the eyes below their middle) is white.
+  const a = Math.atan2(x, z), side = Math.abs(a);
+  if (side > 2.1) return 0;
+  const eyeY = (XEYE.c[1] + SLEEPY.c[1]) / 2;
+  // Outside the channel, the edge sits at eye level (a touch lower on the sleepy-eye side), dropping as it wraps round.
+  let top = eyeY - (x > 0 ? 0.012 : 0) - 0.16 * Math.max(0, side - 0.9) ** 1.5;
+  // The channel between the eyes, down to the nose (its sides are the eye outlines, so it's as wide as the gap).
+  const inner0 = XEYE.c[0] + XEYE.r * 0.95, inner1 = SLEEPY.c[0] - SLEEPY.r * 0.95;
+  if (z > 0.05 && x > inner0 - 0.01 && x < inner1 + 0.01) top = Math.min(top, NOSE_AT.c[1] + 0.012);
+  return soft(top - y, 0.012) * soft((2.1 - side) * 0.2);
 }
 
 const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
@@ -107,7 +100,7 @@ export function colorAt(p, n) {
     }
     case 'lid': {
       // The lid's lower edge is a dark line.
-      return y < SLEEPY.c[1] + 0.012 ? BLACK : TAN;
+      return y < SLEEPY.c[1] + 0.012 ? BLACK : LID;
     }
     case 'nose': return NOSE;
     case 'lip': return LINE;
@@ -129,7 +122,7 @@ export function colorAt(p, n) {
         const rs = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
         if (rs < 1.07) {
           // Above the lid line it's the lid's skin (no outline there); below, the outline and the purple eye.
-          if (y > SLEEPY.c[1] + 0.006) return TAN;
+          if (y > SLEEPY.c[1] + 0.006) return LID;
           return rs > 0.95 ? BLACK : WHITE;
         }
       }

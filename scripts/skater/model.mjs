@@ -165,23 +165,26 @@ function parts(p) {
   // --- shirt: hollow A-line with a rolled hem, front seam, collar, short wide sleeves ---
   {
     const t = clamp((y - 0.3) / 0.21, 0, 1);
-    const rx = mix(0.185, 0.118, t ** 0.9), rz = mix(0.122, 0.09, t);
+    // Hangs from rounded shoulders with only a little flare, no sharp corners at the hem.
+    const shoulder = Math.sqrt(Math.max(0, 1 - clamp((y - 0.455) / 0.06, 0, 1) ** 2));
+    const rx = (0.122 + 0.036 * (1 - t) ** 1.4) * (0.55 + 0.45 * shoulder), rz = (0.09 + 0.022 * (1 - t)) * (0.7 + 0.3 * shoulder);
     // Soft cloth folds that fade out towards the chest.
-    const fold = 0.0035 * Math.sin(Math.atan2(x, z) * 9 + 0.6) * (1 - t) ** 1.5;
+    const fold = 0.003 * Math.sin(Math.atan2(x, z) * 7 + 0.6) * (1 - t) ** 1.5;
     const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz) + fold;
-    const solid = Math.max(outer, 0.3 - y, y - 0.51);
-    let shirt = Math.max(Math.abs(outer + 0.006) - 0.006, 0.3 - y, y - 0.515); // a cloth shell, open at the bottom
-    shirt = Math.min(shirt, Math.max(Math.abs(outer) - 0.012, Math.abs(y - 0.303) - 0.008)); // rolled hem
-    if (y > 0.5) shirt = Math.min(shirt, solid); // closed across the shoulders
+    const hemY = 0.305 + 0.012 * (x / 0.16) ** 2; // the hem curves up a little at the sides
+    const solid = Math.max(outer, hemY - y, y - 0.515);
+    let shirt = Math.max(Math.abs(outer + 0.006) - 0.006, hemY - y, y - 0.515); // a cloth shell, open at the bottom
+    shirt = Math.min(shirt, Math.max(Math.abs(outer) - 0.009, Math.abs(y - hemY - 0.004) - 0.007)); // rolled hem
+    if (y > 0.45) shirt = Math.min(shirt, solid); // closed across the shoulders
     // Front seam: a faint crease down the middle.
     shirt = ssub(shirt, len(x, 0, z - rz) - 0.004, 0.003);
     // Short, wide sleeves at the shoulders, pointing along each (posed) arm: crisp tubes, open at the end.
     let sleeve = 1e3;
     for (const A of ARMS) {
-      const sb = add(A.S, scale(A.u, 0.075));
-      const outerS = roundCone(p, A.S, sb, 0.05, 0.058);
+      const sb = add(A.S, scale(A.u, 0.06));
+      const outerS = roundCone(p, A.S, sb, 0.046, 0.042);
       const cut = dot(sub(p, sb), A.u);
-      sleeve = Math.min(sleeve, Math.max(Math.max(outerS, -(outerS + 0.011)), cut, -dot(sub(p, A.S), A.u) - 0.02));
+      sleeve = Math.min(sleeve, Math.max(outerS, cut - 0.004, -dot(sub(p, A.S), A.u) - 0.03) - 0.002);
     }
     d.sleeve = sleeve;
     d.shirt = shirt;
@@ -200,14 +203,14 @@ function parts(p) {
         if (ex * wy - ey * wx > 0) inside = false;
       }
       const d2 = inside ? -dd : dd;
-      const t2 = clamp((y - 0.3) / 0.21, 0, 1);
-      const rx2 = mix(0.185, 0.118, t2 ** 0.9), rz2 = mix(0.122, 0.09, t2);
+      const t2 = clamp((y - 0.3) / 0.21, 0, 1), sh2 = Math.sqrt(Math.max(0, 1 - clamp((y - 0.455) / 0.06, 0, 1) ** 2));
+      const rx2 = (0.122 + 0.036 * (1 - t2) ** 1.4) * (0.55 + 0.45 * sh2), rz2 = (0.09 + 0.022 * (1 - t2)) * (0.7 + 0.3 * sh2);
       const surf = rz2 * Math.sqrt(Math.max(0, 1 - (X / rx2) ** 2)) + 0.009;
       collar = Math.min(collar, Math.max(d2 - 0.004, Math.abs(z - surf) - 0.0075));
     }
     d.collar = collar;
     // The tie: a little knot and a short ragged blade with drippy ends.
-    const zf = (yy) => mix(0.122, 0.09, clamp((yy - 0.3) / 0.21, 0, 1)) + 0.007;
+    const zf = (yy) => { const tt = clamp((yy - 0.3) / 0.21, 0, 1), sh = Math.sqrt(Math.max(0, 1 - clamp((yy - 0.455) / 0.06, 0, 1) ** 2)); return (0.09 + 0.022 * (1 - tt)) * (0.7 + 0.3 * sh) + 0.006; };
     let tie = ellipsoid(p, [0.004, 0.495, zf(0.495)], [0.016, 0.014, 0.01]);
     tie = Math.min(tie, ellipsoid(p, [0.004, 0.478, zf(0.478)], [0.013, 0.015, 0.008]));
     for (const [ax, ay, bx, by, r] of [[0.004, 0.47, 0.0, 0.42, 0.012], [0.0, 0.43, -0.01, 0.4, 0.008], [0.0, 0.43, 0.012, 0.395, 0.007], [0.012, 0.395, 0.006, 0.375, 0.006], [-0.01, 0.4, -0.016, 0.384, 0.006]]) {
