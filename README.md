@@ -20,6 +20,10 @@ A second SKZOO buddy: menu bar → ⚙️ Settings → Mob → **Wolf Chan** (or
 
 Another SKZOO buddy: ⚙️ Settings → Mob → **Jiniret** (or right-click → Switch mob). A white ferret with pink-lined round ears, a pink nose and whiskers and his beauty mark, painted from the official character description. He does everything Bbokari does, with his own artsy, hype-you-up personality ✨🎨. Say “Hey Jiniret” for voice. Model made with `scripts/jiniret`.
 
+## 🥚 CORTIS plushies
+
+Five fuzzy little balls: ⚙️ Settings → Mob → **CORTIS (yellow / white / blue / pink / green)**. Each one starts in an egg that wobbles, cracks and pops open. Real-looking plush fur (made with layered "fur shells"), pom-pom bumps, one big eye and one little eye, an open mouth and a party hat (it swaps the hat for any outfit or headphones). They hop instead of walking, and bounce instead of waving. Say “Hey CORTIS” for voice.
+
 ## ✨ Everything in one place: the feature hub
 
 Press **⌃⌥Space** (or click **✨ Everything I can do…** at the top of the menu bar menu, or ask “what can you do?”). Every feature is a card: search (“study”, “canva”, “remind”), click to try it. New features have a **NEW** badge.

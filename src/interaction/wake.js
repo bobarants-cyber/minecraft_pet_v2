@@ -8,6 +8,7 @@ const NAMES = {
   wolfchan: String.raw`wol(?:f|ve)s?\s?-?\s?ch?[aeu]n+|wolf`,
   jiniret: String.raw`(?:j|g|y)[iey]n+[iey]{0,2}\s?-?\s?r+[eiay]+t+h?|jinny`,
 };
+for (const c of ['Yellow', 'White', 'Blue', 'Pink', 'Green']) NAMES[`cortis${c}`] = String.raw`c[ou]rt[iey]s|curtis|cortez|kortis`;
 const GREETING = String.raw`(?:hey|hi|ok(?:ay)?|hello|yo|oye|hola|ey)`;
 
 /** The parts of a wake phrase in `text` for `mob`: { question } (may be '' if only the name was said), or null. */
@@ -19,7 +20,7 @@ export function findWake(text, mob = 'bbokari') {
   if (greet) return { question: tidy(greet[1]) };
   // "Bbokari, what's …" at the start (a name on its own in the middle of a sentence doesn't count).
   const lead = new RegExp(String.raw`^(?:${name})\b[\s,!.?:-]*(.*)$`, 'i').exec(t);
-  if (lead && (mob === 'bbokari' || mob === 'wolfchan' || mob === 'jiniret' || /[,!.]/.test(t.slice(0, 12)))) return { question: tidy(lead[1]) };
+  if (lead && (mob === 'bbokari' || mob === 'wolfchan' || mob === 'jiniret' || mob.startsWith('cortis') || /[,!.]/.test(t.slice(0, 12)))) return { question: tidy(lead[1]) };
   return null;
 }
 

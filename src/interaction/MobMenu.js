@@ -188,7 +188,7 @@ export class MobMenu {
     this.notesRow.querySelector('span').textContent = noting ? '⏹ Stop notes' : '📝 Take notes';
     this.notesRow.querySelector('.mob-menu__value').textContent = noting ? 'Write them up' : 'Listen & write';
     for (const o of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) o.classList.toggle('is-on', o.dataset.outfit === (this.settings.outfit ?? 'none'));
-    this.el.querySelector('.mob-menu__outfits').style.display = this.el.querySelector('.mob-menu__outfit-label').style.display = ['bbokari', 'wolfchan', 'jiniret'].includes(this.settings.mob) ? '' : 'none';
+    this.el.querySelector('.mob-menu__outfits').style.display = this.el.querySelector('.mob-menu__outfit-label').style.display = (['bbokari', 'wolfchan', 'jiniret'].includes(this.settings.mob) || this.settings.mob?.startsWith('cortis')) ? '' : 'none';
     const playing = this.playing?.();
     this.stopRow.style.display = playing ? '' : 'none';
     for (const chip of this.el.querySelectorAll('.mob-menu__game')) chip.classList.toggle('is-on', chip.dataset.game === playing);

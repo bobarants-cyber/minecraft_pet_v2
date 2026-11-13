@@ -3,6 +3,7 @@ import { Axolotl } from '../axolotl/Axolotl.js';
 import { Bbokari } from '../bbokari/Bbokari.js';
 import { WolfChan } from '../wolfchan/WolfChan.js';
 import { Jiniret } from '../jiniret/Jiniret.js';
+import { Cortis } from '../cortis/Cortis.js';
 
 /** Every mob exposes the same surface: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate(). */
 export const MOBS = {
@@ -11,6 +12,11 @@ export const MOBS = {
   bbokari: { label: 'Bbokari', create: () => new Bbokari() },
   wolfchan: { label: 'Wolf Chan', create: () => new WolfChan() },
   jiniret: { label: 'Jiniret', create: () => new Jiniret() },
+  cortisYellow: { label: 'CORTIS (yellow)', create: () => new Cortis('yellow') },
+  cortisWhite: { label: 'CORTIS (white)', create: () => new Cortis('white') },
+  cortisBlue: { label: 'CORTIS (blue)', create: () => new Cortis('blue') },
+  cortisPink: { label: 'CORTIS (pink)', create: () => new Cortis('pink') },
+  cortisGreen: { label: 'CORTIS (green)', create: () => new Cortis('green') },
 };
 
 export const MOB_NAMES = Object.keys(MOBS);
