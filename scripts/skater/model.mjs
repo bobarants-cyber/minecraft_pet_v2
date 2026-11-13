@@ -47,17 +47,35 @@ function local(p, c, rz = 0, ry = 0, rx = 0) {
   return [x, y, z];
 }
 
-export const HEAD = { c: [0, 0.695, 0], r: [0.245, 0.185, 0.215] };
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const scale = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = (a) => scale(a, 1 / Math.hypot(...a));
+/** His pose, measured from the front screenshot: S = shoulder, W = wrist, n = which way the palm faces. */
+function arm(S, W, palm, thumb, hand) {
+  const u = norm(sub(W, S));
+  const hu = norm(hand ?? u);
+  const n = norm(sub(palm, scale(hu, dot(palm, hu))));
+  return { S, W, u, hu, n, thumb };
+}
+export const ARMS = [
+  arm([-0.105, 0.49, 0.0], [-0.255, 0.655, 0.05], [0.2, 1, 0.5], 1, [-1, 0.45, 0.25]), // his right arm: up and out, open palm up, fingers out
+  arm([0.115, 0.48, 0.0], [0.295, 0.482, 0.05], [0, 0.35, 1], 1, [1, -0.12, 0.12]), // his left arm: pointing out to the side
+];
+export const HEAD = { c: [0, 0.668, 0], r: [0.258, 0.178, 0.214] };
+export const JOWL = { c: [0, 0.608, 0.015], r: [0.246, 0.108, 0.19] };
 /** Where the head's front surface is, for laying the face on it. */
 export function faceZ(x, y) {
   const u = 1 - (x / HEAD.r[0]) ** 2 - ((y - HEAD.c[1]) / HEAD.r[1]) ** 2;
-  const j = 1 - (x / 0.238) ** 2 - ((y - 0.632) / 0.115) ** 2; // the full lower face (jowls)
-  return Math.max(HEAD.r[2] * Math.sqrt(Math.max(0, u)), 0.015 + 0.19 * Math.sqrt(Math.max(0, j))) + 0.006;
+  const j = 1 - (x / JOWL.r[0]) ** 2 - ((y - JOWL.c[1]) / JOWL.r[1]) ** 2; // the full lower face (jowls)
+  return Math.max(HEAD.r[2] * Math.sqrt(Math.max(0, u)), JOWL.c[2] + JOWL.r[2] * Math.sqrt(Math.max(0, j))) + 0.006;
 }
-export const XEYE = { c: [-0.122, 0.708], r: 0.088, ry: 0.102 }; // oval, a bit taller than wide
-export const SLEEPY = { c: [0.128, 0.708], r: 0.085, ry: 0.098 };
-export const NOSE = { c: [0.004, 0.655] };
-export const MOUTH = { c: [0.006, 0.597], w: 0.044, h: 0.04 };
+export const XEYE = { c: [-0.12, 0.686], r: 0.088, ry: 0.104 }; // oval, a bit taller than wide
+export const SLEEPY = { c: [0.13, 0.682], r: 0.085, ry: 0.097 };
+export const NOSE = { c: [0.006, 0.632] };
+export const MOUTH = { c: [0.008, 0.598], w: 0.046, h: 0.034 };
 
 function parts(p) {
   const [x, y, z] = p;
@@ -65,7 +83,7 @@ function parts(p) {
   const d = {};
 
   // --- head ---
-  let head = smin(ellipsoid(p, HEAD.c, HEAD.r), ellipsoid(p, [0, 0.632, 0.015], [0.238, 0.115, 0.19]), 0.05);
+  let head = smin(ellipsoid(p, HEAD.c, HEAD.r), ellipsoid(p, JOWL.c, JOWL.r), 0.05);
   // A soft brow groove arcing over the big eye.
   {
     const cx = XEYE.c[0], cy = XEYE.c[1];
@@ -102,12 +120,12 @@ function parts(p) {
 
   // --- ears: tall rounded leaves, tilted out, hollow in front, with a small pointed fold inside ---
   {
-    const ec = [0.19, 0.875, -0.035];
+    const ec = [0.172, 0.872, -0.035];
     const q = local(m, ec, -0.5, 0.35);
     // Leaf outline: wider at the bottom, rounded at the top.
-    const shape = (s) => ellipsoid([q[0], q[1] - s * 0.01, q[2]], [0, 0.0, 0], [0.078 * (1 + s), 0.105 * (1 + s), 0.028]);
+    const shape = (s) => ellipsoid([q[0], q[1] - s * 0.01, q[2]], [0, 0.0, 0], [0.071 * (1 + s), 0.094 * (1 + s), 0.027]);
     let ear = shape(0);
-    const hollow = ellipsoid([q[0], q[1] + 0.006, q[2] - 0.022], [0, 0, 0], [0.056, 0.08, 0.026]);
+    const hollow = ellipsoid([q[0], q[1] + 0.006, q[2] - 0.021], [0, 0, 0], [0.05, 0.071, 0.025]);
     d.earHollow = hollow;
     ear = ssub(ear, hollow, 0.01);
     d.ear = ear;
@@ -115,8 +133,8 @@ function parts(p) {
   }
   // --- hair: a tall spike leaning right, a smaller one on the left, both growing out of the head ---
   d.tuft = smin(
-    smin(roundCone(p, [0.03, 0.83, 0.0], [0.045, 0.93, -0.012], 0.075, 0.035), roundCone(p, [0.045, 0.93, -0.012], [0.085, 1.0, -0.03], 0.035, 0.005), 0.02),
-    roundCone(p, [-0.06, 0.835, 0.02], [-0.085, 0.95, 0.0], 0.05, 0.008),
+    smin(roundCone(p, [0.03, 0.8, 0.0], [0.045, 0.92, -0.012], 0.075, 0.035), roundCone(p, [0.045, 0.92, -0.012], [0.07, 1.0, -0.03], 0.035, 0.005), 0.02),
+    roundCone(p, [-0.05, 0.81, 0.02], [-0.07, 0.935, 0.0], 0.048, 0.008),
     0.035,
   );
 
@@ -131,44 +149,48 @@ function parts(p) {
     const inside2d = Math.max(v - top, bottom - v, a - W);
     d.mouthCut = Math.max(inside2d, faceZ(x, y) - 0.024 - z);
     d.lip = 1e3;
-    const ty = cy - 0.03;
-    const t = ellipsoid(p, [cx, ty, faceZ(cx, ty) - 0.026], [0.03, 0.022, 0.022]);
-    d.tongue = ssub(t, len(x - cx, 0, z - faceZ(cx, ty) + 0.004) - 0.0025, 0.003);
+    const ty = cy - 0.036;
+    const t = ellipsoid(p, [cx, ty, faceZ(cx, ty) - 0.012], [0.024, 0.03, 0.016]);
+    d.tongue = ssub(t, len(x - cx, 0, z - faceZ(cx, ty) - 0.004) - 0.0022, 0.003);
+    let tooth = 1e3;
+    for (const sg of [-1, 1]) tooth = Math.min(tooth, roundCone(p, [cx + sg * 0.021, cy + 0.006, fz - 0.006], [cx + sg * 0.02, cy - 0.01, fz - 0.003], 0.0075, 0.003));
+    d.tooth = tooth;
     d.lipCut = 1e3;
   }
 
   // --- shirt: hollow A-line with a rolled hem, front seam, collar, short wide sleeves ---
   {
-    const t = clamp((y - 0.3) / 0.24, 0, 1);
-    const rx = mix(0.175, 0.118, t ** 0.9), rz = mix(0.122, 0.092, t);
+    const t = clamp((y - 0.3) / 0.21, 0, 1);
+    const rx = mix(0.185, 0.118, t ** 0.9), rz = mix(0.122, 0.09, t);
     // Soft cloth folds that fade out towards the chest.
     const fold = 0.0035 * Math.sin(Math.atan2(x, z) * 9 + 0.6) * (1 - t) ** 1.5;
     const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz) + fold;
-    const solid = Math.max(outer, 0.3 - y, y - 0.54);
-    let shirt = Math.max(Math.abs(outer + 0.006) - 0.006, 0.3 - y, y - 0.545); // a cloth shell, open at the bottom
+    const solid = Math.max(outer, 0.3 - y, y - 0.51);
+    let shirt = Math.max(Math.abs(outer + 0.006) - 0.006, 0.3 - y, y - 0.515); // a cloth shell, open at the bottom
     shirt = Math.min(shirt, Math.max(Math.abs(outer) - 0.012, Math.abs(y - 0.303) - 0.008)); // rolled hem
-    if (y > 0.53) shirt = Math.min(shirt, solid); // closed across the shoulders
+    if (y > 0.5) shirt = Math.min(shirt, solid); // closed across the shoulders
     // Front seam: a faint crease down the middle.
     shirt = ssub(shirt, len(x, 0, z - rz) - 0.004, 0.003);
-    // Short, wide sleeves sticking out from the shoulders: crisp tubes, open at the end.
-    const sa = [0.112, 0.505, 0], sb = [0.178, 0.462, 0.006];
-    const sleeveOuter = roundCone(m, sa, sb, 0.05, 0.06);
-    const cut = (() => { // cut the sleeve off flat at its end
-      const ax = sb[0] - sa[0], ay = sb[1] - sa[1], az = sb[2] - sa[2], l = Math.hypot(ax, ay, az);
-      return ((m[0] - sb[0]) * ax + (m[1] - sb[1]) * ay + (m[2] - sb[2]) * az) / l;
-    })();
-    const sleeve = Math.max(Math.max(sleeveOuter, -(sleeveOuter + 0.012)), cut);
-    d.shirt = Math.min(shirt, sleeve);
+    // Short, wide sleeves at the shoulders, pointing along each (posed) arm: crisp tubes, open at the end.
+    let sleeve = 1e3;
+    for (const A of ARMS) {
+      const sb = add(A.S, scale(A.u, 0.075));
+      const outerS = roundCone(p, A.S, sb, 0.05, 0.058);
+      const cut = dot(sub(p, sb), A.u);
+      sleeve = Math.min(sleeve, Math.max(Math.max(outerS, -(outerS + 0.011)), cut, -dot(sub(p, A.S), A.u) - 0.02));
+    }
+    d.sleeve = sleeve;
+    d.shirt = shirt;
     // Collar: two pointed flaps folded over at the neck.
     let collar = 1e3;
     for (const s of [-1, 1]) {
-      const q = local([x * s, y, z], [0.04, 0.515, 0.098], 0.75, -0.25, -0.35);
+      const q = local([x * s, y, z], [0.04, 0.5, 0.096], 0.75, -0.25, -0.35);
       collar = Math.min(collar, box(q, [0.05, 0.016, 0.005], 0.004));
     }
     d.collar = collar;
     // The tie: a little knot and a short ragged blade with drippy ends.
-    const zf = (yy) => mix(0.13, 0.092, clamp((yy - 0.3) / 0.24, 0, 1)) + 0.007;
-    let tie = ellipsoid(p, [0.004, 0.505, zf(0.505)], [0.016, 0.014, 0.01]);
+    const zf = (yy) => mix(0.122, 0.09, clamp((yy - 0.3) / 0.21, 0, 1)) + 0.007;
+    let tie = ellipsoid(p, [0.004, 0.495, zf(0.495)], [0.016, 0.014, 0.01]);
     tie = Math.min(tie, ellipsoid(p, [0.004, 0.478, zf(0.478)], [0.013, 0.015, 0.008]));
     for (const [ax, ay, bx, by, r] of [[0.004, 0.47, 0.0, 0.42, 0.012], [0.0, 0.43, -0.01, 0.4, 0.008], [0.0, 0.43, 0.012, 0.395, 0.007], [0.012, 0.395, 0.006, 0.375, 0.006], [-0.01, 0.4, -0.016, 0.384, 0.006]]) {
       tie = smin(tie, roundCone(p, [ax, ay, zf(ay)], [bx, by, zf(by)], r, r * 0.8), 0.006);
@@ -176,27 +198,35 @@ function parts(p) {
     d.tie = tie;
   }
 
-  // --- arms and hands (tan) coming out of the sleeves ---
-  d.arm = roundCone(m, [0.17, 0.45, 0.008], [0.255, 0.31, 0.03], 0.03, 0.027);
+  // --- arms and hands (tan), in his pose: right arm up and out with an open palm, left arm pointing out ---
   {
-    const hc = [0.268, 0.282, 0.038];
-    const q = local(m, hc, 0.4);
-    let hand = ellipsoid(q, [0, 0, 0], [0.036, 0.04, 0.024]);
-    for (const [fx, fz, l] of [[-0.02, 0.006, 0.042], [-0.005, 0.012, 0.05], [0.011, 0.01, 0.048], [0.025, 0.002, 0.038]]) {
-      hand = smin(hand, roundCone(q, [fx, -0.02, fz], [fx * 1.15, -0.02 - l, fz + 0.006], 0.012, 0.0105), 0.01);
+    let arm = 1e3, hand = 1e3;
+    for (const A of ARMS) {
+      arm = Math.min(arm, roundCone(p, add(A.S, scale(A.u, 0.02)), A.W, 0.028, 0.025));
+      // The hand: a soft palm and four fat cartoon fingers fanned out, plus a thumb.
+      const H = add(A.W, scale(A.hu, 0.042));
+      const v = norm(cross(A.n, A.hu));
+      const q = [dot(sub(p, H), A.hu), dot(sub(p, H), v), dot(sub(p, H), A.n)];
+      let h = ellipsoid(q, [0, 0, 0], [0.05, 0.048, 0.022]);
+      for (const [ang, l] of [[-0.55, 0.048], [-0.18, 0.058], [0.18, 0.058], [0.52, 0.05]]) {
+        const b = [0.032 * Math.cos(ang), 0.036 * Math.sin(ang), 0.002];
+        h = smin(h, roundCone(q, b, [b[0] + l * Math.cos(ang), b[1] + l * Math.sin(ang), 0.006], 0.0145, 0.0125), 0.011);
+      }
+      const ta = A.thumb;
+      h = smin(h, roundCone(q, [-0.006, 0.036 * Math.sign(ta), 0.004], [0.022, 0.076 * Math.sign(ta), 0.012], 0.0145, 0.012), 0.01);
+      hand = Math.min(hand, h);
     }
-    hand = smin(hand, roundCone(q, [-0.03, 0.006, 0.012], [-0.052, -0.016, 0.034], 0.012, 0.01), 0.008);
+    d.arm = arm;
     d.hand = hand;
   }
 
-  // --- legs (navy) and huge round shoes ---
-  d.leg = roundCone(m, [0.06, 0.32, 0], [0.068, 0.14, 0], 0.036, 0.032);
+  // --- thin legs (navy), wide rolled sock cuffs, and huge round black shoes with the toes turned out ---
+  d.leg = roundCone(m, [0.042, 0.31, 0], [0.047, 0.2, 0], 0.026, 0.025);
+  d.cuff = smin(torusY(m, [0.055, 0.222, -0.005], 0.042, 0.022), torusY(m, [0.055, 0.2, -0.005], 0.046, 0.024), 0.012);
   {
-    const sc = [0.118, 0.075, 0.05];
-    const q = local(m, [0.1, 0.07, 0.035], 0, -0.12);
-    const body = ellipsoid(q, [0, 0, 0], [0.1, 0.07, 0.155]);
-    d.shoe = Math.max(body, -y) - 0.002;
-    d.cuff = torusY(m, [0.068, 0.142, -0.008], 0.042, 0.024);
+    const q = local(m, [0.14, 0.085, 0.05], 0, -0.6);
+    const body = smin(ellipsoid(q, [0, -0.012, 0.035], [0.105, 0.072, 0.175]), ellipsoid(q, [0, 0.025, -0.055], [0.082, 0.08, 0.092]), 0.045);
+    d.shoe = Math.max(body, -y);
   }
   return d;
 }
@@ -224,6 +254,8 @@ export function sdf(p) {
   s = smin(s, d.hand, 0.012);
   // ...with the clothes over it (sharp joins: cloth doesn't melt into skin).
   s = Math.min(s, d.shirt);
+  s = Math.min(s, d.sleeve);
+  s = smin(s, d.tooth, 0.003);
   s = Math.min(s, d.collar);
   s = Math.min(s, d.tie);
   return s;
@@ -234,11 +266,11 @@ export function partAt(p) {
   const d = parts(p);
   if (d.mouthCut < 0.003 && d.tongue > 0.002) return { name: 'mouth', d };
   let best = 'head', bd = Infinity;
-  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'shirt', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe']) {
+  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe']) {
     const v = Math.abs(d[k]);
     if (v < bd) { bd = v; best = k; }
   }
   return { name: best, d };
 }
 
-export const BOUNDS = { min: [-0.36, -0.01, -0.24], max: [0.36, 1.02, 0.26] };
+export const BOUNDS = { min: [-0.36, -0.01, -0.24], max: [0.44, 1.02, 0.27] };

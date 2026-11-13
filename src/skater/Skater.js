@@ -156,7 +156,7 @@ export class Skater extends Bbokari {
   constructor() {
     super(
       buildSculptRig({ name: 'skater', glb: skaterGlb, modelHeight: MODEL_HEIGHT, headStandIn: 0.52, eyes: false }),
-      { height: SKATER_HEIGHT, halfWidth: 0.42, emoteLift: 1.0, hand: [0.12, -0.19, 0.04], armScale: 0.7 },
+      { height: SKATER_HEIGHT, halfWidth: 0.42, emoteLift: 1.0, hand: [0.22, 0.0, 0.06], armScale: 0.35 },
     );
     this.outfitOffset = [0, -0.265, 0.02];
     this.outfitScale = 0.85;

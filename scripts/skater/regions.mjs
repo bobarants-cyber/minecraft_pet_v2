@@ -4,41 +4,30 @@
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
 import { partAt, XEYE, SLEEPY } from './model.mjs';
 
-export const PIVOTS = { head: [0, 0.52, 0], arm_R: [0.14, 0.47, 0], arm_L: [-0.14, 0.47, 0], leg_R: [0.06, 0.3, 0], leg_L: [-0.06, 0.3, 0] };
+export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.48, 0], arm_L: [-0.105, 0.49, 0], leg_R: [0.045, 0.3, 0], leg_L: [-0.045, 0.3, 0] };
 
 const GROUP = {
-  head: 'head', lip: 'head', earHollow: 'head', earFold: 'head', ear: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head', nose: 'head', tongue: 'head', mouth: 'head',
+  head: 'head', lip: 'head', ear: 'head', earFold: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
+  nose: 'head', tongue: 'head', tooth: 'head', mouth: 'head',
   shirt: 'body', collar: 'body', tie: 'body',
-  arm: 'arm', hand: 'arm',
+  sleeve: 'arm', arm: 'arm', hand: 'arm',
   leg: 'leg', cuff: 'leg', shoe: 'leg',
 };
 
+/** Each part follows one bone (the joins are hidden by the collar, the sleeves and the shirt hem). */
 export function weightsAt(p) {
-  const { name, d } = partAt(p);
-  // Soft weights: each bone pulls by how close its parts' surfaces are, so joints bend smoothly.
-  const g = { head: 1e9, body: 1e9, arm: 1e9, leg: 1e9 };
-  for (const [k, v] of Object.entries(d)) g[GROUP[k]] = Math.min(g[GROUP[k]], Math.abs(v));
-  if (name === 'mouth') g.head = 0;
-  const s = 0.01;
-  const raw = Object.fromEntries(Object.entries(g).map(([k, v]) => [k, Math.exp(-v / s)]));
-  // Never let the head or legs pull on far-away parts (e.g. the hands passing near the legs).
-  if (p[1] < 0.42) raw.head = 0;
-  if (p[1] > 0.36) raw.leg = 0;
-  if (p[1] > 0.6) raw.arm = 0;
-  const sum = raw.head + raw.body + raw.arm + raw.leg || 1;
-  const w = { body: raw.body / sum, head: raw.head / sum };
-  const arm = raw.arm / sum, leg = raw.leg / sum;
-  w.arm_R = p[0] > 0 ? arm : 0;
-  w.arm_L = p[0] < 0 ? arm : 0;
-  w.leg_R = p[0] > 0 ? leg : 0;
-  w.leg_L = p[0] < 0 ? leg : 0;
+  const g = GROUP[partAt(p).name] ?? 'body';
+  const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0 };
+  if (g === 'arm') w[p[0] > 0 ? 'arm_R' : 'arm_L'] = 1;
+  else if (g === 'leg') w[p[0] > 0 ? 'leg_R' : 'leg_L'] = 1;
+  else w[g] = 1;
   return w;
 }
 
 const lin = (h) => [0, 2, 4].map((i) => (parseInt(h.slice(1 + i, 3 + i), 16) / 255) ** 2.2);
-const TAN = lin('#e9a566');
+const TAN = lin('#eeb27a');
 const WHITE = lin('#fbf8f2');
-const INNER_EAR = lin('#f6d9c4');
+const INNER_EAR = lin('#fcefe4');
 const BLACK = lin('#1b1a1e');
 const PURPLE = lin('#6f45c4');
 const PUPIL = lin('#3a2170');
@@ -82,7 +71,9 @@ export function colorAt(p, n) {
     case 'sleepy': {
       const r = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
       if (r > 0.93) return BLACK;
-      return Math.hypot(x - SLEEPY.c[0] + 0.008, y - (SLEEPY.c[1] - 0.03)) < 0.034 ? PUPIL : PURPLE;
+      // A white eye with a big purple iris peeking out under the lid, and a darker pupil.
+      const ir = Math.hypot(x - SLEEPY.c[0] + 0.01, y - (SLEEPY.c[1] - 0.012));
+      return ir < 0.026 ? PUPIL : ir < 0.058 ? PURPLE : WHITE;
     }
     case 'lid': {
       // The lid's lower edge is a dark line.
@@ -91,7 +82,8 @@ export function colorAt(p, n) {
     case 'nose': return NOSE;
     case 'lip': return LINE;
     case 'mouth': return MOUTH;
-    case 'tongue': return partAt(p).d.mouthCut < 0.006 ? TONGUE : (isWhiteFace(p) > 0.5 ? WHITE : TAN);
+    case 'tongue': return Math.abs(partAt(p).d.tongue) < 0.003 ? TONGUE : WHITE;
+    case 'tooth': return WHITE;
     case 'tuft': return TAN;
     case 'ear': {
       // Pale exactly on the cupped hollow in front, tan on the rim and the back.
@@ -108,12 +100,12 @@ export function colorAt(p, n) {
         if (rs < 1.14) {
           // Above the lid line it's the lid's skin (no outline there); below, the outline and the purple eye.
           if (y > SLEEPY.c[1] + 0.006) return TAN;
-          return rs > 0.9 ? BLACK : PURPLE;
+          return rs > 0.9 ? BLACK : WHITE;
         }
       }
       return blend(TAN, WHITE, isWhiteFace(p));
     }
-    case 'shirt': case 'collar': return SHIRT;
+    case 'shirt': case 'sleeve': case 'collar': return SHIRT;
     case 'tie': return TIE;
     case 'arm': case 'hand': return TAN;
     case 'leg': return NAVY;
