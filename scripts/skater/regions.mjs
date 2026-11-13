@@ -20,9 +20,15 @@ const GROUP = {
  * half arm) to their ends (all arm), so they stretch with the arm instead of looking glued on.
  */
 export function weightsAt(p) {
-  const { name: nearest, d } = partAt(p);
-  // Clothes win where the arm hangs close beside them, so no bit of shirt gets dragged along by the arm.
-  const name = Math.abs(d.shirt) < 0.004 ? 'shirt' : Math.abs(d.sleeve) < 0.004 ? 'sleeve' : nearest;
+  const { d } = partAt(p);
+  // A point on the outside of the figure sits on one part's surface and outside all the others, so the part it
+  // belongs to is the closest one it isn't inside of (this keeps the arm and the shirt beside it apart).
+  let name = 'head', best = Infinity;
+  for (const k of Object.keys(GROUP)) {
+    const v = d[k];
+    if (v === undefined || v < -0.0015) continue;
+    if (v < best) { best = v; name = k; }
+  }
   const g = GROUP[name] ?? 'body';
   const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0 };
   const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';

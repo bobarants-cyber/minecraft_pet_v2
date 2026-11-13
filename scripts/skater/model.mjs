@@ -62,8 +62,8 @@ function arm(S, W, palm, thumb, hand) {
 }
 export const ARMS = [
   // Resting: arms hanging relaxed a little out from the body, palms facing in. (His ta-da pose is an animation.)
-  arm([-0.11, 0.49, 0.0], [-0.235, 0.325, 0.035], [1, 0.1, 0.25], 1, [-0.35, -1, 0.15]),
-  arm([0.115, 0.49, 0.0], [0.24, 0.325, 0.035], [-1, 0.1, 0.25], -1, [0.35, -1, 0.15]),
+  arm([-0.115, 0.485, 0.0], [-0.2, 0.335, 0.04], [1, 0.1, 0.3], 1, [-0.15, -1, 0.12]),
+  arm([0.12, 0.485, 0.0], [0.205, 0.335, 0.04], [-1, 0.1, 0.3], -1, [0.15, -1, 0.12]),
 ];
 /** Each boot (mirrored per side): its centre and how far the toe turns out. */
 export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
