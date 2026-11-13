@@ -71,7 +71,10 @@ export function buildSculptRig({ name, glb, modelHeight, eyes = {}, headStandIn 
     parts.arms = [bones.arm_R, bones.arm_L];
     parts.legs = [bones.leg_R, bones.leg_L];
 
+    // The raycasts that place the eyes and blush read the bones' last skinning pose: bring it up to date first, or
+    // they land where the model was a frame ago (e.g. mid pop-in) and the blush floats off the cheek.
     model.updateWorldMatrix(true, true);
+    mesh.skeleton.update();
     parts.eyes = new BbokariEyes(bones.head, mesh, eyes);
     parts.loaded = true;
     return parts;

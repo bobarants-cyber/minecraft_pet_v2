@@ -19,7 +19,7 @@ export class WolfChan extends Bbokari {
         glb: wolfGlb,
         modelHeight: MODEL_HEIGHT,
         headStandIn: 0.25,
-        eyes: { headY: 0.25, eye: { x: 0.091, y: 0.455, r: 0.024 }, cheek: { x: 0.112, y: 0.37 } },
+        eyes: { headY: 0.25, eye: { x: 0.088, y: 0.446, r: 0.025, tall: 1.68 }, cheek: { x: 0.132, y: 0.361 } },
       }),
       { height: WOLF_HEIGHT, halfWidth: 0.37, emoteLift: 1.05, hand: [0.06, -0.095, 0.03], armScale: 0.4 },
     );

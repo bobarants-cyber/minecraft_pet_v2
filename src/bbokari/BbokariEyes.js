@@ -6,46 +6,72 @@ const EYE_SPOT = { x: 0.115, y: 0.575, r: 0.036 };
 const CHEEK_SPOT = { x: 0.185, y: 0.505 };
 
 const DARK = 0x2a1a10;
-const _o = new THREE.Vector3();
-const _t = new THREE.Vector3();
-const _n = new THREE.Vector3();
-
-/** Finds where a ray straight at the face from the front hits the head, in head-local space. */
-function surface(head, mesh, x, y, headY = HEAD_Y) {
-  _o.set(x, y - headY, 1);
-  _t.set(x, y - headY, 0);
-  head.localToWorld(_o);
-  head.localToWorld(_t);
-  const ray = new THREE.Raycaster(_o, _t.sub(_o).normalize());
-  const hit = ray.intersectObject(mesh, true)[0];
-  if (!hit) return { point: new THREE.Vector3(x, y - headY, 0.28), normal: new THREE.Vector3(0, 0, 1) };
-  const point = head.worldToLocal(hit.point.clone());
-  _n.copy(hit.face?.normal ?? new THREE.Vector3(0, 0, 1)).transformDirection(hit.object.matrixWorld);
-  const normal = _n.clone().transformDirection(head.matrixWorld.clone().invert()).normalize();
-  return { point, normal };
+/**
+ * The front of the face as a height map, in head-local space: where each skinned vertex really is right now (read with
+ * getVertexPosition, so it matches what's drawn; raycasting a skinned, quantised mesh could land far in front of it).
+ */
+class FaceSurface {
+  constructor(head, mesh, headY) {
+    this.cell = 0.01;
+    this.grid = new Map();
+    const v = new THREE.Vector3();
+    mesh.skeleton?.update();
+    mesh.updateMatrixWorld(true);
+    head.updateMatrixWorld(true);
+    const count = mesh.geometry.attributes.position.count;
+    for (let i = 0; i < count; i++) {
+      mesh.getVertexPosition(i, v);
+      mesh.localToWorld(v);
+      head.worldToLocal(v);
+      if (v.z < 0) continue; // only the front half
+      const k = this.key(v.x, v.y);
+      let list = this.grid.get(k);
+      if (!list) this.grid.set(k, (list = []));
+      list.push(v.x, v.y, v.z);
+    }
+    this.headY = headY;
+  }
+  key(x, y) {
+    return `${Math.floor(x / this.cell)},${Math.floor(y / this.cell)}`;
+  }
+  /** The front-most surface depth at (x, y) (head-local), or null if nothing is there. */
+  zAt(x, y, r = 0.006) {
+    let best = null;
+    for (let gx = Math.floor((x - r) / this.cell); gx <= Math.floor((x + r) / this.cell); gx++) {
+      for (let gy = Math.floor((y - r) / this.cell); gy <= Math.floor((y + r) / this.cell); gy++) {
+        const list = this.grid.get(`${gx},${gy}`);
+        if (!list) continue;
+        for (let i = 0; i < list.length; i += 3) {
+          if ((list[i] - x) ** 2 + (list[i + 1] - y) ** 2 < r * r && (best === null || list[i + 2] > best)) best = list[i + 2];
+        }
+      }
+    }
+    return best ?? (r < 0.03 ? this.zAt(x, y, r * 2) : null);
+  }
+  /** The face at a spot given in model units (height 1): { point, normal } in head-local space. */
+  at(x, y) {
+    const ly = y - this.headY;
+    const z = this.zAt(x, ly) ?? 0.28;
+    const d = 0.012;
+    const zx = ((this.zAt(x + d, ly) ?? z) - (this.zAt(x - d, ly) ?? z)) / (2 * d);
+    const zy = ((this.zAt(x, ly + d) ?? z) - (this.zAt(x, ly - d) ?? z)) / (2 * d);
+    return { point: new THREE.Vector3(x, ly, z), normal: new THREE.Vector3(-zx, -zy, 1).normalize() };
+  }
 }
 
 /**
- * A soft oval painted onto the cheek: each point of the oval is dropped onto the head along the cheek's normal, so it
- * follows the curve of the face instead of sticking out past it as a flat disc would.
+ * A soft oval painted onto the cheek: each point of the oval is laid on the face, so it follows the curve of the face
+ * instead of sticking out past it as a flat disc would.
  */
-function cheekDecal(head, mesh, cheek, rx, ry) {
+function cheekDecal(face, cheek, rx, ry) {
   const geo = new THREE.CircleGeometry(1, 24);
   const n = cheek.normal.clone();
   const u = new THREE.Vector3(0, 1, 0).cross(n).normalize(); // sideways along the face
   const v = n.clone().cross(u).normalize(); // up along the face
   const pos = geo.attributes.position;
-  const ray = new THREE.Raycaster();
-  const o = new THREE.Vector3();
-  const d = n.clone().transformDirection(head.matrixWorld).negate();
   for (let i = 0; i < pos.count; i++) {
     const p = cheek.point.clone().addScaledVector(u, pos.getX(i) * rx).addScaledVector(v, pos.getY(i) * ry);
-    o.copy(p).addScaledVector(n, 0.05);
-    head.localToWorld(o);
-    ray.set(o, d);
-    const hit = ray.intersectObject(mesh, true)[0];
-    if (hit) p.copy(head.worldToLocal(hit.point.clone()));
-    p.addScaledVector(n, 0.003);
+    p.z = (face.zAt(p.x, p.y) ?? p.z) + 0.004;
     pos.setXYZ(i, p.x, p.y, p.z);
   }
   geo.computeVertexNormals();
@@ -61,22 +87,23 @@ function material(color, extra = {}) {
  * close for sleep, look around, cry and blush. Reads the shared FaceDisplay state each frame.
  */
 export class BbokariEyes {
-  /** `spots` moves the eyes and cheeks for another sculpt (Wolf Chan): { headY, eye: { x, y, r }, cheek: { x, y } }. */
+  /** `spots` moves the eyes and cheeks for another sculpt (Wolf Chan): { headY, eye: { x, y, r, tall? }, cheek: { x, y } }. */
   constructor(head, headMesh, spots = {}) {
     const headY = spots.headY ?? HEAD_Y;
     const EYE = (this.EYE = spots.eye ?? { ...EYE_SPOT });
     const CHEEK = spots.cheek ?? CHEEK_SPOT;
+    const face = new FaceSurface(head, headMesh, headY);
     this.eyes = [];
     this.blush = [];
     this.tears = [];
     const black = material(DARK, { roughness: 0.2 });
     const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const pink = new THREE.MeshBasicMaterial({ color: 0xff7aa2, transparent: true, opacity: 0, depthWrite: false });
+    const pink = new THREE.MeshBasicMaterial({ color: 0xff7aa2, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const tear = material(0x7fd4ff, { transparent: true, opacity: 0.9 });
     const r = EYE.r;
 
     for (const side of [1, -1]) {
-      const { point, normal } = surface(head, headMesh, side * EYE.x, EYE.y, headY);
+      const { point, normal } = face.at(side * EYE.x, EYE.y);
       const eye = new THREE.Group();
       eye.position.copy(point).addScaledVector(normal, 0.002);
       eye.lookAt(eye.position.clone().add(normal));
@@ -85,7 +112,7 @@ export class BbokariEyes {
       // Open: a glossy dark bead with a sparkle that drifts with the gaze.
       const open = new THREE.Group();
       const bead = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), black);
-      bead.scale.set(1, 1.12, 0.35);
+      bead.scale.set(1, EYE.tall ?? 1.12, 0.35); // `tall` stretches it for oval eyes (Wolf Chan)
       const sparkle = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 12, 8), white);
       sparkle.position.set(r * 0.32, r * 0.4, r * 0.3);
       const sparkle2 = new THREE.Mesh(new THREE.SphereGeometry(r * 0.13, 8, 6), white);
@@ -102,8 +129,8 @@ export class BbokariEyes {
       eye.add(open, closed, happy);
       this.eyes.push({ eye, open, closed, happy, sparkle, side });
 
-      const cheek = surface(head, headMesh, side * CHEEK.x, CHEEK.y, headY);
-      const blush = new THREE.Mesh(cheekDecal(head, headMesh, cheek, r * 1.2, r * 0.7), pink);
+      const cheek = face.at(side * CHEEK.x, CHEEK.y);
+      const blush = new THREE.Mesh(cheekDecal(face, cheek, r * 1.2, r * 0.7), pink);
       head.add(blush);
       this.blush.push(blush);
 
