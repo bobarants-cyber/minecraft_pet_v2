@@ -49,6 +49,11 @@ export const FEATURES = [
   { id: 'junk', cat: 'messages', emoji: '🧹', title: 'Clean my inbox', desc: 'Finds ads and newsletters and clears them.', example: 'clean up my inbox', ask: 'clean up my inbox', keys: 'gmail junk spam' },
   // Mac helper
   { id: 'spotify', cat: 'mac', emoji: '🎵', title: 'Play music on Spotify', desc: 'Opens Spotify, types the song or playlist like a person and plays it. Also pause, next, louder, what’s playing.', example: 'play Blinding Lights', prefill: 'play ', isNew: true, keys: 'music song playlist spotify pause next skip volume' },
+  { id: 'ytsearch', cat: 'mac', emoji: '▶️', title: 'Search YouTube / Google', desc: 'Opens the search for you: videos, websites, pictures or maps.', example: 'open youtube and search how caterpillars become butterflies', prefill: 'search youtube for ', isNew: true, keys: 'youtube video google search look up pictures images maps directions' },
+  { id: 'wallpaper', cat: 'mac', emoji: '🖼', title: 'Change my wallpaper', desc: 'Finds a picture and sets it as your desktop background.', example: 'change my wallpaper to a cute axolotl', prefill: 'change my wallpaper to ', isNew: true, keys: 'background desktop picture fondo' },
+  { id: 'screens', cat: 'mac', emoji: '🧹', title: 'Clean up screenshots', desc: 'Moves only your screenshots to the Trash (asks first; everything else stays).', example: 'delete all the screenshots on my desktop', ask: 'delete all the screenshots on my desktop', isNew: true, keys: 'trash delete clean desktop capturas' },
+  { id: 'macctl', cat: 'mac', emoji: '🎛', title: 'Volume, brightness, dark mode', desc: 'Mute, volume 30, louder, brighter, dark mode, light mode, lock my computer, turn off the screen.', example: 'turn on dark mode', prefill: 'turn on dark mode', isNew: true, keys: 'volume mute brightness dark light mode lock screen' },
+  { id: 'macinfo', cat: 'mac', emoji: '🔋', title: 'Battery, storage, screenshots', desc: 'How much battery or storage, what apps are open, take a screenshot, open my last download, close an app.', example: 'how much battery do i have', ask: 'how much battery do i have', isNew: true, keys: 'battery storage space screenshot download close quit apps' },
   { id: 'open', cat: 'mac', emoji: '🚀', title: 'Open anything', desc: 'Apps, websites, files and folders.', example: 'open my math project file', prefill: 'open ', keys: 'app website file folder launch' },
   { id: 'class', cat: 'mac', emoji: '🎒', title: 'Open my class', desc: 'Opens your class link (and 2 minutes before class by itself).', example: 'open my math class', prefill: 'open my  class', keys: 'meet zoom link schedule' },
   { id: 'cursor', cat: 'fun', emoji: '🖱', title: 'Be my cursor', desc: 'Bbokari spins, shrinks and becomes a tiny Bbokari mouse pointer. He keeps taking notes and doing everything.', example: 'be my cursor (say “come back” to undo)', ask: 'be my cursor', isNew: true, keys: 'mouse pointer small tiny cursor' },
@@ -63,6 +68,10 @@ export const FEATURES = [
   { id: 'bubbles', cat: 'fun', emoji: '🫧', title: 'Bubbles', desc: 'Pop the bubbles.', example: 'menu → Games', run: 'game:bubbles', keys: 'game' },
   { id: 'dance', cat: 'fun', emoji: '💃', title: 'Dance!', desc: 'Bbokari dances for you.', example: 'dance', run: 'dance', keys: 'party' },
   { id: 'outfit', cat: 'fun', emoji: '🎀', title: 'Change outfit', desc: 'Party hat, crown, beanie, bow, flower, sunglasses.', example: 'tap to try the next one', run: 'outfit', keys: 'hat clothes dress up' },
+  { id: 'riddle', cat: 'fun', emoji: '🧩', title: 'Riddles', desc: 'Guess the answer, or ask for it.', example: 'tell me a riddle', ask: 'tell me a riddle', isNew: true, keys: 'riddle puzzle game adivinanza' },
+  { id: 'wyr', cat: 'fun', emoji: '🤔', title: 'Would you rather', desc: 'Silly choices to talk about.', example: 'would you rather', ask: 'would you rather', isNew: true, keys: 'game question choice' },
+  { id: 'fact', cat: 'fun', emoji: '🤓', title: 'Fun fact', desc: 'Cool true facts about animals, space and more.', example: 'fun fact', ask: 'fun fact', isNew: true, keys: 'fact learn did you know' },
+  { id: 'joke', cat: 'fun', emoji: '😆', title: 'Tell me a joke', desc: 'Bbokari’s best jokes (and a dance party).', example: 'tell me a joke', ask: 'tell me a joke', isNew: true, keys: 'joke funny laugh dance party' },
   { id: 'coin', cat: 'fun', emoji: '🪙', title: 'Flip a coin / roll a die', desc: 'Or ask the magic 8-ball.', example: 'flip a coin', ask: 'flip a coin', keys: 'random dice 8 ball' },
 ];
 

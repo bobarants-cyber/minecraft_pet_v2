@@ -35,6 +35,8 @@ import { findNotes, latestNotes, makeCards, parseQuiz } from './flashcards.js';
 import { FEATURES, hubData } from './features.js';
 import { findFeedback, looksLikeFeedback } from './feedback.js';
 import * as spotify from './spotify.js';
+import * as computer from './computer.js';
+import * as fun from './fun.js';
 import http from 'node:http';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -738,6 +740,11 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
     return { ok: true, kind: 'classes', text: 'Here’s your class calendar! 📅' };
   }
   // "Open my math class", "open my robot project", "make a presentation about volcanoes in Canva"…
+  // Any other way of asking to control the Mac: the AI picks the closest action.
+  if (computer.mightBeComputer(text) && !actions.parseAction(text)) {
+    const guess = await computer.classifyComputer(text, settings.aiModel).catch(() => null);
+    if (guess) return { ok: true, kind: 'action', text: await doComputer(guess) };
+  }
   let action = actions.parseAction(text);
   if (!action && actions.mightBeAction(text)) action = await actions.classifyAction(text, settings.aiModel).catch(() => null);
   if (action) return { ok: true, kind: 'action', text: await runAction(action) };
@@ -1126,6 +1133,38 @@ ipcMain.handle('hub:run', (_e, id) => {
   runs[f.run]?.();
 });
 
+/** 🖥 Controlling the Mac (computer.js): asks first for anything that deletes. */
+const computerDeps = () => ({ openURL: (u) => shell.openExternal(u), openPath: (f) => shell.openPath(f), trash: (f) => shell.trashItem(f), pixabayKey: settings.pixabayKey });
+async function doComputer(cmd) {
+  if (cmd.confirm) {
+    const ask = await computer.confirmText(cmd).catch(() => null);
+    if (!ask) return cmd.type === 'trashScreenshots' ? 'I didn’t find any screenshots there ✨ Already clean!' : 'Nothing to do!';
+    offer = { kind: 'computer', cmd, until: Date.now() + 2 * 60_000 };
+    return ask;
+  }
+  try {
+    send('typing', { on: true });
+    return (await computer.runComputer(cmd, computerDeps())) ?? 'I’m not sure how to do that yet 🤔';
+  } catch (err) {
+    return /not allowed|1743|assistive|not authori[sz]ed/i.test(err.message)
+      ? 'Your Mac blocked me 🙈 System Settings → Privacy & Security → Automation (and Accessibility): turn on Bbokari / Electron, then ask again.'
+      : `That didn’t work: ${String(err.message).slice(0, 140)}`;
+  } finally {
+    send('typing', { on: false });
+  }
+}
+
+/** "Open visual arts" (a class name, without the word "class"): only when it really matches one of your classes. */
+function classByName(said) {
+  const m = said.match(/^(?:(?:hey|ok)\s+\w+[,!]?\s*)?(?:can you\s+|please\s+)?(?:open|join|go to|start|abre|entra a)\s+(?:me\s+)?(?:my\s+|the\s+|mi\s+|la\s+|el\s+)?(.{2,40}?)(?:\s+(?:please|now))?[.!?]*$/i);
+  if (!m || !classes) return null;
+  const want = m[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]+/g, ' ').trim();
+  const c = actions.findClass(classes.list(), want);
+  if (!c) return null;
+  const name = c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]+/g, ' ');
+  return name.includes(want) || want.includes(name.trim()) ? m[1] : null;
+}
+
 /** Memory, planner, flashcards, "plan my day", "how was my day", and "what can you do". Returns a reply or null. */
 async function newFeatures(said) {
   if (/^(?:what (?:else )?can you do|help|show me (?:what you can do|everything)|features|what are your features|everything you can do|qu[eé] puedes hacer|ayuda)\??$/i.test(said)) {
@@ -1186,6 +1225,18 @@ async function newFeatures(said) {
   }
   if (/\b(?:my grades?|what grades?|which grades?|what did i get on|did i get (?:my )?(?:\w+ )?(?:exam|test|quiz|grade)s? back|exam results?|test results?|my results|qu[eé] nota|mis notas|mis calificaciones)\b/i.test(said) && said.length < 90) {
     return { ok: true, kind: 'skill', text: await gradesReply() };
+  }
+  // 🖥 "search youtube for…", "change my wallpaper to…", "delete my screenshots", "volume 30", "dark mode"…
+  const comp = computer.parseComputer(said);
+  if (comp) return { ok: true, kind: 'action', text: await doComputer(comp) };
+  // "Open visual arts" → your class.
+  const cls = classByName(said);
+  if (cls) return { ok: true, kind: 'action', text: await runAction({ type: 'open_class', name: cls }) };
+  // 🎉 Riddles, would-you-rather, fun facts, dance party…
+  const play = fun.handle(said);
+  if (play) {
+    if (play.effect) command('trigger', { name: play.effect });
+    return { ok: true, kind: 'skill', text: play.text };
   }
   const mem = memory?.handle(said);
   if (mem) return { ok: true, kind: 'skill', text: mem };
@@ -1486,7 +1537,12 @@ async function answerOffer(said) {
   const yes = /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|please|do it|go ahead|yes please|si|sí|claro|vale|of course)\b/i.test(said) && (short || /\b(?:i'?m doing|i am doing|about|topic|my recipe is|it'?s)\b/i.test(said));
   const no = /^(?:no|nope|not now|later|no thanks|nah)\b/i.test(said) && short;
   if (!yes && !no) return null;
+  const pending = offer;
   offer = null;
+  if (pending.kind === 'computer') {
+    if (no) return { ok: true, kind: 'action', text: 'Okay, I won’t touch anything 👍' };
+    return { ok: true, kind: 'action', text: await doComputer({ ...pending.cmd, confirm: false }) };
+  }
   if (no) return { ok: true, kind: 'project', text: 'Okay! Just ask me whenever you want one 👍' };
   // Pick up anything said after the yes ("yes, I'm doing bibimbap, Korean style").
   const t = parseProjectTemplate(`make a template for this project ${said.replace(/^\S+[,!.]?\s*/, '')}`) ?? { topic: '', korean: false };
