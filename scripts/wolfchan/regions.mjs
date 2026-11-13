@@ -32,7 +32,6 @@ const WHITE = lin('#f7f5f1');
 const PINK = lin('#f4b6c3');
 const CHEEK = lin('#f6a9bb');
 const NOSE = lin('#2e2a33');
-const MOUTH = lin('#3a2c31');
 const PAD = lin('#f0a7b6');
 
 const inPoly = (px, py, pts) => {
@@ -53,10 +52,7 @@ export function colorAt([x, y, z], [nx, ny, nz]) {
   const ax = Math.abs(x);
   const face = z > 0.15 && nz > 0.3;
   if (face && (x / 0.04) ** 2 + ((y - 0.41) / 0.026) ** 2 < 1) return NOSE;
-  if (face && ax < 0.068) {
-    const t = (x / 0.068) ** 2;
-    if (y < 0.3576 + 0.0064 * t && y > 0.338 + 0.026 * t) return MOUTH;
-  }
+  // (The smile is drawn on top as a smooth shape by BbokariEyes, so it's left white here.)
   if (face && (ax - 0.132) ** 2 + (y - 0.361) ** 2 < 0.0155 ** 2) return CHEEK;
   if (y > 0.69 && z < 0.08 && nz > 0.1 && inPoly(ax, y, INNER_EAR)) return PINK;
   if (y < 0.01) return PAD;

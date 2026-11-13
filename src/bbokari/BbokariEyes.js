@@ -78,6 +78,30 @@ function cheekDecal(face, cheek, rx, ry) {
   return geo;
 }
 
+/**
+ * A smooth crescent smile laid on the face (`mouth`: half-width w, and the top and bottom edges as
+ * y = y0 + k·(x/w)² in model units). Drawn as its own shape, it stays crisp where painting the sculpt's points would
+ * leave jagged, flickering edges.
+ */
+function smileDecal(face, { w, top: [t0, tk], bottom: [b0, bk] }) {
+  const N = 28;
+  const edge = (y0, k, i) => { const x = -w + (2 * w * i) / N; return [x, y0 + k * (x / w) ** 2]; };
+  const verts = [];
+  const index = [];
+  for (let i = 0; i <= N; i++) {
+    for (const [x, y] of [edge(t0, tk, i), edge(b0, bk, i)]) {
+      const ly = y - face.headY;
+      verts.push(x, ly, (face.zAt(x, ly) ?? 0.2) + 0.003);
+    }
+    if (i < N) index.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function material(color, extra = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0, ...extra });
 }
@@ -87,7 +111,7 @@ function material(color, extra = {}) {
  * close for sleep, look around, cry and blush. Reads the shared FaceDisplay state each frame.
  */
 export class BbokariEyes {
-  /** `spots` moves the eyes and cheeks for another sculpt (Wolf Chan): { headY, eye: { x, y, r, tall? }, cheek: { x, y } }. */
+  /** `spots` moves the eyes and cheeks for another sculpt (Wolf Chan): { headY, eye: { x, y, r, tall?, maxScale? }, cheek: { x, y }, mouth? }. */
   constructor(head, headMesh, spots = {}) {
     const headY = spots.headY ?? HEAD_Y;
     const EYE = (this.EYE = spots.eye ?? { ...EYE_SPOT });
@@ -101,6 +125,10 @@ export class BbokariEyes {
     const pink = new THREE.MeshBasicMaterial({ color: 0xff7aa2, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const tear = material(0x7fd4ff, { transparent: true, opacity: 0.9 });
     const r = EYE.r;
+    if (spots.mouth) {
+      const mouth = new THREE.Mesh(smileDecal(face, spots.mouth), new THREE.MeshBasicMaterial({ color: 0x3a2c31, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      head.add(mouth);
+    }
 
     for (const side of [1, -1]) {
       const { point, normal } = face.at(side * EYE.x, EYE.y);
@@ -152,7 +180,7 @@ export class BbokariEyes {
     const squint = Math.max(c.happy ?? 0, c.squeeze ?? 0, c.cat ?? 0);
     this.eyes.forEach(({ open, closed, happy, sparkle, side }, i) => {
       const openness = THREE.MathUtils.clamp(c.eyeOpen[i] * face.blinkFactor, 0, 1.2);
-      const size = c.eyeScale[i] ?? 1;
+      const size = Math.min(c.eyeScale[i] ?? 1, EYE.maxScale ?? Infinity);
       const showHappy = squint > 0.5 && openness > 0.2;
       const showClosed = !showHappy && openness < 0.22;
       happy.visible = showHappy;
