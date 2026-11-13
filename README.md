@@ -22,7 +22,7 @@ Another SKZOO buddy: ⚙️ Settings → Mob → **Jiniret** (or right-click →
 
 ## 🥚 CORTIS plushies
 
-Five fuzzy little balls: ⚙️ Settings → Mob → **CORTIS (yellow / white / blue / pink / green)**. Each one starts in an egg that wobbles, cracks and pops open. Real-looking plush fur (made with layered "fur shells"), pom-pom bumps, one big eye and one little eye, an open mouth and a party hat (it swaps the hat for any outfit or headphones). They hop instead of walking, and bounce instead of waving. Say “Hey CORTIS” for voice.
+Five fuzzy little balls: ⚙️ Settings → Mob → **CORTIS (yellow / white / blue / pink / green)**. Each one starts in an egg that wobbles, cracks and pops open. Real-looking plush fur (made with layered "fur shells"), pom-pom bumps, one big eye and one little eye, an open mouth and a party hat (it swaps the hat for any outfit or headphones). They always look straight at you and roll to get around (landing face-up when they stop), and bounce instead of waving. Say “Hey CORTIS” for voice.
 
 ## ✨ Everything in one place: the feature hub
 

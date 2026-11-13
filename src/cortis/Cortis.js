@@ -28,12 +28,14 @@ const popIn = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 + 2.4 * (t - 1) ** 3 + 1.4 * (
 // Laid out by direction: the front of the ball is the middle of the canvas, 1 unit = 1 radian of arc on the ball
 // (x right, y up). Traced from the full-size photo of the pink one (measured in pixels, turned into angles on the
 // ball and re-centred, because the photo's plush is turned to one side).
-const BIG_AT = [0.13, 0.43];
-const BIG_EYE = [[-0.2, 0.08], [-0.12, 0.19], [0.0, 0.215], [0.12, 0.18], [0.21, 0.06], [0.2, -0.09], [0.12, -0.19], [-0.02, -0.215], [-0.15, -0.17], [-0.215, -0.05]];
-const PUPIL = { x: -0.05, y: 0.0, r: 0.088 };
-const TINY = { x: -0.29, y: 0.17, rx: 0.105, ry: 0.09 };
-const MOUTH = [[-0.13, -0.06], [0.09, 0.047], [0.29, 0.027], [0.407, -0.003], [0.4, -0.092], [0.237, -0.229], [-0.033, -0.352], [-0.123, -0.32], [-0.14, -0.194]];
-const MOUTH_TOP = 0.047;
+// The photo's plush leans about 30° to one side, so the traced face is turned back level (the tiny eye sits a hair
+// lower than the big one, as on the front-facing plushies) and centred, so it looks straight at you.
+const BIG_AT = [0.192, 0.144];
+const BIG_EYE = [[-0.14, 0.164], [-0.018, 0.224], [0.1, 0.19], [0.19, 0.103], [0.214, -0.045], [0.135, -0.173], [0.018, -0.224], [-0.118, -0.181], [-0.212, -0.081], [-0.214, 0.056]];
+const PUPIL = { x: -0.044, y: 0.023, r: 0.088 };
+const TINY = { x: -0.301, y: 0.11, rx: 0.105, ry: 0.09 };
+const MOUTH = [[-0.266, -0.168], [-0.022, -0.176], [0.146, -0.287], [0.235, -0.368], [0.188, -0.443], [-0.02, -0.489], [-0.316, -0.472], [-0.381, -0.401], [-0.338, -0.282]];
+const MOUTH_TOP = -0.168;
 /** Arc units → canvas units (a degree of longitude is shorter away from the middle, so widen to keep shapes true). */
 const P = ([x, y]) => [x / Math.cos(y), y];
 
@@ -87,7 +89,7 @@ class FaceCanvas {
 
     // Blush, in the fur (so it stays fuzzy).
     if (s.blush > 0.05) {
-      for (const [x, y] of [[-0.48, -0.05], [0.5, 0.12]]) {
+      for (const [x, y] of [[-0.5, -0.12], [0.46, -0.12]]) {
         const g = ctx.createRadialGradient(x, y, 0, x, y, 0.13);
         g.addColorStop(0, `rgba(255,120,150,${0.5 * s.blush})`);
         g.addColorStop(1, 'rgba(255,120,150,0)');
@@ -157,12 +159,12 @@ class FaceCanvas {
     ctx.save();
     smoothPath(ctx, mouth);
     ctx.clip();
-    const ty = MOUTH_TOP - 0.25 * k;
-    const tg = ctx.createRadialGradient(0.05, ty, 0, 0.05, ty, 0.16);
+    const ty = MOUTH_TOP - 0.24 * k;
+    const tg = ctx.createRadialGradient(-0.1, ty, 0, -0.1, ty, 0.17);
     tg.addColorStop(0, 'rgba(255,255,255,0.28)');
     tg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = tg;
-    ctx.fillRect(-0.3, -0.6, 0.9, 0.8);
+    ctx.fillRect(-0.5, -0.7, 0.9, 0.7);
     ctx.restore();
     smoothPath(m, mouth);
     m.fill();
@@ -323,6 +325,8 @@ export class Cortis {
     this.climb = 0;
     this.grounded = 1;
     this.time = Math.random() * 10;
+    this.roll = 0;
+    this.speed = 0;
 
     // The egg it hatches from.
     this.egg = new THREE.Group();
@@ -341,12 +345,13 @@ export class Cortis {
 
   applyPose(p, breath = 0) {
     const j = this.joints;
-    const hop = Math.abs(Math.sin(this.walkPhase)) * 0.11 * this.walkAmount;
+    // It rolls instead of walking, so only a tiny bounce.
+    const hop = Math.abs(Math.sin(this.walkPhase * 2)) * 0.015 * this.walkAmount;
     j.hips.position.y = HOVER + p.bodyY + hop - p.crouch * 0.4;
-    const land = this.walkAmount * Math.max(0, Math.cos(this.walkPhase * 2)) * 0.06;
-    const squash = 1 - p.crouch * 1.2 - land;
+    const squash = 1 - p.crouch * 1.2;
     j.torso.scale.set(1 / Math.sqrt(squash) + breath * 0.006, squash + breath * 0.01, 1 / Math.sqrt(squash));
-    j.torso.rotation.set(p.torsoPitch * 0.6 + p.headPitch * 0.5 + this.lean * 0.5, p.torsoYaw + p.headYaw * 0.5, p.torsoRoll + p.headRoll * 0.6);
+    // Always face you: undo the turn the other pets make towards where they walk (a ball just rolls there).
+    j.torso.rotation.set(p.torsoPitch * 0.6 + p.headPitch * 0.5, p.torsoYaw + p.headYaw * 0.5 - this.root.rotation.y, p.torsoRoll + p.headRoll * 0.6);
   }
 
   animate(dt) {
@@ -368,7 +373,15 @@ export class Cortis {
       lookY: q(this.face.look.y, 4),
     });
     this.hat.visible = this.headHolder.children.length === 0;
-    this.body.rotation.z = Math.sin(this.time * 1.7) * 0.025 + Math.sin(this.walkPhase) * 0.05 * this.walkAmount;
+    // Rolling: it turns over as it moves (distance ÷ radius), and when it stops it rolls on to land face-up again.
+    const v = this.speed ?? 0;
+    if (Math.abs(v) > 0.05) this.roll -= (v * dt) / (R + FUR);
+    else {
+      const home = Math.round(this.roll / (Math.PI * 2)) * Math.PI * 2;
+      const step = clamp((home - this.roll) * 4 * dt, -4 * dt, 4 * dt);
+      this.roll += step;
+    }
+    this.body.rotation.z = this.roll + Math.sin(this.time * 1.7) * 0.02;
   }
 
   /** Wobble, wobble, crack! The top flies off and it pops out; then the shell shrinks away. */
