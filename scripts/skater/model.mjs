@@ -172,12 +172,12 @@ function parts(p) {
     };
     var flame = blade([[0.04, 0.77], [0.11, 0.86], [-0.03, 0.9], [-0.025, 1.0]], 0.095, 0.003, 0.0, 10);
     var lock = blade([[0.02, 0.775], [-0.08, 0.85], [-0.06, 0.925], [0.03, 0.955]], 0.08, 0.004, -0.045, 10);
-    // Version B (HAIR=B when building): the back lock is a copy of the big front lock, smaller, tilted a little to
-    // the left and set lower, so the two read as matching wavy locks.
-    if (globalThis.process?.env?.HAIR === 'B') {
-      const FL = [[0.04, 0.77], [0.11, 0.86], [-0.03, 0.9], [-0.025, 1.0]], k = 0.75, th = 0.2, base = [-0.05, 0.79];
+    // The back lock is a copy of the big front lock, smaller, tilted a little to the left, set lower and behind it,
+    // so the two read as matching wavy locks. (HAIR=A builds the older flipped curl instead.)
+    if (globalThis.process?.env?.HAIR !== 'A') {
+      const FL = [[0.04, 0.77], [0.11, 0.86], [-0.03, 0.9], [-0.025, 1.0]], k = 0.75, th = 0.2, base = [-0.036, 0.79];
       const tr = ([px, py]) => { const dx = (px - FL[0][0]) * k, dy = (py - FL[0][1]) * k; return [base[0] + dx * Math.cos(th) - dy * Math.sin(th), base[1] + dx * Math.sin(th) + dy * Math.cos(th)]; };
-      lock = blade(FL.map(tr), 0.095 * k, 0.003, -0.045, 10);
+      lock = blade(FL.map(tr), 0.095 * k, 0.003, -0.062, 10);
     }
     d.tuft = Math.min(flame, lock);
   }
