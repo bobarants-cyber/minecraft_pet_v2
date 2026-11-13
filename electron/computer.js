@@ -23,6 +23,17 @@ export function parseComputer(text) {
   if (!t || t.length > 300) return null;
   let m;
   // --- searches ---
+  // "go to youtube and search X", "open youtube and type X", "get on youtube and look up X", "ve a youtube y busca X"
+  if ((m = t.match(re(String.raw`(?:open|go\s+(?:to|on|onto)|get\s+on|hop\s+on|pull\s+up|ve\s+a|entra\s+a|abre)\s+(?:the\s+)?(youtube|google|google images|google maps|maps)\s+(?:and|then|y)\s+(?:search|look\s+up|find|type|play|put|watch|busca|pon)(?:\s+(?:me|for|up))*\s+(.+)`)))) {
+    const site = m[1].toLowerCase();
+    const q = cleanQ(m[2]);
+    if (q) return { type: site === 'youtube' ? 'youtube' : /images/.test(site) ? 'images' : /maps/.test(site) ? 'maps' : 'google', q };
+  }
+  // "search hootie frutti on youtube", "look up X in youtube", "find X on youtube", "put X on youtube"
+  if ((m = t.match(re(String.raw`(?:search(?:\s+for)?|look\s+up|find|put|watch|play|busca|pon)\s+(?:me\s+)?(.+?)\s+(?:on|in|en)\s+youtube`)))) {
+    const q = cleanQ(m[1]);
+    if (q) return { type: 'youtube', q };
+  }
   if ((m = t.match(re(String.raw`(?:open\s+youtube\s+and\s+(?:search|look up|find|play)(?:\s+(?:me|for))?|(?:search|look up|find)(?:\s+me)?\s+(?:on\s+|in\s+)?youtube\s+(?:for\s+)?|youtube\s+search\s+|play\s+(?:me\s+)?(?:a\s+video\s+(?:about|of|on)\s+)?(.+?)\s+on\s+youtube$|busca(?:me)?\s+en\s+youtube\s+|pon(?:me)?\s+en\s+youtube\s+)(.*)`)))) {
     const q = cleanQ(m[1] ?? m[2]);
     if (q) return { type: 'youtube', q };
@@ -81,7 +92,11 @@ export function parseComputer(text) {
 
 /** Might this be a computer command the patterns missed (so the AI should have a look)? */
 export function mightBeComputer(text) {
-  return /^(?:(?:hey|ok|oye)\s+\w+[,!]?\s*)?(?:can you\s+|please\s+)?(?:change|set|turn|switch|make|delete|remove|trash|clean|close|quit|search|look up|find|play|take|lock|mute|unmute|increase|decrease|raise|lower|put|show|empty|cambia|pon|borra|busca|cierra|sube|baja|apaga|bloquea|quita|haz)\b/i.test(String(text ?? '').trim());
+  const t = String(text ?? '').trim();
+  return (
+    /^(?:(?:hey|ok|oye)\s+\w+[,!]?\s*)?(?:can you\s+|could you\s+|please\s+)?(?:change|set|turn|switch|make|delete|remove|trash|clean|close|quit|search|look up|find|play|take|lock|mute|unmute|increase|decrease|raise|lower|put|show|empty|go|open|get|pull up|watch|cambia|pon|borra|busca|cierra|sube|baja|apaga|bloquea|quita|haz|ve|abre|entra)\b/i.test(t) ||
+    /\b(?:youtube|google|wallpaper|background|screenshots?|volume|brightness|dark mode|battery|storage)\b/i.test(t)
+  );
 }
 
 const TYPES = ['youtube', 'google', 'images', 'maps', 'wallpaper', 'trashScreenshots', 'emptyTrash', 'volume', 'brightness', 'darkMode', 'screenshot', 'battery', 'storage', 'openApps', 'lock', 'displaySleep', 'quitApp', 'newFolder', 'lastDownload', 'lastScreenshot', 'say'];

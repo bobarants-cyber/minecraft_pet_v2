@@ -741,7 +741,7 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   }
   // "Open my math class", "open my robot project", "make a presentation about volcanoes in Canva"…
   // Any other way of asking to control the Mac: the AI picks the closest action.
-  if (computer.mightBeComputer(text) && !actions.parseAction(text)) {
+  if (computer.mightBeComputer(text) && !actions.parseAction(text) && !opener.parseOpen(text)) {
     const guess = await computer.classifyComputer(text, settings.aiModel).catch(() => null);
     if (guess) return { ok: true, kind: 'action', text: await doComputer(guess) };
   }
