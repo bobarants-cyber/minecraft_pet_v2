@@ -61,9 +61,11 @@ function arm(S, W, palm, thumb, hand) {
   return { S, W, u, hu, n, thumb };
 }
 export const ARMS = [
-  arm([-0.105, 0.49, 0.0], [-0.255, 0.655, 0.05], [0.2, 1, 0.5], 1, [-1, 0.45, 0.25]), // his right arm: up and out, open palm up, fingers out
-  arm([0.115, 0.48, 0.0], [0.295, 0.482, 0.05], [0, 0.35, 1], 1, [1, -0.12, 0.12]), // his left arm: pointing out to the side
+  arm([-0.105, 0.49, 0.0], [-0.29, 0.69, 0.06], [0.2, 1, 0.5], 1, [-1, 0.5, 0.25]), // his right arm: up and out, open palm up, fingers out
+  arm([0.115, 0.48, 0.0], [0.325, 0.47, 0.06], [0, 0.35, 1], 1, [1, -0.15, 0.15]), // his left arm: pointing out to the side
 ];
+/** Each boot (mirrored per side): its centre and how far the toe turns out. */
+export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
 export const HEAD = { c: [0, 0.668, 0], r: [0.258, 0.178, 0.214] };
 export const JOWL = { c: [0, 0.608, 0.015], r: [0.246, 0.108, 0.19] };
 /** Where the head's front surface is, for laying the face on it. */
@@ -133,8 +135,8 @@ function parts(p) {
   }
   // --- hair: a tall spike leaning right, a smaller one on the left, both growing out of the head ---
   d.tuft = smin(
-    smin(roundCone(p, [0.03, 0.8, 0.0], [0.045, 0.92, -0.012], 0.075, 0.035), roundCone(p, [0.045, 0.92, -0.012], [0.07, 1.0, -0.03], 0.035, 0.005), 0.02),
-    roundCone(p, [-0.05, 0.81, 0.02], [-0.07, 0.935, 0.0], 0.048, 0.008),
+    smin(smin(roundCone(p, [0.02, 0.79, 0.0], [0.035, 0.91, -0.012], 0.085, 0.04), roundCone(p, [0.035, 0.91, -0.012], [0.07, 1.0, -0.03], 0.04, 0.005), 0.02), roundCone(p, [0.1, 0.8, 0.0], [0.15, 0.87, -0.01], 0.04, 0.006), 0.02),
+    roundCone(p, [-0.05, 0.8, 0.02], [-0.075, 0.93, 0.0], 0.05, 0.008),
     0.035,
   );
 
@@ -181,11 +183,25 @@ function parts(p) {
     }
     d.sleeve = sleeve;
     d.shirt = shirt;
-    // Collar: two pointed flaps folded over at the neck.
+    // Collar: big pointed flaps spreading out from the neck, lying on the shirt (thin triangles with soft edges).
     let collar = 1e3;
-    for (const s of [-1, 1]) {
-      const q = local([x * s, y, z], [0.04, 0.5, 0.096], 0.75, -0.25, -0.35);
-      collar = Math.min(collar, box(q, [0.05, 0.016, 0.005], 0.004));
+    for (const sg of [-1, 1]) {
+      const X = x * sg;
+      const tri = [[0.008, 0.512], [0.11, 0.488], [0.035, 0.432]];
+      // 2D distance to the triangle (negative inside).
+      let dd = 1e3, inside = true;
+      for (let i = 0; i < 3; i++) {
+        const [ax, ay] = tri[i], [bx, by] = tri[(i + 1) % 3];
+        const ex = bx - ax, ey = by - ay, wx = X - ax, wy = y - ay;
+        const h = clamp((wx * ex + wy * ey) / (ex * ex + ey * ey), 0, 1);
+        dd = Math.min(dd, Math.hypot(wx - ex * h, wy - ey * h));
+        if (ex * wy - ey * wx > 0) inside = false;
+      }
+      const d2 = inside ? -dd : dd;
+      const t2 = clamp((y - 0.3) / 0.21, 0, 1);
+      const rx2 = mix(0.185, 0.118, t2 ** 0.9), rz2 = mix(0.122, 0.09, t2);
+      const surf = rz2 * Math.sqrt(Math.max(0, 1 - (X / rx2) ** 2)) + 0.009;
+      collar = Math.min(collar, Math.max(d2 - 0.004, Math.abs(z - surf) - 0.0075));
     }
     d.collar = collar;
     // The tie: a little knot and a short ragged blade with drippy ends.
@@ -207,26 +223,39 @@ function parts(p) {
       const H = add(A.W, scale(A.hu, 0.042));
       const v = norm(cross(A.n, A.hu));
       const q = [dot(sub(p, H), A.hu), dot(sub(p, H), v), dot(sub(p, H), A.n)];
-      let h = ellipsoid(q, [0, 0, 0], [0.05, 0.048, 0.022]);
-      for (const [ang, l] of [[-0.55, 0.048], [-0.18, 0.058], [0.18, 0.058], [0.52, 0.05]]) {
-        const b = [0.032 * Math.cos(ang), 0.036 * Math.sin(ang), 0.002];
-        h = smin(h, roundCone(q, b, [b[0] + l * Math.cos(ang), b[1] + l * Math.sin(ang), 0.006], 0.0145, 0.0125), 0.011);
+      let h = ellipsoid(q, [0, 0, 0], [0.056, 0.054, 0.024]);
+      for (const [ang, l] of [[-0.6, 0.05], [-0.2, 0.064], [0.2, 0.064], [0.6, 0.054]]) {
+        const b = [0.036 * Math.cos(ang), 0.04 * Math.sin(ang), 0.002];
+        h = smin(h, roundCone(q, b, [b[0] + l * Math.cos(ang), b[1] + l * Math.sin(ang), 0.006], 0.016, 0.0135), 0.011);
       }
       const ta = A.thumb;
-      h = smin(h, roundCone(q, [-0.006, 0.036 * Math.sign(ta), 0.004], [0.022, 0.076 * Math.sign(ta), 0.012], 0.0145, 0.012), 0.01);
+      h = smin(h, roundCone(q, [-0.008, 0.042 * Math.sign(ta), 0.004], [0.024, 0.086 * Math.sign(ta), 0.012], 0.016, 0.013), 0.01);
       hand = Math.min(hand, h);
     }
     d.arm = arm;
     d.hand = hand;
   }
 
-  // --- thin legs (navy), wide rolled sock cuffs, and huge round black shoes with the toes turned out ---
-  d.leg = roundCone(m, [0.042, 0.31, 0], [0.047, 0.2, 0], 0.026, 0.025);
-  d.cuff = smin(torusY(m, [0.055, 0.222, -0.005], 0.042, 0.022), torusY(m, [0.055, 0.2, -0.005], 0.046, 0.024), 0.012);
+  // --- thin legs (navy) going into big chunky black boots: a fat rounded toe turned OUT (like the drawing), and an
+  // upright ankle shaft with a rolled top that the leg disappears into ---
+  d.leg = roundCone(m, [0.048, 0.31, 0], [0.058, 0.2, 0], 0.026, 0.025);
   {
-    const q = local(m, [0.14, 0.085, 0.05], 0, -0.6);
-    const body = smin(ellipsoid(q, [0, -0.012, 0.035], [0.105, 0.072, 0.175]), ellipsoid(q, [0, 0.025, -0.055], [0.082, 0.08, 0.092]), 0.045);
-    d.shoe = Math.max(body, -y);
+    const q = local(m, BOOT.c, 0, BOOT.ry);
+    const toe = ellipsoid(q, [0, -0.004, 0.06], [0.108, 0.084, 0.15]);
+    const heel = ellipsoid(q, [0.004, 0.022, -0.045], [0.088, 0.086, 0.088]);
+    const shaft = roundCone(m, [0.066, 0.07, -0.006], [0.062, 0.212, -0.004], 0.06, 0.05);
+    d.shoe = Math.max(smin(smin(toe, heel, 0.05), shaft, 0.035), -y);
+    d.cuff = torusY(m, [0.062, 0.222, -0.004], 0.047, 0.017);
+  }
+  // --- the big red tail behind him: thick at the base low on his back, sweeping up and out to a rounded tip ---
+  {
+    const pts = [[0.13, 0.27, -0.14, 0.085], [0.04, 0.36, -0.22, 0.105], [-0.08, 0.5, -0.27, 0.098], [-0.17, 0.64, -0.26, 0.072], [-0.21, 0.75, -0.22, 0.03]];
+    let tail = 1e3;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, ay, az, ar] = pts[i], [bx, by, bz, br] = pts[i + 1];
+      tail = smin(tail, roundCone(p, [ax, ay, az], [bx, by, bz], ar, br), 0.04);
+    }
+    d.tail = tail;
   }
   return d;
 }
@@ -250,6 +279,7 @@ export function sdf(p) {
   s = smin(s, d.leg, 0.02);
   s = smin(s, d.cuff, 0.01);
   s = smin(s, d.shoe, 0.025);
+  s = smin(s, d.tail, 0.03);
   s = smin(s, d.arm, 0.01);
   s = smin(s, d.hand, 0.012);
   // ...with the clothes over it (sharp joins: cloth doesn't melt into skin).
@@ -266,11 +296,11 @@ export function partAt(p) {
   const d = parts(p);
   if (d.mouthCut < 0.003 && d.tongue > 0.002) return { name: 'mouth', d };
   let best = 'head', bd = Infinity;
-  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe']) {
+  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe', 'tail']) {
     const v = Math.abs(d[k]);
     if (v < bd) { bd = v; best = k; }
   }
   return { name: best, d };
 }
 
-export const BOUNDS = { min: [-0.36, -0.01, -0.24], max: [0.44, 1.02, 0.27] };
+export const BOUNDS = { min: [-0.44, -0.01, -0.4], max: [0.5, 1.02, 0.29] };

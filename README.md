@@ -22,7 +22,7 @@ Another SKZOO buddy: ⚙️ Settings → Mob → **Jiniret** (or right-click →
 
 ## 🛹 Gliddy
 
-⚙️ Settings → Mob → **Gliddy** (EVAN's official character): a tan-and-white critter with an X-stitched eye and a sleepy purple one, sculpted from 3D screenshots. His skateboard is strapped to his back; when he goes somewhere he hops on and rides it (facing you, wheels spinning), then hops off and slings it back on. Say “Hey Gliddy” for voice.
+⚙️ Settings → Mob → **Gliddy** (EVAN's official character): a tan-and-white critter with an X-stitched eye and a sleepy purple one, sculpted from 3D screenshots. He has his big red tail, and when he goes somewhere his skateboard pops out and he rides it (facing you, wheels spinning). Say “Hey Gliddy” for voice.
 
 ## 🥚 CORTIS plushies
 

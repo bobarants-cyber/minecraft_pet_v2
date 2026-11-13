@@ -149,8 +149,8 @@ function gripTexture() {
 
 /**
  * Gliddy (EVAN's official character, always on his skateboard): a tan-and-white critter with an X-stitched eye and a sleepy purple one, a white shirt and big black
- * shoes, sculpted from the Meshy screenshots (see scripts/skater). His cape became a skateboard: it's strapped to his
- * back while he stands, and when he goes somewhere he hops on and rides it, facing you, wheels spinning.
+ * shoes and a big red tail, sculpted from the Meshy screenshots (see scripts/skater). When he goes somewhere his
+ * skateboard pops out under his feet and he rides it, facing you, wheels spinning.
  */
 export class Skater extends Bbokari {
   constructor() {
@@ -207,6 +207,12 @@ export class Skater extends Bbokari {
     b.position.y += Math.sin(Math.PI * this.ride) * 0.15; // it swings round in an arc
     const qa = BACK_Q, qb = new THREE.Quaternion().setFromEuler(under.rot);
     b.quaternion.slerpQuaternions(qa, qb, r);
+    // His big red tail is on his back now, so the board isn't carried there: it pops out under his feet when he
+    // rides and tucks away again when he stops.
+    b.position.copy(under.pos);
+    b.quaternion.identity();
+    b.scale.setScalar(Math.max(0.001, r));
+    b.visible = this.ride > 0.01;
     // Wheels roll with the distance travelled.
     this.wheelSpin += ((this.speed ?? 0) * dt) / BOARD.wheelR;
     for (const w of b.userData.wheels) w.rotation.z = -this.wheelSpin;

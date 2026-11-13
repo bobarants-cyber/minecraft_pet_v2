@@ -2,7 +2,7 @@
 // Colours from the original drawing: tan-orange fur on top of the head, ears, hands and around his sleepy eye; white
 // face; one white eye stitched with a black X, one half-closed purple eye; pink tongue; white shirt with a grey tear;
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
-import { partAt, XEYE, SLEEPY } from './model.mjs';
+import { partAt, XEYE, SLEEPY, BOOT } from './model.mjs';
 
 export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.48, 0], arm_L: [-0.105, 0.49, 0], leg_R: [0.045, 0.3, 0], leg_L: [-0.045, 0.3, 0] };
 
@@ -11,7 +11,7 @@ const GROUP = {
   nose: 'head', tongue: 'head', tooth: 'head', mouth: 'head',
   shirt: 'body', collar: 'body', tie: 'body',
   sleeve: 'arm', arm: 'arm', hand: 'arm',
-  leg: 'leg', cuff: 'leg', shoe: 'leg',
+  leg: 'leg', cuff: 'leg', shoe: 'leg', tail: 'body',
 };
 
 /** Each part follows one bone (the joins are hidden by the collar, the sleeves and the shirt hem). */
@@ -39,6 +39,8 @@ const TIE = lin('#3b4566');
 const LINE = lin('#5b3a2a');
 const NAVY = lin('#252a4a');
 const SOLE = lin('#f2f2ef');
+const RED = lin('#d8463a');
+const SHINE = lin('#d6d9e0');
 
 /**
  * Where the white face mask is. The borders are smooth curves that follow the head round (by angle), never a straight
@@ -110,7 +112,16 @@ export function colorAt(p, n) {
     case 'arm': case 'hand': return TAN;
     case 'leg': return NAVY;
     case 'cuff': return BLACK;
-    case 'shoe': return y < 0.022 ? SOLE : BLACK;
+    case 'shoe': {
+      // The white highlight on the outer top of each toe, like in the drawing (worked out in the boot's own frame,
+      // so it sits on the same spot of each boot).
+      const sg = x < 0 ? -1 : 1;
+      const lx = sg * x - BOOT.c[0], lz = z - BOOT.c[2], c = Math.cos(BOOT.ry), sn = Math.sin(BOOT.ry);
+      const bx = c * lx - sn * lz, bz = sn * lx + c * lz;
+      if (Math.hypot((bx - 0.03) / 0.032, (y - 0.135) / 0.022, (bz - 0.12) / 0.045) < 1) return SHINE;
+      return BLACK;
+    }
+    case 'tail': return RED;
   }
   return WHITE;
 }
