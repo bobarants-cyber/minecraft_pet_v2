@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app } from 'electron';
 
 export const SIZES = { small: 150, medium: 210, large: 290 };
-export const MOBS = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' };
+export const MOBS = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari', wolfchan: 'Wolf Chan' };
 /** Caption translation targets, keyed by Whisper's language names. */
 export const CAPTION_LANGUAGES = {
   english: 'English',

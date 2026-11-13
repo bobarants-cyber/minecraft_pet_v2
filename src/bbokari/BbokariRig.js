@@ -23,19 +23,27 @@ function pivot(name, [x, y, z] = [0, 0, 0]) {
  * Returns synchronously; `parts.ready` resolves once the model has loaded and the bones are in `parts`.
  */
 export function buildBbokariRig() {
-  const root = pivot('bbokari');
+  return buildSculptRig({ name: 'bbokari', glb: bbokariGlb, modelHeight: MODEL_HEIGHT });
+}
+
+/**
+ * The same kind of rig for any sculpt made by the scripts in scripts/bbokari or scripts/wolfchan (a skinned mesh
+ * with body → head, arm_R, arm_L, leg_R, leg_L bones). `eyes` places the blinking eyes and cheeks on its face.
+ */
+export function buildSculptRig({ name, glb, modelHeight, eyes = {}, headStandIn = 0.4 }) {
+  const root = pivot(name);
   const hips = pivot('hips', [0, HOVER, 0]);
   const torso = pivot('torso');
   root.add(hips);
   hips.add(torso);
   // Until the model loads, the head joint is a stand-in at neck height (used for emotes).
-  const joints = { hips, torso, head: pivot('head', [0, 0.4, 0]) };
+  const joints = { hips, torso, head: pivot('head', [0, headStandIn, 0]) };
   torso.add(joints.head);
   const parts = { arms: [], legs: [], head: null, loaded: false, eyes: null };
 
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
-  parts.ready = loader.loadAsync(bbokariGlb).then((gltf) => {
+  parts.ready = loader.loadAsync(glb).then((gltf) => {
     const bones = {};
     let mesh = null;
     gltf.scene.traverse((o) => {
@@ -53,7 +61,7 @@ export function buildBbokariRig() {
 
     const model = new THREE.Group();
     model.name = 'model';
-    model.scale.setScalar(MODEL_HEIGHT);
+    model.scale.setScalar(modelHeight);
     model.add(gltf.scene);
     torso.remove(joints.head);
     torso.add(model);
@@ -64,7 +72,7 @@ export function buildBbokariRig() {
     parts.legs = [bones.leg_R, bones.leg_L];
 
     model.updateWorldMatrix(true, true);
-    parts.eyes = new BbokariEyes(bones.head, mesh);
+    parts.eyes = new BbokariEyes(bones.head, mesh, eyes);
     parts.loaded = true;
     return parts;
   });

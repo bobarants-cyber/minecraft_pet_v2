@@ -9,16 +9,20 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
  * Same surface as the other mobs: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate().
  */
 export class Bbokari {
-  constructor() {
-    const { root, joints, parts } = buildBbokariRig();
+  /** Other mobs built the same way (Wolf Chan) pass their own rig and sizes. */
+  constructor(rig = buildBbokariRig(), sizes = {}) {
+    const { root, joints, parts } = rig;
     this.root = root;
     this.joints = joints;
     this.parts = parts;
     this.face = new FaceDisplay();
 
-    this.height = BBOKARI_HEIGHT;
-    this.halfWidth = 0.42;
-    this.emoteLift = 0.8;
+    this.height = sizes.height ?? BBOKARI_HEIGHT;
+    this.halfWidth = sizes.halfWidth ?? 0.42;
+    this.emoteLift = sizes.emoteLift ?? 0.8;
+    this.hover = sizes.hover ?? HOVER;
+    /** Where the hands are, from the shoulder joint (model units). */
+    this.hand = sizes.hand ?? [0.1, -0.13, 0.05];
 
     this.time = Math.random() * 10;
     this.bobPhase = Math.random() * 10;
@@ -51,8 +55,8 @@ export class Bbokari {
   anchor(slot) {
     if (!this.parts.loaded) return null;
     if (slot === 'head') return { parent: this.parts.head, at: null };
-    if (slot === 'handR') return { parent: this.parts.arms[0], at: [0.1, -0.13, 0.05] };
-    if (slot === 'handL') return { parent: this.parts.arms[1], at: [-0.1, -0.13, 0.05] };
+    if (slot === 'handR') return { parent: this.parts.arms[0], at: [...this.hand] };
+    if (slot === 'handL') return { parent: this.parts.arms[1], at: [-this.hand[0], this.hand[1], this.hand[2]] };
     return null;
   }
 
@@ -61,7 +65,7 @@ export class Bbokari {
     const attach = () => {
       const arm = this.parts.arms[0];
       // The hand is at the end of the arm bone: model units, relative to the shoulder joint.
-      item.position.set(0.1, -0.13, 0.05);
+      item.position.set(...this.hand);
       item.rotation.set(0, 0, -0.35);
       arm.add(item);
     };
@@ -81,7 +85,7 @@ export class Bbokari {
     const bob = Math.sin(this.bobPhase) * 0.03 * this.airborne;
     // A little waddle: the body rises at each step.
     const step = Math.abs(Math.sin(this.walkPhase)) * 0.025 * this.walkAmount * (1 - this.airborne);
-    j.hips.position.y = HOVER * (1 - sit) + p.bodyY + bob + step - p.crouch * 0.4;
+    j.hips.position.y = this.hover * (1 - sit) + p.bodyY + bob + step - p.crouch * 0.4;
 
     const squash = 1 - p.crouch * 1.4;
     j.torso.scale.set(1 / Math.sqrt(squash) + breath * 0.004, squash + breath * 0.008, 1 / Math.sqrt(squash));

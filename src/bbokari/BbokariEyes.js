@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 /** Head-relative spots on the sculpt (model units, height 1): eye sockets and cheeks. */
 const HEAD_Y = 0.355;
-const EYE = { x: 0.115, y: 0.575, r: 0.036 };
-const CHEEK = { x: 0.185, y: 0.505 };
+const EYE_SPOT = { x: 0.115, y: 0.575, r: 0.036 };
+const CHEEK_SPOT = { x: 0.185, y: 0.505 };
 
 const DARK = 0x2a1a10;
 const _o = new THREE.Vector3();
@@ -11,14 +11,14 @@ const _t = new THREE.Vector3();
 const _n = new THREE.Vector3();
 
 /** Finds where a ray straight at the face from the front hits the head, in head-local space. */
-function surface(head, mesh, x, y) {
-  _o.set(x, y - HEAD_Y, 1);
-  _t.set(x, y - HEAD_Y, 0);
+function surface(head, mesh, x, y, headY = HEAD_Y) {
+  _o.set(x, y - headY, 1);
+  _t.set(x, y - headY, 0);
   head.localToWorld(_o);
   head.localToWorld(_t);
   const ray = new THREE.Raycaster(_o, _t.sub(_o).normalize());
   const hit = ray.intersectObject(mesh, true)[0];
-  if (!hit) return { point: new THREE.Vector3(x, y - HEAD_Y, 0.28), normal: new THREE.Vector3(0, 0, 1) };
+  if (!hit) return { point: new THREE.Vector3(x, y - headY, 0.28), normal: new THREE.Vector3(0, 0, 1) };
   const point = head.worldToLocal(hit.point.clone());
   _n.copy(hit.face?.normal ?? new THREE.Vector3(0, 0, 1)).transformDirection(hit.object.matrixWorld);
   const normal = _n.clone().transformDirection(head.matrixWorld.clone().invert()).normalize();
@@ -34,7 +34,11 @@ function material(color, extra = {}) {
  * close for sleep, look around, cry and blush. Reads the shared FaceDisplay state each frame.
  */
 export class BbokariEyes {
-  constructor(head, headMesh) {
+  /** `spots` moves the eyes and cheeks for another sculpt (Wolf Chan): { headY, eye: { x, y, r }, cheek: { x, y } }. */
+  constructor(head, headMesh, spots = {}) {
+    const headY = spots.headY ?? HEAD_Y;
+    const EYE = (this.EYE = spots.eye ?? { ...EYE_SPOT });
+    const CHEEK = spots.cheek ?? CHEEK_SPOT;
     this.eyes = [];
     this.blush = [];
     this.tears = [];
@@ -45,7 +49,7 @@ export class BbokariEyes {
     const r = EYE.r;
 
     for (const side of [1, -1]) {
-      const { point, normal } = surface(head, headMesh, side * EYE.x, EYE.y);
+      const { point, normal } = surface(head, headMesh, side * EYE.x, EYE.y, headY);
       const eye = new THREE.Group();
       eye.position.copy(point).addScaledVector(normal, 0.002);
       eye.lookAt(eye.position.clone().add(normal));
@@ -71,7 +75,7 @@ export class BbokariEyes {
       eye.add(open, closed, happy);
       this.eyes.push({ eye, open, closed, happy, sparkle, side });
 
-      const cheek = surface(head, headMesh, side * CHEEK.x, CHEEK.y);
+      const cheek = surface(head, headMesh, side * CHEEK.x, CHEEK.y, headY);
       const blush = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 24), pink);
       blush.position.copy(cheek.point).addScaledVector(cheek.normal, 0.003);
       blush.lookAt(blush.position.clone().add(cheek.normal));
@@ -90,6 +94,7 @@ export class BbokariEyes {
 
   /** `face` is the shared FaceDisplay; `dt` drives the tear drip. */
   apply(face, dt = 1 / 60) {
+    const EYE = this.EYE;
     this.time += dt;
     const c = face.current;
     const look = face.look;

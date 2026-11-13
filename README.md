@@ -11,6 +11,11 @@ npm start
 > download step, and you'll get "Electron failed to install correctly".
 
 
+
+## 🐺 Wolf Chan
+
+A second SKZOO buddy: menu bar → ⚙️ Settings → Mob → **Wolf Chan** (or right-click → Switch mob). He walks, waves, dances, sleeps, types, wears outfits and does everything Bbokari does, with his own personality (“awoo” 🐺💙). Say “Hey Wolf Chan” for voice. His model was made from a 3D-printing sculpt with `scripts/wolfchan`.
+
 ## ✨ Everything in one place: the feature hub
 
 Press **⌃⌥Space** (or click **✨ Everything I can do…** at the top of the menu bar menu, or ask “what can you do?”). Every feature is a card: search (“study”, “canva”, “remind”), click to try it. New features have a **NEW** badge.

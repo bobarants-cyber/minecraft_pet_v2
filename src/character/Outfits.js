@@ -137,9 +137,19 @@ export class Wardrobe {
       return;
     }
     const a = mob.anchor?.('head');
-    if (!a || !BUILDERS[name]) return;
-    this.current = this.cache[name] ??= BUILDERS[name]();
-    a.parent.add(this.current);
+    if (!a) {
+      this.mob = null; // the model is still loading: try again next frame
+      return;
+    }
+    if (!BUILDERS[name]) return;
+    // Each pet's head is a different size: a small holder moves and scales the outfit to fit (Wolf Chan's head
+    // top is lower, between his ears).
+    const holder = new THREE.Group();
+    holder.position.set(...(mob.outfitOffset ?? [0, 0, 0]));
+    holder.scale.setScalar(mob.outfitScale ?? 1);
+    holder.add((this.cache[name] ??= BUILDERS[name]()));
+    a.parent.add(holder);
+    this.current = holder;
   }
 
   /** Re-apply after something else took the glasses off (typing, scenes). */
