@@ -155,25 +155,23 @@ function parts(p) {
     d.earFuzz = fuzz;
   }
   // --- hair: a tall spike leaning right, a smaller one on the left, both growing out of the head ---
-  // Hair, from the markups: one big flame whose tip leans a little left, with a long smooth inward curve down its
-  // right side; and to its left, past a narrow notch, a thin curved lock rising almost as high and hooking towards it.
+  // Hair: two locks, each an S-curve (it bends one way, then the other). The big lock in front rises from his head,
+  // bows out to the right, then sweeps back so its tip points up and to the left. The smaller lock sits BEHIND it,
+  // peeking out on its left, bowing left and then hooking its tip back towards the big one.
   {
-    const chain = (pts) => {
-      let t = 1e3;
-      for (let i = 0; i < pts.length - 1; i++) t = smin(t, roundCone(p, pts[i].slice(0, 3), pts[i + 1].slice(0, 3), pts[i][3], pts[i + 1][3]), 0.02);
-      return t;
+    // A tapering, slightly flattened blade swept along a cubic curve.
+    const blade = ([a, b, c, e], r0, r1, z0, N = 14) => {
+      const at = (t) => [0, 1].map((k) => (1 - t) ** 3 * a[k] + 3 * (1 - t) ** 2 * t * b[k] + 3 * (1 - t) * t * t * c[k] + t ** 3 * e[k]);
+      const q = [x, y, z0 + (z - z0) * 1.7]; // thinner front-to-back than side-to-side
+      let d0 = 1e3;
+      for (let i = 0; i < N; i++) {
+        const t0 = i / N, t1 = (i + 1) / N, [x0, y0] = at(t0), [x1, y1] = at(t1);
+        d0 = smin(d0, roundCone(q, [x0, y0, z0], [x1, y1, z0], mix(r0, r1, t0 ** 0.8), mix(r0, r1, t1 ** 0.8)), 0.01);
+      }
+      return d0;
     };
-    const flame = smin(
-      smin(
-        ellipsoid(p, [0.045, 0.825, -0.01], [0.11, 0.085, 0.07]), // the wide teardrop body
-        chain([[0.03, 0.87, -0.01, 0.06], [0.0, 0.945, -0.018, 0.032], [-0.022, 1.0, -0.025, 0.004]]), // the tip, leaning left
-        0.04,
-      ),
-      chain([[0.17, 0.775, -0.01, 0.022], [0.11, 0.81, -0.01, 0.04]]), // long base on the right: the right side curves in
-      0.04,
-    );
-    // The lock: a rounded lobe left of the flame (past a notch), up to about the flame's middle, leaning left.
-    const lock = chain([[-0.045, 0.8, 0.025, 0.044], [-0.068, 0.865, 0.018, 0.036], [-0.074, 0.905, 0.012, 0.027]]);
+    var flame = blade([[0.04, 0.77], [0.11, 0.86], [-0.03, 0.9], [-0.025, 1.0]], 0.095, 0.003, 0.0, 10);
+    var lock = blade([[-0.035, 0.79], [-0.1, 0.84], [-0.085, 0.915], [-0.04, 0.925]], 0.055, 0.006, -0.03, 10);
     d.tuft = Math.min(flame, lock);
   }
 
