@@ -2,6 +2,7 @@ import { Bee } from '../bee/Bee.js';
 import { Axolotl } from '../axolotl/Axolotl.js';
 import { Bbokari } from '../bbokari/Bbokari.js';
 import { WolfChan } from '../wolfchan/WolfChan.js';
+import { Jiniret } from '../jiniret/Jiniret.js';
 
 /** Every mob exposes the same surface: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate(). */
 export const MOBS = {
@@ -9,6 +10,7 @@ export const MOBS = {
   axolotl: { label: 'Axolotl', create: () => new Axolotl() },
   bbokari: { label: 'Bbokari', create: () => new Bbokari() },
   wolfchan: { label: 'Wolf Chan', create: () => new WolfChan() },
+  jiniret: { label: 'Jiniret', create: () => new Jiniret() },
 };
 
 export const MOB_NAMES = Object.keys(MOBS);

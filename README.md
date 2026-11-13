@@ -16,6 +16,10 @@ npm start
 
 A second SKZOO buddy: menu bar → ⚙️ Settings → Mob → **Wolf Chan** (or right-click → Switch mob). He walks, waves, dances, sleeps, types, wears outfits and does everything Bbokari does, with his own personality (“awoo” 🐺💙). Say “Hey Wolf Chan” for voice. His model was made from a 3D-printing sculpt with `scripts/wolfchan`.
 
+## 🦦 Jiniret
+
+Another SKZOO buddy: ⚙️ Settings → Mob → **Jiniret** (or right-click → Switch mob). A white ferret with pink-lined round ears, a pink nose and whiskers and his beauty mark, painted from the official character description. He does everything Bbokari does, with his own artsy, hype-you-up personality ✨🎨. Say “Hey Jiniret” for voice. Model made with `scripts/jiniret`.
+
 ## ✨ Everything in one place: the feature hub
 
 Press **⌃⌥Space** (or click **✨ Everything I can do…** at the top of the menu bar menu, or ask “what can you do?”). Every feature is a card: search (“study”, “canva”, “remind”), click to try it. New features have a **NEW** badge.
