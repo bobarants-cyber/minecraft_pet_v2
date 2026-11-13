@@ -7,7 +7,7 @@ import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, NOSE as NOSE_AT } from './mo
 export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.49, 0], arm_L: [-0.11, 0.49, 0], leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
 
 const GROUP = {
-  head: 'head', lip: 'head', ear: 'head', earFold: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
+  head: 'head', lip: 'head', ear: 'head', earFold: 'head', earFuzz: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
   nose: 'head', tongue: 'head', tooth: 'head', mouth: 'head',
   shirt: 'body', collar: 'body', tie: 'body',
   sleeve: 'arm', arm: 'arm', hand: 'arm',
@@ -64,6 +64,8 @@ const TAN = lin('#eeb27a');
 const LID = lin('#d98a48'); // the sleepy eye's lid is a darker orange in the drawing
 const WHITE = lin('#fbf8f2');
 const INNER_EAR = lin('#fcefe4');
+const EAR = lin('#e19a5a'); // the ears are a darker orange than his fur
+const EAR_LINE = lin('#a8612e');
 const BLACK = lin('#1b1a1e');
 const PURPLE = lin('#6f45c4');
 const PUPIL = lin('#3a2170');
@@ -92,7 +94,7 @@ function isWhiteFace([x, y, z]) {
   if (side > 2.1) return 0;
   const eyeY = (XEYE.c[1] + SLEEPY.c[1]) / 2;
   // Outside the channel, the edge sits at eye level (a touch lower on the sleepy-eye side), dropping as it wraps round.
-  let top = eyeY + (x > 0 ? -0.006 : 0.022) - 0.16 * Math.max(0, side - 0.9) ** 1.5;
+  let top = eyeY + (x > 0 ? 0.03 : 0.075) - 0.16 * Math.max(0, side - 0.95) ** 1.5;
   // The channel between the eyes, down to the nose (its sides are the eye outlines, so it's as wide as the gap).
   const inner0 = XEYE.c[0] + XEYE.r * 0.95, inner1 = SLEEPY.c[0] - SLEEPY.r * 0.95;
   if (z > 0.05 && x > inner0 - 0.01 && x < inner1 + 0.01) top = Math.min(top, NOSE_AT.c[1] + 0.012);
@@ -130,10 +132,12 @@ export function colorAt(p, n) {
     case 'tooth': return WHITE;
     case 'tuft': return TAN;
     case 'ear': {
-      // Pale exactly on the cupped hollow in front, tan on the rim and the back.
+      // Darker orange all over, with a darker crease line curving round inside the hollow.
       const h = partAt(p).d.earHollow;
-      return h > -0.004 && h < 0.006 && n[2] > -0.2 ? INNER_EAR : TAN;
+      if (n[2] > -0.2 && Math.abs(h + 0.002) < 0.0025) return EAR_LINE;
+      return EAR;
     }
+    case 'earFuzz': return WHITE;
     case 'head': {
       // The dark outline all the way round each eye (where the socket meets the eye).
       if (z > 0.05) {

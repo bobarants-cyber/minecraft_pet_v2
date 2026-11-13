@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import skaterGlb from '../../assets/models/skater.glb?inline';
-import { FINGERS } from '../../scripts/skater/model.mjs';
+import { FINGERS, MOUTH, faceZ } from '../../scripts/skater/model.mjs';
 import { HOVER, buildSculptRig } from '../bbokari/BbokariRig.js';
 import { Bbokari } from '../bbokari/Bbokari.js';
 
@@ -154,6 +154,55 @@ function gripTexture() {
  * shoes and a big red tail, sculpted from the Meshy screenshots (see scripts/skater). When he goes somewhere his
  * skateboard pops out under his feet and he rides it, facing you, wheels spinning.
  */
+// ---------- His mouth (drawn live on the face, so it can change) ----------
+// Closed: just the "m" (two little scallops under the nose). Smiling: the mouth opens below the "m", which becomes its
+// top edge. Ta-da / excited: a narrow oval opens under the middle of the "m", cut off by it at the top.
+const HEAD_PIVOT = [0, 0.5, 0];
+const MW = 0.042;
+const mY = (x) => { const u = Math.min(1, Math.abs(x - MOUTH.c[0]) / MW); return MOUTH.c[1] - 0.011 * Math.sin(Math.PI * u) + 0.006 * Math.max(0, u - 0.85) / 0.15; };
+const onFace = (x, y, lift) => new THREE.Vector3(x - HEAD_PIVOT[0], y - HEAD_PIVOT[1], faceZ(x, y) + lift - HEAD_PIVOT[2]);
+function faceMesh(pts2d, tris, color, lift) {
+  const pos = [];
+  for (const [x, y] of pts2d) pos.push(...onFace(x, y, lift).toArray());
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(tris);
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+}
+/** A filled shape between a top and a bottom curve over x in [x0, x1]. */
+function band(x0, x1, top, bottom, color, lift, N = 24) {
+  const pts = [], tris = [];
+  for (let i = 0; i <= N; i++) {
+    const x = x0 + ((x1 - x0) * i) / N;
+    pts.push([x, top(x)], [x, Math.min(top(x), bottom(x))]);
+    if (i < N) tris.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+  }
+  return faceMesh(pts, tris, color, lift);
+}
+function buildMouth() {
+  const g = new THREE.Group();
+  const [cx, cy] = MOUTH.c;
+  // The "m": a thin dark line.
+  const curve = new THREE.CatmullRomCurve3(Array.from({ length: 25 }, (_, i) => { const x = cx - MW + (2 * MW * i) / 24; return onFace(x, mY(x), 0.006); }));
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.0034, 6), new THREE.MeshStandardMaterial({ color: 0x3a2622, roughness: 0.6 }));
+  // Smile: opens below the "m" (unit size; scaled by how open it is).
+  const smile = new THREE.Group();
+  const H = 0.04;
+  smile.add(band(cx - MW * 0.98, cx + MW * 0.98, mY, (x) => cy - 0.006 - H * Math.sqrt(Math.max(0, 1 - ((x - cx) / MW) ** 2)), 0x5b1e2a, 0.0055));
+  smile.add(band(cx - MW * 0.5, cx + MW * 0.5, (x) => cy - 0.03 + 0.012 * (1 - ((x - cx) / (MW * 0.5)) ** 2), (x) => cy - 0.006 - H * Math.sqrt(Math.max(0, 1 - ((x - cx) / MW) ** 2)) + 0.002, 0xf28aa2, 0.0065));
+  // Ta-da: a narrow oval under the middle of the "m", its top cut by the "m".
+  const oval = new THREE.Group();
+  const ow = 0.017, oh = 0.026, oc = cy - 0.006 - oh;
+  const ovalTop = (x) => Math.min(mY(x), oc + oh * Math.sqrt(Math.max(0, 1 - ((x - cx) / ow) ** 2)));
+  const ovalBot = (x) => oc - oh * Math.sqrt(Math.max(0, 1 - ((x - cx) / ow) ** 2));
+  oval.add(band(cx - ow, cx + ow, ovalTop, ovalBot, 0x5b1e2a, 0.0055));
+  oval.add(band(cx - ow * 0.75, cx + ow * 0.75, (x) => oc - oh * 0.25 + 0.006 * (1 - ((x - cx) / (ow * 0.75)) ** 2), (x) => ovalBot(x) + 0.0015, 0xf28aa2, 0.0065));
+  g.add(m, smile, oval);
+  g.userData = { smile, oval };
+  return g;
+}
+
 export class Skater extends Bbokari {
   constructor() {
     super(
@@ -171,6 +220,8 @@ export class Skater extends Bbokari {
     this.pushPhase = 0;
     this.hemA = 0;
     this.hemV = 0;
+    this.mouth = buildMouth();
+    this.parts.ready.then(() => this.parts.head.add(this.mouth));
     this.fingers = [];
     this.handOpen = [0, 0];
     this.handSeed = [Math.random() * 10, Math.random() * 10];
@@ -223,9 +274,12 @@ export class Skater extends Bbokari {
     rz += r * (0.55 + stroke * 0.2 * dir);
     lz += r * (0.55 - stroke * 0.2 * dir);
     // Raised arms stop out to the side of his big head (never through it), and turn so the open palm faces you.
-    const cap = 1.5 + r * 0.3;
+    const cap = 1.4 + r * 0.4;
+    // ...and come a little forward as they go up, so the hand passes in front of his head, not into it.
+    rx -= clamp(p.armRaiseR / 1.3, 0, 1) * 0.5 * (1 - r);
+    lx -= clamp(p.armRaiseL / 1.3, 0, 1) * 0.5 * (1 - r);
     const tw = (raise) => clamp(raise / 1.4, 0, 1) * 1.45 * (1 - r);
-    armR.rotation.order = armL.rotation.order = 'ZYX'; // twist about the arm first, then raise
+    armR.rotation.order = armL.rotation.order = 'ZXY'; // twist about the arm first, then bring it forward, then raise
     armR.rotation.set(rx, tw(p.armRaiseR), Math.min(rz, cap));
     armL.rotation.set(lx, -tw(p.armRaiseL), -Math.min(lz, cap));
   }
@@ -266,6 +320,20 @@ export class Skater extends Bbokari {
         // Negative opens (fingers straighten out), positive curls them towards the palm.
         f.bone.quaternion.setFromAxisAngle(f.axis, -this.handOpen[i]);
       });
+    }
+    // Mouth: closed "m", the open smile, or the ta-da oval, from how open the face wants it.
+    {
+      const o = this.face.current.mouthOpen ?? 0;
+      const { smile, oval } = this.mouth.userData;
+      const smiling = o > 0.12 && o < 0.62;
+      smile.visible = smiling;
+      oval.visible = o >= 0.62;
+      // Grow from the "m" (its top edge) downwards.
+      const top = new THREE.Vector3(0, MOUTH.c[1] - HEAD_PIVOT[1], 0);
+      for (const [g, k] of [[smile, Math.min(1, 0.5 + o)], [oval, Math.min(1.15, 0.6 + o * 0.5)]]) {
+        g.scale.set(1, k, 1);
+        g.position.set(0, top.y * (1 - k), 0);
+      }
     }
     // The shirt moves like cloth: its lower half swings behind his movement on a spring, bounces a little, and lifts
     // and flares out when he raises his arms.

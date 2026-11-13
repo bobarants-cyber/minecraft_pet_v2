@@ -329,7 +329,7 @@ export const STATES = {
   tada: {
     priority: 2,
     enter(c) {
-      c.face.setExpression(pick(['excited', 'joy', 'happy']));
+      c.face.setExpression(pick(['excited', 'joy']));
       c.emote('sparkle', 0.5);
     },
     update(c, dt, t, s, p) {

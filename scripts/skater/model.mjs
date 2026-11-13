@@ -62,8 +62,8 @@ function arm(S, W, palm, thumb, hand) {
 }
 export const ARMS = [
   // Resting: arms hanging relaxed a little out from the body, palms facing in. (His ta-da pose is an animation.)
-  arm([-0.115, 0.485, 0.0], [-0.2, 0.335, 0.04], [1, 0.1, 0.3], 1, [-0.15, -1, 0.12]),
-  arm([0.12, 0.485, 0.0], [0.205, 0.335, 0.04], [-1, 0.1, 0.3], -1, [0.15, -1, 0.12]),
+  arm([-0.115, 0.485, 0.0], [-0.2, 0.335, 0.04], [1, 0.1, 0.3], 1),
+  arm([0.12, 0.485, 0.0], [0.205, 0.335, 0.04], [-1, 0.1, 0.3], -1),
 ];
 /** Each boot (mirrored per side): its centre and how far the toe turns out. */
 export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
@@ -133,17 +133,25 @@ function parts(p) {
     // Leaf outline: wider at the bottom, rounded at the top.
     const shape = (s) => ellipsoid([q[0], q[1] - s * 0.01, q[2]], [0, 0.0, 0], [0.071 * (1 + s), 0.094 * (1 + s), 0.027]);
     void shape;
-    let ear = smin(ellipsoid(q, [0.008, 0.014, 0], [0.074, 0.078, 0.027]), ellipsoid(q, [-0.008, -0.048, 0], [0.056, 0.05, 0.024]), 0.022);
+    let ear = smin(smin(ellipsoid(q, [0.004, 0.012, 0], [0.076, 0.076, 0.027]), ellipsoid(q, [0.03, 0.038, 0], [0.05, 0.048, 0.026]), 0.03), ellipsoid(q, [-0.008, -0.046, 0], [0.056, 0.05, 0.024]), 0.022);
     const hollow = smin(ellipsoid(q, [0.008, 0.018, 0.021], [0.054, 0.058, 0.022]), ellipsoid(q, [-0.006, -0.032, 0.02], [0.038, 0.034, 0.02]), 0.016);
     d.earHollow = hollow;
     ear = ssub(ear, hollow, 0.01);
     d.ear = ear;
-    d.earFold = 1e3; // (the small fold inside the ear is painted, not sculpted)
+    d.earFold = 1e3;
+    // Little white tufts of fuzz sticking up out of the bottom of the hollow.
+    let fuzz = 1e3;
+    for (const [ax, ay, bx, by] of [[-0.022, -0.05, -0.036, -0.012], [-0.006, -0.054, -0.006, -0.018], [0.01, -0.05, 0.022, -0.02]]) {
+      fuzz = Math.min(fuzz, roundCone(q, [ax, ay, 0.012], [bx, by, 0.022], 0.009, 0.0015));
+    }
+    d.earFuzz = fuzz;
   }
   // --- hair: a tall spike leaning right, a smaller one on the left, both growing out of the head ---
   d.tuft = smin(
-    smin(smin(roundCone(p, [0.02, 0.79, 0.0], [0.035, 0.91, -0.012], 0.085, 0.04), roundCone(p, [0.035, 0.91, -0.012], [0.07, 1.0, -0.03], 0.04, 0.005), 0.02), roundCone(p, [0.1, 0.8, 0.0], [0.15, 0.87, -0.01], 0.04, 0.006), 0.02),
-    roundCone(p, [-0.05, 0.8, 0.02], [-0.075, 0.93, 0.0], 0.05, 0.008),
+    // The flame: a wide base that rises, bends a little left, then flicks its tip up and to the right.
+    smin(smin(roundCone(p, [0.03, 0.78, 0.0], [0.02, 0.88, -0.01], 0.09, 0.052), roundCone(p, [0.02, 0.88, -0.01], [0.03, 0.955, -0.02], 0.052, 0.022), 0.03), roundCone(p, [0.03, 0.955, -0.02], [0.07, 1.0, -0.03], 0.022, 0.004), 0.015),
+    // The small lock on the left: a rounded curl, not a spike.
+    smin(roundCone(p, [-0.085, 0.8, 0.03], [-0.1, 0.88, 0.02], 0.04, 0.026), roundCone(p, [-0.1, 0.88, 0.02], [-0.082, 0.915, 0.015], 0.026, 0.012), 0.012),
     0.035,
   );
 
@@ -282,14 +290,15 @@ export function sdf(p) {
   s = smin(s, d.tuft, 0.035);
   s = smin(s, d.ear, 0.02);
   s = Math.min(s, d.earFold);
+  s = smin(s, d.earFuzz, 0.004);
   s = Math.min(s, d.xeye);
   s = Math.min(s, d.xcross);
   s = Math.min(s, d.sleepy);
   s = smin(s, d.lid, 0.004);
   s = smin(s, d.nose, 0.006);
-  s = ssub(s, d.mouthCut, 0.008);
+
   s = smin(s, d.lip, 0.004);
-  s = Math.min(s, d.tongue);
+
   s = smin(s, d.leg, 0.02);
   s = smin(s, d.cuff, 0.01);
   s = smin(s, d.shoe, 0.025);
@@ -299,7 +308,7 @@ export function sdf(p) {
   // ...with the clothes over it (sharp joins: cloth doesn't melt into skin).
   s = Math.min(s, d.shirt);
   s = Math.min(s, d.sleeve);
-  s = smin(s, d.tooth, 0.003);
+
   s = Math.min(s, d.collar);
   s = Math.min(s, d.tie);
   return s;
@@ -308,9 +317,8 @@ export function sdf(p) {
 /** Which part a surface point belongs to. */
 export function partAt(p) {
   const d = parts(p);
-  if (d.mouthCut < 0.003 && d.tongue > 0.002) return { name: 'mouth', d };
   let best = 'head', bd = Infinity;
-  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe', 'tail']) {
+  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'earFuzz', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe', 'tail']) {
     const v = Math.abs(d[k]);
     if (v < bd) { bd = v; best = k; }
   }
