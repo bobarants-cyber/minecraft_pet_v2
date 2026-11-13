@@ -76,7 +76,7 @@ function isWhiteFace([x, y, z]) {
   if (side > 2.1) return 0;
   const eyeY = (XEYE.c[1] + SLEEPY.c[1]) / 2;
   // Outside the channel, the edge sits at eye level (a touch lower on the sleepy-eye side), dropping as it wraps round.
-  let top = eyeY - (x > 0 ? 0.012 : 0) - 0.16 * Math.max(0, side - 0.9) ** 1.5;
+  let top = eyeY + (x > 0 ? -0.006 : 0.022) - 0.16 * Math.max(0, side - 0.9) ** 1.5;
   // The channel between the eyes, down to the nose (its sides are the eye outlines, so it's as wide as the gap).
   const inner0 = XEYE.c[0] + XEYE.r * 0.95, inner1 = SLEEPY.c[0] - SLEEPY.r * 0.95;
   if (z > 0.05 && x > inner0 - 0.01 && x < inner1 + 0.01) top = Math.min(top, NOSE_AT.c[1] + 0.012);
@@ -100,7 +100,12 @@ export function colorAt(p, n) {
     }
     case 'lid': {
       // The lid's lower edge is a dark line.
-      return y < SLEEPY.c[1] + 0.012 ? BLACK : LID;
+      const rl = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
+      if (rl > 0.95) return rl < 1.06 ? BLACK : blend(TAN, WHITE, isWhiteFace(p));
+      if (y < SLEEPY.c[1] + 0.012) return BLACK;
+      // The little white shine on the lid (upper left).
+      if (Math.hypot((x - SLEEPY.c[0] + 0.03) / 0.017, (y - SLEEPY.c[1] - 0.055) / 0.013) < 1) return WHITE;
+      return LID;
     }
     case 'nose': return NOSE;
     case 'lip': return LINE;
@@ -120,11 +125,8 @@ export function colorAt(p, n) {
         if (rx > 0.95 && rx < 1.06) return BLACK;
         if (rx <= 0.95) return WHITE;
         const rs = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
-        if (rs < 1.07) {
-          // Above the lid line it's the lid's skin (no outline there); below, the outline and the purple eye.
-          if (y > SLEEPY.c[1] + 0.006) return LID;
-          return rs > 0.95 ? BLACK : WHITE;
-        }
+        if (rs > 0.95 && rs < 1.06) return BLACK; // the full outline, same as the X eye
+        if (rs <= 0.95) return y > SLEEPY.c[1] + 0.006 ? LID : WHITE;
       }
       return blend(TAN, WHITE, isWhiteFace(p));
     }
