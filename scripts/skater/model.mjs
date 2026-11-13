@@ -36,6 +36,7 @@ function torusY(p, c, R, r) {
   const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2];
   return len(Math.sqrt(x * x + z * z) - R, y, 0) - r;
 }
+const smax = (a, b, k) => -smin(-a, -b, k);
 const smin = (a, b, k) => { const h = clamp(0.5 + (0.5 * (b - a)) / k, 0, 1); return mix(b, a, h) - k * h * (1 - h); };
 const ssub = (d, cut, k) => { const h = clamp(0.5 - (0.5 * (d + cut)) / k, 0, 1); return mix(d, -cut, h) + k * h * (1 - h); };
 /** A point in a part's own frame: moved to its centre, then turned (z, then y, then x). */
@@ -133,12 +134,19 @@ function parts(p) {
     // Leaf outline: wider at the bottom, rounded at the top.
     const shape = (s) => ellipsoid([q[0], q[1] - s * 0.01, q[2]], [0, 0.0, 0], [0.071 * (1 + s), 0.094 * (1 + s), 0.027]);
     void shape;
-    let ear = smin(smin(ellipsoid(q, [0.004, 0.012, 0], [0.076, 0.076, 0.027]), ellipsoid(q, [0.03, 0.038, 0], [0.05, 0.048, 0.026]), 0.03), ellipsoid(q, [-0.008, -0.046, 0], [0.056, 0.05, 0.024]), 0.022);
+    let ear = smin(ellipsoid(q, [0.006, 0.01, 0], [0.08, 0.082, 0.027]), ellipsoid(q, [-0.004, -0.046, 0], [0.06, 0.05, 0.024]), 0.022);
+    ear = smax(ear, -(q[0] + 0.052 - 0.12 * Math.max(0, q[1] - 0.04) ** 2 * 6), 0.012); // the straighter inner side
     const hollow = smin(ellipsoid(q, [0.008, 0.018, 0.021], [0.054, 0.058, 0.022]), ellipsoid(q, [-0.006, -0.032, 0.02], [0.038, 0.034, 0.02]), 0.016);
     d.earHollow = hollow;
     ear = ssub(ear, hollow, 0.01);
     d.ear = ear;
-    d.earFold = 1e3;
+    // The fold: a soft ridge curving down the inside of the ear, parallel to its inner edge (the folded flap).
+    {
+      const pts = [[-0.012, 0.075, 0.006], [-0.03, 0.04, 0.014], [-0.036, -0.005, 0.016], [-0.03, -0.045, 0.014]];
+      let f = 1e3;
+      for (let i = 0; i < pts.length - 1; i++) f = smin(f, roundCone(q, pts[i], pts[i + 1], 0.0065, 0.0065), 0.004);
+      d.earFold = f;
+    }
     // Little white tufts of fuzz sticking up out of the bottom of the hollow.
     let fuzz = 1e3;
     for (const [ax, ay, bx, by] of [[-0.022, -0.05, -0.036, -0.012], [-0.006, -0.054, -0.006, -0.018], [0.01, -0.05, 0.022, -0.02]]) {
@@ -147,13 +155,28 @@ function parts(p) {
     d.earFuzz = fuzz;
   }
   // --- hair: a tall spike leaning right, a smaller one on the left, both growing out of the head ---
-  d.tuft = smin(
-    // The flame: a wide base that rises, bends a little left, then flicks its tip up and to the right.
-    smin(smin(roundCone(p, [0.03, 0.78, 0.0], [0.02, 0.88, -0.01], 0.09, 0.052), roundCone(p, [0.02, 0.88, -0.01], [0.03, 0.955, -0.02], 0.052, 0.022), 0.03), roundCone(p, [0.03, 0.955, -0.02], [0.07, 1.0, -0.03], 0.022, 0.004), 0.015),
-    // The small lock on the left: a rounded curl, not a spike.
-    smin(roundCone(p, [-0.085, 0.8, 0.03], [-0.1, 0.88, 0.02], 0.04, 0.026), roundCone(p, [-0.1, 0.88, 0.02], [-0.082, 0.915, 0.015], 0.026, 0.012), 0.012),
-    0.035,
-  );
+  // Hair, from the markups: one big flame whose tip leans a little left, with a long smooth inward curve down its
+  // right side; and to its left, past a narrow notch, a thin curved lock rising almost as high and hooking towards it.
+  {
+    const chain = (pts) => {
+      let t = 1e3;
+      for (let i = 0; i < pts.length - 1; i++) t = smin(t, roundCone(p, pts[i].slice(0, 3), pts[i + 1].slice(0, 3), pts[i][3], pts[i + 1][3]), 0.02);
+      return t;
+    };
+    const flame = smin(
+      smin(
+        ellipsoid(p, [0.045, 0.825, -0.01], [0.11, 0.085, 0.07]), // the wide teardrop body
+        chain([[0.03, 0.87, -0.01, 0.06], [0.0, 0.945, -0.018, 0.032], [-0.022, 1.0, -0.025, 0.004]]), // the tip, leaning left
+        0.04,
+      ),
+      chain([[0.17, 0.775, -0.01, 0.022], [0.11, 0.81, -0.01, 0.04]]), // long base on the right: the right side curves in
+      0.04,
+    );
+    // The lock: a rounded lobe left of the flame (past a notch), up to about the flame's middle, leaning left.
+    const lock = chain([[-0.045, 0.8, 0.025, 0.044], [-0.068, 0.865, 0.018, 0.036], [-0.074, 0.905, 0.012, 0.027]]);
+    d.tuft = Math.min(flame, lock);
+  }
+
 
   // --- mouth: one Pikachu mouth. Its top edge IS the "w" (two little scallops meeting in a point in the middle),
   // the rest hangs below, round at the bottom, with the tongue resting inside. ---
@@ -289,7 +312,7 @@ export function sdf(p) {
   let s = d.head;
   s = smin(s, d.tuft, 0.035);
   s = smin(s, d.ear, 0.02);
-  s = Math.min(s, d.earFold);
+  s = smin(s, d.earFold, 0.005);
   s = smin(s, d.earFuzz, 0.004);
   s = Math.min(s, d.xeye);
   s = Math.min(s, d.xcross);

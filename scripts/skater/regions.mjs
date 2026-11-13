@@ -133,11 +133,10 @@ export function colorAt(p, n) {
     case 'tuft': return TAN;
     case 'ear': {
       // Darker orange all over, with a darker crease line curving round inside the hollow.
-      const h = partAt(p).d.earHollow;
-      if (n[2] > -0.2 && Math.abs(h + 0.002) < 0.0025) return EAR_LINE;
       return EAR;
     }
     case 'earFuzz': return WHITE;
+    case 'earFold': return EAR_LINE;
     case 'head': {
       // The dark outline all the way round each eye (where the socket meets the eye).
       if (z > 0.05) {
