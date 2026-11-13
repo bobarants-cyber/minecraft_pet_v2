@@ -2,9 +2,9 @@
 // Colours from the original drawing: tan-orange fur on top of the head, ears, hands and around his sleepy eye; white
 // face; one white eye stitched with a black X, one half-closed purple eye; pink tongue; white shirt with a grey tear;
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
-import { partAt, XEYE, SLEEPY, BOOT, ARMS, NOSE as NOSE_AT } from './model.mjs';
+import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, NOSE as NOSE_AT } from './model.mjs';
 
-export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.49, 0], arm_L: [-0.11, 0.49, 0], leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0] };
+export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.49, 0], arm_L: [-0.11, 0.49, 0], leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
 
 const GROUP = {
   head: 'head', lip: 'head', ear: 'head', earFold: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
@@ -30,7 +30,7 @@ export function weightsAt(p) {
     if (v < best) { best = v; name = k; }
   }
   const g = GROUP[name] ?? 'body';
-  const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0 };
+  const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0, fingers_R: 0, fingers_L: 0 };
   const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';
   if (name === 'shirt' || name === 'tie') {
     const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
@@ -43,6 +43,16 @@ export function weightsAt(p) {
     const a = Math.min(1, Math.max(0.8, 0.8 + (along + 0.01) / 0.03 * 0.2));
     w[armKey] = a;
     w.body = 1 - a;
+  } else if (name === 'hand') {
+    // The fingers (past the knuckles) follow the finger bone, blending over the knuckles; the palm and thumb stay.
+    const F = FINGERS[p[0] > 0 ? 1 : 0];
+    const r = [p[0] - F.H[0], p[1] - F.H[1], p[2] - F.H[2]];
+    const along = r[0] * F.hu[0] + r[1] * F.hu[1] + r[2] * F.hu[2];
+    const side = r[0] * F.axis[0] + r[1] * F.axis[1] + r[2] * F.axis[2];
+    const f = along > 0.004 ? Math.min(1, Math.max(0, (Math.hypot(along, side * 0.7) - 0.036) / 0.022)) : 0;
+    const fk = p[0] > 0 ? 'fingers_R' : 'fingers_L';
+    w[fk] = f;
+    w[armKey] = 1 - f;
   } else if (g === 'arm') w[armKey] = 1;
   else if (g === 'leg') w[p[0] > 0 ? 'leg_R' : 'leg_L'] = 1;
   else w[g] = 1;

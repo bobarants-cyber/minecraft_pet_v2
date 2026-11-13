@@ -98,7 +98,7 @@ for (let i = 0; i < n; i++) { const c = colorAt(v(i), [N[3 * i], N[3 * i + 1], N
 
 // One skinned mesh with a small skeleton: body → head, arms, legs. Each vertex follows its nearest bones and blends
 // smoothly across the joints, so moving a limb bends the surface instead of opening a seam.
-const BONES = ['body', 'head', 'arm_R', 'arm_L', 'leg_R', 'leg_L', 'hem'];
+const BONES = ['body', 'head', 'arm_R', 'arm_L', 'leg_R', 'leg_L', 'hem', 'fingers_R', 'fingers_L'];
 const J = new Uint16Array(n * 4);
 const W = new Float32Array(n * 4);
 for (let i = 0; i < n; i++) {
@@ -120,8 +120,11 @@ const bones = {};
 bones.body = doc.createNode('body');
 root.addChild(bones.body);
 for (const name of BONES.slice(1)) {
-  bones[name] = doc.createNode(name).setTranslation(PIVOTS[name]);
-  bones.body.addChild(bones[name]);
+  // Finger bones hang off their arm (so they follow it); everything else hangs off the body.
+  const parent = name.startsWith('fingers') ? 'arm' + name.slice(7) : 'body';
+  const pp = parent === 'body' ? [0, 0, 0] : PIVOTS[parent];
+  bones[name] = doc.createNode(name).setTranslation(PIVOTS[name].map((v, k) => v - pp[k]));
+  bones[parent].addChild(bones[name]);
 }
 const ibm = new Float32Array(16 * BONES.length);
 BONES.forEach((name, b) => {

@@ -67,6 +67,11 @@ export const ARMS = [
 ];
 /** Each boot (mirrored per side): its centre and how far the toe turns out. */
 export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
+/** The knuckle line of each hand (for the finger bones): a point on it, and the axis the fingers bend around. */
+export const FINGERS = ARMS.map((A) => {
+  const H = add(A.W, scale(A.hu, 0.042));
+  return { K: add(H, scale(A.hu, 0.036)), H, axis: norm(cross(A.n, A.hu)), hu: A.hu, n: A.n };
+});
 export const HEAD = { c: [0, 0.668, 0], r: [0.258, 0.178, 0.214] };
 export const JOWL = { c: [0, 0.608, 0.015], r: [0.246, 0.108, 0.19] };
 /** Where the head's front surface is, for laying the face on it. */
@@ -233,7 +238,7 @@ function parts(p) {
         const b = [0.036 * Math.cos(ang), 0.04 * Math.sin(ang), 0.002];
         const dir = [Math.cos(ang), Math.sin(ang), 0];
         const mid = [b[0] + dir[0] * l * 0.55, b[1] + dir[1] * l * 0.55, 0.008];
-        const c = 0.75; // curl
+        const c = 0.4; // sculpted half-curled; the finger bones open or curl them from here
         const tip = [mid[0] + dir[0] * l * 0.5 * Math.cos(c), mid[1] + dir[1] * l * 0.5 * Math.cos(c), mid[2] + l * 0.5 * Math.sin(c)];
         h = smin(h, smin(roundCone(q, b, mid, 0.016, 0.0145), roundCone(q, mid, tip, 0.0145, 0.0125), 0.006), 0.011);
       }

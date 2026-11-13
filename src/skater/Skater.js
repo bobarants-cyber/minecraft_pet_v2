@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import skaterGlb from '../../assets/models/skater.glb?inline';
+import { FINGERS } from '../../scripts/skater/model.mjs';
 import { HOVER, buildSculptRig } from '../bbokari/BbokariRig.js';
 import { Bbokari } from '../bbokari/Bbokari.js';
 
@@ -170,7 +171,16 @@ export class Skater extends Bbokari {
     this.pushPhase = 0;
     this.hemA = 0;
     this.hemV = 0;
-    this.parts.ready.then(() => this.root.traverse((o) => { if (o.isBone && o.name === 'hem') this.hem = o; }));
+    this.fingers = [];
+    this.handOpen = [0, 0];
+    this.handSeed = [Math.random() * 10, Math.random() * 10];
+    this.parts.ready.then(() => this.root.traverse((o) => {
+      if (!o.isBone) return;
+      if (o.name === 'hem') this.hem = o;
+      // fingers_R is on his +x side (FINGERS[1]), fingers_L on −x (FINGERS[0]).
+      if (o.name === 'fingers_R') this.fingers[0] = { bone: o, axis: new THREE.Vector3(...FINGERS[1].axis), raise: 'R' };
+      if (o.name === 'fingers_L') this.fingers[1] = { bone: o, axis: new THREE.Vector3(...FINGERS[0].axis), raise: 'L' };
+    }));
   }
 
   /** The typing scene's glasses need bead eyes; his eyes are sculpted, so he skips them. */
@@ -237,6 +247,22 @@ export class Skater extends Bbokari {
     this.wheelSpin += ((this.speed ?? 0) * dt) / BOARD.wheelR;
     for (const w of b.userData.wheels) w.rotation.z = -this.wheelSpin;
 
+    // Hands: they open wide for big moves (waving, ta-da, dancing, cheering, riding for balance), and otherwise rest
+    // gently curled, each one flexing a little on its own now and then so they never look frozen or identical.
+    if (p) {
+      this.fingers.forEach((f, i) => {
+        if (!f) return;
+        const raise = p[`armRaise${f.raise}`] ?? 0;
+        const sd = this.handSeed[i];
+        const fidget = 0.18 * Math.sin(this.time * 0.7 + sd) + 0.12 * Math.sin(this.time * 1.9 + sd * 2.3);
+        const target = clamp(raise / 1.3, 0, 1) * 1.1 + r * 0.5 > 0.05
+          ? -Math.min(0.75, clamp(raise / 1.3, 0, 1) * 0.8 + r * 0.35)
+          : 0.32 + fidget; // relaxed: curled a little more than the sculpt, drifting
+        this.handOpen[i] += (target - this.handOpen[i]) * (1 - Math.exp(-10 * dt));
+        // Negative opens (fingers straighten out), positive curls them towards the palm.
+        f.bone.quaternion.setFromAxisAngle(f.axis, -this.handOpen[i]);
+      });
+    }
     // The shirt moves like cloth: its lower half swings behind his movement on a spring, bounces a little, and lifts
     // and flares out when he raises his arms.
     if (this.hem && p) {
