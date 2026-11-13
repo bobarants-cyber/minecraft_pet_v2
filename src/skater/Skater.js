@@ -148,7 +148,7 @@ function gripTexture() {
 }
 
 /**
- * The skater: a tan-and-white critter with an X-stitched eye and a sleepy purple one, a white shirt and big black
+ * Gliddy (EVAN's official character, always on his skateboard): a tan-and-white critter with an X-stitched eye and a sleepy purple one, a white shirt and big black
  * shoes, sculpted from the Meshy screenshots (see scripts/skater). His cape became a skateboard: it's strapped to his
  * back while he stands, and when he goes somewhere he hops on and rides it, facing you, wheels spinning.
  */

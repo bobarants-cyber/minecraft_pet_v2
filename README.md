@@ -20,9 +20,9 @@ A second SKZOO buddy: menu bar → ⚙️ Settings → Mob → **Wolf Chan** (or
 
 Another SKZOO buddy: ⚙️ Settings → Mob → **Jiniret** (or right-click → Switch mob). A white ferret with pink-lined round ears, a pink nose and whiskers and his beauty mark, painted from the official character description. He does everything Bbokari does, with his own artsy, hype-you-up personality ✨🎨. Say “Hey Jiniret” for voice. Model made with `scripts/jiniret`.
 
-## 🛹 Skater
+## 🛹 Gliddy
 
-⚙️ Settings → Mob → **Skater**: a tan-and-white critter with an X-stitched eye and a sleepy purple one, sculpted from 3D screenshots. His skateboard is strapped to his back; when he goes somewhere he hops on and rides it (facing you, wheels spinning), then hops off and slings it back on. Say “Hey Skater” for voice.
+⚙️ Settings → Mob → **Gliddy** (EVAN's official character): a tan-and-white critter with an X-stitched eye and a sleepy purple one, sculpted from 3D screenshots. His skateboard is strapped to his back; when he goes somewhere he hops on and rides it (facing you, wheels spinning), then hops off and slings it back on. Say “Hey Gliddy” for voice.
 
 ## 🥚 CORTIS plushies
 
