@@ -270,13 +270,14 @@ function phoneMenu() {
 // the real arrow (the arrow stays inside his body, so clicking works exactly as normal). He keeps working.
 let cursorWin = null;
 let cursorTimer = null;
-const cursorLook = { typing: false, notes: false, shape: 'arrow' };
+const cursorLook = { typing: false, notes: false, shape: 'arrow', mob: null }; // mob: which mob's pointer to draw
 function cursorState(patch) {
   Object.assign(cursorLook, patch);
   if (cursorWin && !cursorWin.isDestroyed()) cursorWin.webContents.send('cursorState', cursorLook);
 }
 function startCursor() {
   if (cursorWin && !cursorWin.isDestroyed()) return;
+  cursorLook.mob = settings.mob;
   // One see-through, click-through layer over the whole screen the mouse is on (menu bar and Dock included);
   // Bbokari's pointer moves inside it. (A small window that follows the mouse gets stuck near the Dock, because
   // macOS won't let a window hang off the bottom of the screen.)
@@ -394,6 +395,7 @@ function applySettings(patch) {
   if ('openAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
   if ('reactToActivity' in patch) syncActivity();
   if ('cursorMode' in patch) (settings.cursorMode ? startCursor() : stopCursor());
+  if ('mob' in patch) cursorState({ mob: settings.mob }); // the pointer turns into the new mob
   if ('phoneLink' in patch) syncPhoneLink();
   send('settings', settings);
   buildTray();

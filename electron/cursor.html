@@ -2,7 +2,8 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Bbokari cursor</title>
+<title>Pet cursor</title>
+<script src="cursorThemes.js"></script>
 <style>
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
   /* This page covers the whole screen; #ptr moves to the mouse. Inside it, the hot spot (where clicks land) is at (40, 40). */
@@ -38,106 +39,71 @@
 </head>
 <body data-shape="arrow">
 <div id="ptr">
-<svg viewBox="0 0 112 112" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <!-- Bbokari's little face, centred on (0, 0), for a head about 22 px wide -->
-    <g id="face">
-      <g class="eyes">
-        <ellipse cx="-4.2" cy="-1" rx="2.2" ry="2.6" fill="#1d1408"/>
-        <ellipse cx="4.2" cy="-1" rx="2.2" ry="2.6" fill="#1d1408"/>
-        <circle cx="-3.5" cy="-2" r=".75" fill="#fff"/>
-        <circle cx="4.9" cy="-2" r=".75" fill="#fff"/>
-      </g>
-      <ellipse cx="-7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".85"/>
-      <ellipse cx="7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".85"/>
-      <path d="M-2.2 2.2 Q0 0.7 2.2 2.2 Q0 5.2 -2.2 2.2 Z" fill="#FF8A1F" stroke="#C25E00" stroke-width=".5"/>
-    </g>
-    <!-- Happy squished eyes (while grabbing) -->
-    <g id="happyface">
-      <path d="M-6.4 -0.5 Q-4.2 -3.6 -2 -0.5 M2 -0.5 Q4.2 -3.6 6.4 -0.5" fill="none" stroke="#1d1408" stroke-width="1.6" stroke-linecap="round"/>
-      <ellipse cx="-7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".9"/>
-      <ellipse cx="7.2" cy="3" rx="2" ry="1.2" fill="#FF9AA8" opacity=".9"/>
-      <path d="M-2.2 2.2 Q0 0.7 2.2 2.2 Q0 5.2 -2.2 2.2 Z" fill="#FF8A1F" stroke="#C25E00" stroke-width=".5"/>
-    </g>
-    <!-- His wavy hair curl, for the top of a head at (0, 0) -->
-    <path id="curl" d="M0 0 C 0 -9, 12 -10, 11 -3 C 10 1, 4 1, 5 -3" fill="none" stroke="#E8A800" stroke-width="3" stroke-linecap="round"/>
-  </defs>
-
-  <!-- Arrow (normal): tip at (40, 40) -->
-  <g class="shape s-arrow"><g class="bob">
-    <use class="hair" href="#curl" x="33" y="42"/>
-    <path d="M38 38 L38 86 L50 75.5 L58 94 L67 90 L59 72.5 L75 72.5 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M41 44 L41 78" stroke="#FFF2B0" stroke-width="2" stroke-linecap="round" opacity=".7"/>
-    <use href="#face" x="50.3" y="64"/>
-  </g></g>
-
-  <!-- Text I-beam: middle at (40, 40), with a little Bbokari head on top -->
-  <g class="shape s-ibeam">
-    <path d="M33 23 Q40 26 47 23 M33 57 Q40 54 47 57" fill="none" stroke="#3b2f14" stroke-width="5" stroke-linecap="round"/>
-    <path d="M33 23 Q40 26 47 23 M33 57 Q40 54 47 57" fill="none" stroke="#FFD84D" stroke-width="2.4" stroke-linecap="round"/>
-    <rect x="37.6" y="24.5" width="4.8" height="31" rx="2.2" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
-    <g class="bob">
-      <use class="hair" href="#curl" x="53" y="8"/>
-      <circle cx="56" cy="17" r="10" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
-      <use href="#face" x="56" y="18" transform="translate(56 18) scale(.8) translate(-56 -18)"/>
-    </g>
-  </g>
-
-  <!-- Pointing hand (links, buttons): Bbokari points his wing; the wing tip is at (40, 40) -->
-  <g class="shape s-hand"><g class="bob">
-    <path d="M40.5 41 L52 56" stroke="#3b2f14" stroke-width="9" stroke-linecap="round"/>
-    <path d="M40.5 41 L52 56" stroke="#FFD84D" stroke-width="5.6" stroke-linecap="round"/>
-    <use class="hair" href="#curl" x="55" y="50"/>
-    <circle cx="58" cy="64" r="13" fill="#FFD84D" stroke="#3b2f14" stroke-width="2"/>
-    <use href="#face" x="59" y="65"/>
-    <path d="M70 66 Q76 63 75 70" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/>
-  </g></g>
-
-  <!-- Open hand (can grab / drag): wings up and open; the middle is at (40, 40) -->
-  <g class="shape s-open"><g class="bob">
-    <ellipse cx="25" cy="34" rx="5" ry="9" transform="rotate(-30 25 34)" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
-    <ellipse cx="55" cy="34" rx="5" ry="9" transform="rotate(30 55 34)" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8"/>
-    <use class="hair" href="#curl" x="37" y="31"/>
-    <circle cx="40" cy="44" r="13" fill="#FFD84D" stroke="#3b2f14" stroke-width="2"/>
-    <use href="#face" x="40" y="45"/>
-  </g></g>
-
-  <!-- Closed hand (dragging): wings hugging, happy squished eyes -->
-  <g class="shape s-grab"><g class="grabbing">
-    <use href="#curl" x="37" y="29"/>
-    <circle cx="40" cy="42" r="13" fill="#FFD84D" stroke="#3b2f14" stroke-width="2"/>
-    <use href="#happyface" x="40" y="42"/>
-    <ellipse cx="30" cy="51" rx="6" ry="4" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/>
-    <ellipse cx="50" cy="51" rx="6" ry="4" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/>
-  </g></g>
-
-  <!-- Crosshair -->
-  <g class="shape s-cross">
-    <path d="M40 26 V54 M26 40 H54" stroke="#3b2f14" stroke-width="5" stroke-linecap="round"/>
-    <path d="M40 26 V54 M26 40 H54" stroke="#FFD84D" stroke-width="2.4" stroke-linecap="round"/>
-    <g class="bob"><circle cx="60" cy="22" r="8.5" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/><use href="#face" transform="translate(60 22.5) scale(.7)"/></g>
-  </g>
-
-  <!-- Resize left/right and up/down -->
-  <g class="shape s-resizeH">
-    <path d="M22 40 L30 32 L30 37 L50 37 L50 32 L58 40 L50 48 L50 43 L30 43 L30 48 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8" stroke-linejoin="round"/>
-    <g class="bob"><circle cx="40" cy="25" r="8.5" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/><use href="#face" transform="translate(40 25.5) scale(.7)"/></g>
-  </g>
-  <g class="shape s-resizeV">
-    <path d="M40 22 L48 30 L43 30 L43 50 L48 50 L40 58 L32 50 L37 50 L37 30 L32 30 Z" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.8" stroke-linejoin="round"/>
-    <g class="bob"><circle cx="57" cy="40" r="8.5" fill="#FFD84D" stroke="#3b2f14" stroke-width="1.6"/><use href="#face" transform="translate(57 40.5) scale(.7)"/></g>
-  </g>
-
-  <!-- Little signs added to the arrow -->
-  <g class="shape b-no"><circle cx="76" cy="88" r="8" fill="#fff" stroke="#E03131" stroke-width="2.6"/><path d="M70.5 93.5 L81.5 82.5" stroke="#E03131" stroke-width="2.6"/></g>
-  <g class="shape b-copy"><circle cx="76" cy="88" r="8" fill="#2F9E44" stroke="#fff" stroke-width="1.5"/><path d="M76 83.5 V92.5 M71.5 88 H80.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></g>
-  <g class="shape b-link"><circle cx="76" cy="88" r="8" fill="#1971C2" stroke="#fff" stroke-width="1.5"/><path d="M72 91 Q72 84 79 84 M76.5 81.5 L79.5 84 L76.5 86.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></g>
-  <g class="shape b-menu"><rect x="68" y="81" width="16" height="14" rx="3" fill="#fff" stroke="#3b2f14" stroke-width="1.5"/><path d="M71 85 H81 M71 88 H81 M71 91 H78" stroke="#3b2f14" stroke-width="1.4"/></g>
-</svg>
+<svg id="svg" viewBox="0 0 112 112" xmlns="http://www.w3.org/2000/svg"></svg>
 <div class="badge" id="notes">📝</div>
 <div class="dots" id="dots"><i></i><i></i><i></i></div>
 </div>
 <script>
+
+  // Builds every pointer shape for one mob's theme (colours + its little head; see cursorThemes.js).
+  const BADGES = `  <!-- Little signs added to the arrow -->
+  <g class="shape b-no"><circle cx="76" cy="88" r="8" fill="#fff" stroke="#E03131" stroke-width="2.6"/><path d="M70.5 93.5 L81.5 82.5" stroke="#E03131" stroke-width="2.6"/></g>
+  <g class="shape b-copy"><circle cx="76" cy="88" r="8" fill="#2F9E44" stroke="#fff" stroke-width="1.5"/><path d="M76 83.5 V92.5 M71.5 88 H80.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></g>
+  <g class="shape b-link"><circle cx="76" cy="88" r="8" fill="#1971C2" stroke="#fff" stroke-width="1.5"/><path d="M72 91 Q72 84 79 84 M76.5 81.5 L79.5 84 L76.5 86.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></g>
+  <g class="shape b-menu"><rect x="68" y="81" width="16" height="14" rx="3" fill="#fff" stroke="#3b2f14" stroke-width="1.5"/><path d="M71 85 H81 M71 88 H81 M71 91 H78" stroke="#3b2f14" stroke-width="1.4"/></g>
+`;
+  function build(key) {
+    const T = window.CURSOR_THEMES[key] ?? window.CURSOR_THEMES.bbokari;
+    const F = T.fill, L = T.line, S = T.shine;
+    const base = T.base ?? `<circle r="13" fill="${F}" stroke="${L}" stroke-width="2"/>`;
+    const head = (x, y, k = 1, happy = false) => `<g transform="translate(${x} ${y}) scale(${k})">${T.top}${base}${happy ? T.happy : T.face}</g>`;
+    const paw = (cx, cy, rx, ry, rot = 0) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${rot} ${cx} ${cy})" fill="${F}" stroke="${L}" stroke-width="1.8"/>`;
+    document.getElementById('svg').innerHTML = `
+      <defs><radialGradient id="cur-shade" cx="40%" cy="32%" r="72%"><stop offset="0" stop-color="#F8CFA2"/><stop offset="1" stop-color="#D3945C"/></radialGradient></defs>
+      <!-- Arrow (normal): tip at (40, 40) -->
+      <g class="shape s-arrow"><g class="bob">
+        <path d="M38 38 L38 86 L50 75.5 L58 94 L67 90 L59 72.5 L75 72.5 Z" fill="${F}" stroke="${L}" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M41 44 L41 78" stroke="${S}" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+        ${head(50, 65, 0.62)}
+      </g></g>
+      <!-- Text I-beam: middle at (40, 40), with the little head on top -->
+      <g class="shape s-ibeam">
+        <path d="M33 23 Q40 26 47 23 M33 57 Q40 54 47 57" fill="none" stroke="${L}" stroke-width="5" stroke-linecap="round"/>
+        <path d="M33 23 Q40 26 47 23 M33 57 Q40 54 47 57" fill="none" stroke="${F}" stroke-width="2.4" stroke-linecap="round"/>
+        <rect x="37.6" y="24.5" width="4.8" height="31" rx="2.2" fill="${F}" stroke="${L}" stroke-width="1.8"/>
+        <g class="bob">${head(57, 18, 0.8)}</g>
+      </g>
+      <!-- Pointing hand (links, buttons): it points a paw; the tip is at (40, 40) -->
+      <g class="shape s-hand"><g class="bob">
+        <path d="M40.5 41 L52 56" stroke="${L}" stroke-width="9" stroke-linecap="round"/>
+        <path d="M40.5 41 L52 56" stroke="${F}" stroke-width="5.6" stroke-linecap="round"/>
+        ${head(58, 64)}
+      </g></g>
+      <!-- Open hand (can grab / drag): paws up and open; the middle is at (40, 40) -->
+      <g class="shape s-open"><g class="bob">${paw(25, 36, 5, 9, -30)}${paw(55, 36, 5, 9, 30)}${head(40, 46)}</g></g>
+      <!-- Closed hand (dragging): paws hugging, happy squished eyes -->
+      <g class="shape s-grab"><g class="grabbing">${head(40, 42, 1, true)}${paw(30, 52, 6, 4)}${paw(50, 52, 6, 4)}</g></g>
+      <!-- Crosshair -->
+      <g class="shape s-cross">
+        <path d="M40 26 V54 M26 40 H54" stroke="${L}" stroke-width="5" stroke-linecap="round"/>
+        <path d="M40 26 V54 M26 40 H54" stroke="${F}" stroke-width="2.4" stroke-linecap="round"/>
+        <g class="bob">${head(61, 22, 0.66)}</g>
+      </g>
+      <!-- Resize left/right and up/down -->
+      <g class="shape s-resizeH">
+        <path d="M22 40 L30 32 L30 37 L50 37 L50 32 L58 40 L50 48 L50 43 L30 43 L30 48 Z" fill="${F}" stroke="${L}" stroke-width="1.8" stroke-linejoin="round"/>
+        <g class="bob">${head(40, 24, 0.62)}</g>
+      </g>
+      <g class="shape s-resizeV">
+        <path d="M40 22 L48 30 L43 30 L43 50 L48 50 L40 58 L32 50 L37 50 L37 30 L32 30 Z" fill="${F}" stroke="${L}" stroke-width="1.8" stroke-linejoin="round"/>
+        <g class="bob">${head(58, 40, 0.62)}</g>
+      </g>
+      ${BADGES}`;
+    // (the typing dots match the mob's outline colour)
+    document.querySelectorAll('.dots i').forEach((i) => (i.style.background = L));
+  }
+  let theme = null;
+  build('bbokari');
   const ptr = document.getElementById('ptr');
   window.mobHost?.onCursorPos?.(({ x, y }) => {
     ptr.style.transform = `translate(${x - 40}px, ${y - 40}px)`;
@@ -145,6 +111,7 @@
   window.mobHost?.onCursorState?.((s) => {
     if (s.bye) document.body.classList.add('bye');
     if (s.shape) document.body.dataset.shape = s.shape;
+    if (s.mob && s.mob !== theme) { theme = s.mob; build(s.mob); }
     document.getElementById('notes').classList.toggle('on', !!s.notes);
     document.getElementById('dots').classList.toggle('on', !!s.typing);
   });
