@@ -327,6 +327,7 @@ export class SkateRun {
     const kinds = ['cone', 'cone', 'bench', 'rail', 'sign', 'ramp', 'notes'];
     if (level > 0.3) kinds.push('sign', 'bench', 'combo');
     const k = pick(kinds);
+    const react = 0.55 - 0.15 * level; // seconds to see the next thing and press a key, after landing
     const at = 3.2; // spawn just past the right edge of the screen, in H from Gliddy
     const edge = (this.L.W - this.#gliddyX()) / this.L.H + 0.3;
     const x = Math.max(at, edge);
@@ -340,11 +341,27 @@ export class SkateRun {
     }
     if (k === 'notes') for (let i = 0; i < 5; i++) this.objects.push({ kind: 'note', x: x + i * 0.3, w: 0.12, h: 0.25 + (i === 2 ? 0.45 : i % 2 ? 0.3 : 0) });
     if (k === 'combo') {
+      // Jump the cone, land, then duck the sign: far enough apart for a whole jump plus time to get down.
       this.objects.push({ kind: 'cone', x, w: 0.16, h: 0.24 });
-      this.objects.push({ kind: 'sign', x: x + 1.5, w: 0.35, h0: 0.62, h: 1.2 });
+      this.objects.push({ kind: 'sign', x: x + this.#clearAfter('cone', 0.16, react), w: 0.35, h0: 0.62, h: 1.2 });
     }
-    // Room to react: more space when it's fast, a bit less as you get better.
-    this.nextSpawn = rand(1.5, 2.6) + this.speed * 0.18 - level * 0.4;
+    // The next thing comes only once every obstacle here can be cleared and he's back on the ground with time to
+    // react: a jump keeps him in the air for a fixed time, so the faster he goes, the further apart things must be.
+    // (Before, the next obstacle could arrive while he was still in the air from the last one, and a low sign can
+    // only be ducked on the ground: impossible.)
+    let need = 0;
+    for (const o of this.objects) if (o.x >= x && o.kind !== 'note') need = Math.max(need, o.x - x + this.#clearAfter(o.kind, o.w, react));
+    this.nextSpawn = Math.max(need, 1.2) + rand(0, 0.8) * this.speed * 0.25;
+  }
+
+  /** How far past the start of an obstacle the next one may start (H): his box, plus the time he's in the air
+   *  clearing it (a jump, a ramp launch, the hop off the end of a rail, or none for ducking), plus reaction time. */
+  #clearAfter(kind, w, react) {
+    const box = 0.34 + 0.1; // his width plus a little slack
+    const jump = (2 * OLLIE) / GRAVITY + 0.08; // a full ollie from the ground (from a rail it's a touch longer)
+    const air = { cone: jump, bench: jump, ramp: (2 * RAMP_POP) / GRAVITY + 0.1, rail: jump + 0.1, sign: 0.25 }[kind] ?? jump;
+    const v = this.speed + 0.3; // (it speeds up a little before he gets there)
+    return (kind === 'rail' ? w : 0) + box + v * (air + react);
   }
 
   #land(h, onRail = false) {
