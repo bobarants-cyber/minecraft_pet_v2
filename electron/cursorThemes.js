@@ -137,6 +137,26 @@
     green: { fur: '#9fd78f', bobble: '#4fb05c', mouth: '#46a656', rim: '#2f8a40', sclera: '#fbf8ef', pupil: '#2a201c', tiny: '#2a201c', hat: '#f2c94c' },
   };
 
+  // ---------- Moffy: milk-white bear, bitten ear + gold hoop, blue eye + smug green eye, heart nose, tongue out ----------
+  const moffyFace = `<ellipse cx="-4.6" cy="-1.6" rx="2.9" ry="3.3" fill="#3d8bff" stroke="#16151d" stroke-width=".7"/><circle cx="-4.4" cy="-1.2" r="1.3" fill="#0f1b3a"/><circle cx="-5.4" cy="-2.8" r=".9" fill="#fff"/>
+    <path d="M2 -1.4 Q4.8 -3.6 7.6 -1.4 Q4.8 0.4 2 -1.4 Z" fill="#33c46a" stroke="#16151d" stroke-width=".7"/><path d="M1.8 -2 Q4.8 -3.4 7.8 -2" fill="none" stroke="#16151d" stroke-width=".9"/>
+    <path d="M2.4 -5.4 Q5 -7 7.8 -5.6" fill="none" stroke="#16151d" stroke-width=".9" stroke-linecap="round"/>
+    <ellipse cy="3.6" rx="4.6" ry="3.4" fill="#ffe2cf"/>
+    <path d="M0 2.4 C -0.8 1.4, -2.2 1.8, -1.8 2.8 C -1.4 3.4, -0.4 3.8, 0 4.4 C 0.4 3.8, 1.4 3.4, 1.8 2.8 C 2.2 1.8, 0.8 1.4, 0 2.4 Z" fill="#ff5c8a"/>
+    <path d="M-2 5.4 Q0 6.4 2.4 5" fill="none" stroke="#16151d" stroke-width=".8" stroke-linecap="round"/><ellipse cx="1.4" cy="6.3" rx=".9" ry="1.1" fill="#ff5c8a"/>
+    <circle cx="-8" cy="3" r="1.6" fill="#ff9cbc"/>`;
+  const moffy = {
+    fill: '#fff7ef', line: '#8a6a74', shine: '#ffffff',
+    base: `<path d="M9 9 C 14 6, 20 9, 18 14 C 17 17, 12 18, 9 21 C 6 18, 2 16, 2 13 C 2 9, 7 7, 9 9 Z" fill="#ff7aa8" stroke="#8a6a74" stroke-width=".8"/>
+      <circle r="13" fill="#fff7ef" stroke="#8a6a74" stroke-width="1.6"/><path d="M2 -12.6 L7.4 -11 L6.6 -8 L1.6 -9.4 Z" fill="#7ad6ff"/>`,
+    top: `<circle cx="-9.6" cy="-9.6" r="4.6" fill="#fff7ef" stroke="#8a6a74" stroke-width="1.4"/><circle cx="-9.6" cy="-9.6" r="2.4" fill="#ffc2d4"/>
+      <circle cx="-13" cy="-6.6" r="1.4" fill="none" stroke="#ffc83d" stroke-width=".9"/>
+      <path d="M6 -13.4 A 4.6 4.6 0 1 1 13.8 -6.4 Q 12 -7.2 12.2 -9 Q 10.4 -9.2 10 -11 Q 8 -11 6 -13.4 Z" fill="#fff7ef" stroke="#8a6a74" stroke-width="1.4"/><circle cx="9.8" cy="-9.4" r="2" fill="#ffc2d4"/>`,
+    face: `<g class="eyes">${moffyFace}</g>`,
+    happy: `<path d="M-7.4 -1 Q-4.6 -4.4 -1.8 -1 M2 -1 Q4.8 -4.4 7.6 -1" fill="none" stroke="#16151d" stroke-width="1.4" stroke-linecap="round"/>
+      <ellipse cy="3.6" rx="4.6" ry="3.4" fill="#ffe2cf"/><path d="M0 2.4 C -0.8 1.4, -2.2 1.8, -1.8 2.8 C -1.4 3.4, -0.4 3.8, 0 4.4 C 0.4 3.8, 1.4 3.4, 1.8 2.8 C 2.2 1.8, 0.8 1.4, 0 2.4 Z" fill="#ff5c8a"/>`,
+  };
+
   const plush = (fur, ear, lid, nose, line) => gliddy({ fur, ear, lid, nose, line, shine: '#ffffff', plush: true });
   window.CURSOR_THEMES = {
     bbokari, bee, axolotl, wolfchan, jiniret,
@@ -148,6 +168,7 @@
     gliddyPlushMidnight: plush('#9a90c2', '#8579b4', '#7a6eb0', '#6a5f9c', '#3a335c'),
     gliddyPlushChoco: plush('#a8754e', '#956541', '#8a5a38', '#7a4c2e', '#3e2414'),
     gliddyPlushMini: { ...gliddy({ plush: true, mini: true, shine: '#ffffff' }) },
+    moffy,
     cortisYellow: cortis(CORTIS.yellow), cortisWhite: cortis(CORTIS.white), cortisBlue: cortis(CORTIS.blue),
     cortisPink: cortis(CORTIS.pink), cortisGreen: cortis(CORTIS.green),
   };
