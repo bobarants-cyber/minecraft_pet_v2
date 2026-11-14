@@ -163,21 +163,29 @@ function plushSleeves(p) {
   }
   return s;
 }
-/** Classic/realistic shirt body: a rounded belly under a narrower chest, shoulders, a rolled hem on the boots. */
-export const CLEAN_SHIRT = { bottom: 0.246, hemY: 0.258 };
+/**
+ * Classic/realistic shirt, worn untucked: a narrower chest with rounded shoulders, then the cloth falls straight
+ * down (barely widening, so its corners never reach out towards his hands) to a loose open hem above his legs.
+ */
+const hemAt = (x) => 0.29 + 0.01 * (x / 0.16) ** 2; // the hem curves up a touch at the sides
 function cleanShirt(p) {
   const [x, y, z] = p;
-  const belly = ellipsoid(p, [0, 0.36, 0.004], [0.152, 0.165, 0.12]);
   const chest = ellipsoid(p, [0, 0.455, 0], [0.135, 0.07, 0.104]);
-  let s = smin(belly, chest, 0.035);
-  for (const sg of [-1, 1]) s = smin(s, ellipsoid(p, [sg * 0.118, 0.47, 0], [0.048, 0.044, 0.05]), 0.025);
+  // The hanging part: an oval tube that widens only slightly towards the hem.
+  const t = clamp((0.42 - y) / 0.13, 0, 1);
+  const rx = 0.145 + 0.012 * t, rz = 0.112 + 0.008 * t;
+  let outer = (Math.hypot(x / rx, (z - 0.004) / rz) - 1) * Math.min(rx, rz);
   // Realistic: soft creases pressed into the cloth (drape folds low down, pulls from the armpits).
-  if (REAL) s += 0.55 * shirtCreases(x, y, z, clamp((y - 0.25) / 0.26, 0, 1));
-  s = smax(s, CLEAN_SHIRT.bottom - y, 0.02);
-  const k = Math.sqrt(Math.max(0, 1 - ((CLEAN_SHIRT.hemY - 0.36) / 0.165) ** 2));
-  const rxh = 0.152 * k - 0.003, rzh = 0.12 * k - 0.003;
-  const radial = (Math.hypot(x / rxh, (z - 0.004) / rzh) - 1) * 0.12;
-  return smin(s, Math.hypot(radial, y - CLEAN_SHIRT.hemY) - 0.007, 0.004);
+  if (REAL) outer += 0.55 * shirtCreases(x, y, z, clamp((y - 0.29) / 0.22, 0, 1));
+  const hem = hemAt(x);
+  const body = Math.max(outer, hem - y, y - 0.47);
+  let s = smin(body, chest, 0.03);
+  for (const sg of [-1, 1]) s = smin(s, ellipsoid(p, [sg * 0.118, 0.47, 0], [0.048, 0.044, 0.05]), 0.025);
+  // Open at the bottom: hollow up inside the hem, so it's loose cloth, not a solid block.
+  s = Math.max(s, -Math.max(outer + 0.007, y - hem - 0.05));
+  // A neat folded hem round the bottom edge.
+  const radial = (Math.hypot(x / (rx - 0.0035), (z - 0.004) / (rz - 0.0035)) - 1) * Math.min(rx, rz);
+  return smin(s, Math.max(Math.hypot(radial, y - hem - 0.004) - 0.006, 0), 0.003);
 }
 /** Classic/realistic sleeves: roomy tubes about half way down the upper arm, with a rolled cuff. */
 function cleanSleeves(p) {
@@ -441,7 +449,7 @@ function partsAt(p) {
         continue;
       }
       let h = ellipsoid(q, [0, 0, 0], [0.056, 0.054, 0.024]);
-      for (const [ang, l] of [[-0.55, 0.05], [-0.18, 0.06], [0.18, 0.06], [0.55, 0.05]]) {
+      for (const [ang, l] of [[-0.55, 0.068], [-0.18, 0.082], [0.18, 0.08], [0.55, 0.066]]) { // (longer fingers)
         const b = [0.036 * Math.cos(ang), 0.04 * Math.sin(ang), 0.002];
         const dir = [Math.cos(ang), Math.sin(ang), 0];
         const mid = [b[0] + dir[0] * l * 0.55, b[1] + dir[1] * l * 0.55, 0.008];
@@ -450,7 +458,7 @@ function partsAt(p) {
         h = smin(h, smin(roundCone(q, b, mid, 0.016, 0.0145), roundCone(q, mid, tip, 0.0145, 0.0125), 0.006), 0.011);
       }
       const ta = A.thumb;
-      h = smin(h, roundCone(q, [-0.008, 0.042 * Math.sign(ta), 0.004], [0.024, 0.086 * Math.sign(ta), 0.012], 0.016, 0.013), 0.01);
+      h = smin(h, roundCone(q, [-0.008, 0.042 * Math.sign(ta), 0.004], [0.032, 0.1 * Math.sign(ta), 0.014], 0.016, 0.013), 0.01);
       hand = Math.min(hand, h);
     }
     d.arm = arm;
