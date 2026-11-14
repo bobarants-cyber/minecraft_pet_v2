@@ -83,7 +83,19 @@ const CORTIS = {
 };
 for (const c of ['Yellow', 'White', 'Blue', 'Pink', 'Green']) PERSONAS[`cortis${c}`] = CORTIS;
 
+let CUSTOM = [];
+/** Custom mobs (from the customizer) keep their base pet's personality, under the name you gave them. */
+export function setCustomMobs(list) {
+  CUSTOM = list ?? [];
+}
 export function personaFor(mob) {
+  const m = String(mob ?? '');
+  if (m.startsWith('custom:')) {
+    const c = CUSTOM.find((x) => `custom:${x.id}` === m);
+    const base = PERSONAS[c?.base] ?? PERSONAS.bee;
+    if (!c) return base;
+    return { name: c.name || base.name, style: `Your name is ${c.name || base.name}: you are a custom-made version of ${base.name} that your human designed themselves (your own colours and look). ${base.style}` };
+  }
   return PERSONAS[mob] ?? PERSONAS.bee;
 }
 

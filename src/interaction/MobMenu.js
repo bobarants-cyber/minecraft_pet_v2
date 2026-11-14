@@ -1,4 +1,5 @@
 import { MOBS, nextMob } from '../mobs/index.js';
+import { petName } from '../mobs/names.js';
 import { GAME_LIST } from '../games/Games.js';
 import { OUTFITS } from '../character/Outfits.js';
 import { DESIGNS, COLORS, FINISHES, catalogSize, randomItem, parseItem } from '../character/KpopCloset.js';
@@ -8,7 +9,7 @@ const OFFSET_PX = 14;
 
 /** Right-click popup next to the pet: "Chat" opens the speech bubble; "Switch mob" shows the mob you'd switch to. */
 export class MobMenu {
-  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, onHide = null, onCursor = null, onCheck = null, onQuit = null, parent = document.body }) {
+  constructor({ settings, save, onChat = null, onGame = null, onStopGame = null, onRewrite = null, onCaptions = null, onOpen = null, onClasses = null, onNotes = null, onVoice = null, onFeed = null, onBall = null, onOutfit = null, onCustomize = null, onHide = null, onCursor = null, onCheck = null, onQuit = null, parent = document.body }) {
     this.settings = settings;
     this.save = save;
     this.isOpen = false;
@@ -90,6 +91,10 @@ export class MobMenu {
       <button type="button" class="mob-menu__row mob-menu__switch">
         <span>Switch mob</span>
         <span class="mob-menu__value"></span>
+      </button>
+      <button type="button" class="mob-menu__row mob-menu__customize">
+        <span>🎨 Make your own mob</span>
+        <span class="mob-menu__value">colours, size, extras</span>
       </button>
       <div class="mob-menu__text mob-menu__write">
         <div class="mob-menu__text-label">✏️ Highlight text in any app, then:</div>
@@ -173,6 +178,10 @@ export class MobMenu {
       this.close();
       onChat?.();
     });
+    this.el.querySelector('.mob-menu__customize').addEventListener('click', () => {
+      this.close();
+      onCustomize?.();
+    });
     this.el.querySelector('.mob-menu__switch').addEventListener('click', () => {
       this.save({ mob: nextMob(this.settings.mob) });
       this.close();
@@ -199,13 +208,13 @@ export class MobMenu {
 
   open(px, py) {
     this.captionsRow.querySelector('.mob-menu__value').textContent = this.captionsOn?.() ? 'On' : 'Off';
-    this.voiceRow.querySelector('span').textContent = `🗣 Hey ${MOBS[this.settings.mob]?.label ?? 'Bbokari'}`;
+    this.voiceRow.querySelector('span').textContent = `🗣 Hey ${petName(this.settings.mob, 'Bbokari')}`;
     this.voiceRow.querySelector('.mob-menu__value').textContent = this.voiceOn?.() ? 'Listening' : 'Off';
     const noting = this.notesOn?.();
     this.notesRow.querySelector('span').textContent = noting ? '⏹ Stop notes' : '📝 Take notes';
     this.notesRow.querySelector('.mob-menu__value').textContent = noting ? 'Write them up' : 'Listen & write';
     for (const o of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) o.classList.toggle('is-on', o.dataset.outfit === (this.settings.outfit ?? 'none'));
-    this.el.querySelector('.mob-menu__outfits').style.display = this.el.querySelector('.mob-menu__outfit-label').style.display = (['bbokari', 'wolfchan', 'jiniret', 'gliddy', 'gliddyReal'].includes(this.settings.mob) || this.settings.mob?.startsWith('gliddy') || this.settings.mob?.startsWith('cortis')) ? '' : 'none';
+    this.el.querySelector('.mob-menu__outfits').style.display = this.el.querySelector('.mob-menu__outfit-label').style.display = !['bee', 'axolotl'].includes(this.settings.mob) ? '' : 'none'; // (every sculpted pet can dress up)
     const playing = this.playing?.();
     this.stopRow.style.display = playing ? '' : 'none';
     for (const chip of this.el.querySelectorAll('.mob-menu__game')) chip.classList.toggle('is-on', chip.dataset.game === playing);

@@ -15,6 +15,8 @@ import { NotesBadge } from './interaction/NotesBadge.js';
 import { Voice } from './interaction/Voice.js';
 import { FocusBadge } from './interaction/FocusBadge.js';
 import { Wardrobe } from './character/Outfits.js';
+import { CustomizerPanel, applyCustom } from './character/Customizer.js';
+import { setCustomNames } from './mobs/names.js';
 import { KpopCloset, buildItem, catalogSize, DESIGNS, COLORS, FINISHES } from './character/KpopCloset.js';
 import { Toys } from './character/Toys.js';
 import { PanelStack } from './interaction/PanelStack.js';
@@ -26,13 +28,29 @@ const { settings, save } = await connectSettings();
 const stage = new Stage(document.getElementById('app'));
 const screen = new ScreenSpace(stage);
 
-let mobName = MOBS[settings.mob] ? settings.mob : 'bee';
+/** Which pet body to show, and the custom look on it: a saved custom mob ("custom:<id>"), or the customizer's live
+ *  preview while you edit. */
+function resolveMob() {
+  const preview = settings.customPreview;
+  if (preview && MOBS[preview.base]) return { base: preview.base, preset: preview };
+  const m = String(settings.mob ?? '');
+  if (m.startsWith('custom:')) {
+    const preset = (settings.customMobs ?? []).find((c) => `custom:${c.id}` === m);
+    if (preset && MOBS[preset.base]) return { base: preset.base, preset };
+    return { base: 'bee', preset: null };
+  }
+  return { base: MOBS[m] ? m : 'bee', preset: null };
+}
+let mobName = resolveMob().base;
+let presetKey = '';
+setCustomNames(settings.customMobs);
 const character = new Character({ mob: createMob(mobName), scene: stage.scene, settings });
 stage.scene.add(character.mob.root);
 const chat = new Chat({ character, stage, settings, host });
 const game = new Games({ character, stage, settings, host });
 const captions = new Captions({ character, settings, save, host });
 const classes = new Classes({ character, host, onOpen: () => chat.close() });
+const customizer = new CustomizerPanel({ character, settings, save: (p) => save(p), getMob: () => character.mob, onOpen: () => chat.close() });
 const notesBadge = new NotesBadge({ character, host });
 const voice = new Voice({ character, chat, captions, settings, host });
 const focusBadge = new FocusBadge({ character, host });
@@ -87,6 +105,7 @@ const menu = new MobMenu({
   onFeed: () => toys.feed(),
   onBall: () => toys.playBall(),
   onOutfit: (name) => save({ outfit: name }),
+  onCustomize: () => customizer.open(),
   onKpop: (patch) => save(patch),
   onCheck: () => host?.checkWriting?.(),
   onQuit: () => host?.quit?.(),
@@ -100,11 +119,12 @@ menu.captionsOn = () => settings.captionsOn;
 menu.notesOn = () => notesBadge.state.active;
 menu.voiceOn = () => settings.voiceOn;
 menu.playing = () => game.currentId;
-const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes, notesBadge, focusBadge] });
+const director = new PointerDirector({ character, screen, host, canvas: stage.renderer.domElement, menu, chat, game, panels: [captions, classes, notesBadge, focusBadge, customizer] });
 
 /** Swap the pet's body in place; the character keeps its position, mood and state. */
 function applyMob(name) {
   if (!MOBS[name] || name === mobName) return;
+  presetKey = ''; // re-apply the custom look on the new body
   const previous = character.mob;
   const next = createMob(name);
   stage.scene.remove(previous.root);
@@ -203,10 +223,18 @@ function applyHidden() {
 }
 
 // Pop-ups stack instead of covering each other, and can be dragged anywhere (most important first).
-const stack = new PanelStack(() => [chat.el, notesBadge.el, focusBadge.el, captions.el, classes.el, ...document.querySelectorAll('.game-panel, .pong-hud')]);
+const stack = new PanelStack(() => [chat.el, notesBadge.el, focusBadge.el, captions.el, classes.el, customizer.el, ...document.querySelectorAll('.game-panel, .pong-hud')]);
 
 const loop = new Loop((dt, t) => {
-  if (settings.mob !== mobName) applyMob(settings.mob);
+  const want = resolveMob();
+  if (want.base !== mobName) applyMob(want.base);
+  const key = want.preset ? JSON.stringify(want.preset) : '';
+  if (key !== presetKey) {
+    presetKey = key;
+    setCustomNames(settings.customMobs);
+    if (want.preset) applyCustom(character.mob, want.preset);
+  }
+  customizer.update();
   updatePlacement();
   director.update(dt);
   game.update(dt);
@@ -220,8 +248,9 @@ const loop = new Loop((dt, t) => {
   focusBadge.update(chat.isOpen || character.hidden, notesBadge.visible);
   stack.update();
   toys.update(dt);
-  wardrobe.wear(character.mob, settings.outfit);
-  closet.wear(character.mob, settings.kpopHand ?? '', settings.kpopHead ?? '');
+  const look = resolveMob().preset;
+  wardrobe.wear(character.mob, look ? look.outfit : settings.outfit);
+  closet.wear(character.mob, look?.kpopHand || settings.kpopHand || '', look?.kpopHead || settings.kpopHead || '');
   if (!['typing', 'activity'].includes(character.stateName)) wardrobe.refresh();
   voice.update();
 });

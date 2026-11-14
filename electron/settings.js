@@ -56,6 +56,8 @@ export const DEFAULTS = {
   seenUpdate: '',
   // 🖱 Bbokari is your mouse pointer (the pet is hidden but keeps working).
   cursorMode: false,
+  customMobs: [], // mobs made in the customizer: { id, name, base, colors, size, head, chub, outfit, kpopHand, kpopHead }
+  customPreview: null,
   // 📱 Phone link: Pocket Bbokari on your iPhone can use this Mac's features (same Wi-Fi, 6-digit code). Off by default.
   phoneLink: false,
   phoneCode: '',

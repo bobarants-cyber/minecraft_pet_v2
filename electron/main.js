@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
-import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText, poseFromText } from './ai.js';
+import { AI_MODELS, REWRITE_MODES, askAI, personaFor, setCustomMobs, rewriteText, translateText, poseFromText } from './ai.js';
 import { Whisper } from './captions.js';
 import * as opener from './opener.js';
 import { ClassSchedule, LEAD_MINUTES, classDecision } from './schedule.js';
@@ -54,6 +54,7 @@ const IDLE_POLL_MS = 15_000;
 const ASLEEP = new Set(['sleep', 'sleepy']);
 
 const settings = loadSettings();
+setCustomMobs(settings.customMobs); // custom mobs keep their base pet's personality, under their own names
 let win = null;
 let tray = null;
 let beeState = 'boot';
@@ -271,13 +272,19 @@ function phoneMenu() {
 let cursorWin = null;
 let cursorTimer = null;
 const cursorLook = { typing: false, notes: false, shape: 'arrow', mob: null }; // mob: which mob's pointer to draw
+/** A custom mob uses its base pet's pointer. */
+function cursorMob() {
+  const m = String(settings.mob ?? '');
+  if (!m.startsWith('custom:')) return m;
+  return (settings.customMobs ?? []).find((c) => `custom:${c.id}` === m)?.base ?? 'bbokari';
+}
 function cursorState(patch) {
   Object.assign(cursorLook, patch);
   if (cursorWin && !cursorWin.isDestroyed()) cursorWin.webContents.send('cursorState', cursorLook);
 }
 function startCursor() {
   if (cursorWin && !cursorWin.isDestroyed()) return;
-  cursorLook.mob = settings.mob;
+  cursorLook.mob = cursorMob();
   // One see-through, click-through layer over the whole screen the mouse is on (menu bar and Dock included);
   // Bbokari's pointer moves inside it. (A small window that follows the mouse gets stuck near the Dock, because
   // macOS won't let a window hang off the bottom of the screen.)
@@ -395,7 +402,8 @@ function applySettings(patch) {
   if ('openAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
   if ('reactToActivity' in patch) syncActivity();
   if ('cursorMode' in patch) (settings.cursorMode ? startCursor() : stopCursor());
-  if ('mob' in patch) cursorState({ mob: settings.mob }); // the pointer turns into the new mob
+  if ('customMobs' in patch) setCustomMobs(settings.customMobs);
+  if ('mob' in patch || 'customMobs' in patch) cursorState({ mob: cursorMob() }); // the pointer turns into the new mob
   if ('phoneLink' in patch) syncPhoneLink();
   send('settings', settings);
   buildTray();
@@ -548,7 +556,7 @@ function buildTray() {
         { label: 'Wanders around', type: 'checkbox', checked: settings.autoWalk, click: (i) => applySettings({ autoWalk: i.checked }) },
         { label: 'Open at login', type: 'checkbox', checked: settings.openAtLogin, click: (i) => applySettings({ openAtLogin: i.checked }) },
         { type: 'separator' },
-        { label: 'Mob', submenu: Object.entries(MOBS).map(([key, label]) => radio(label, 'mob', key)) },
+        { label: 'Mob', submenu: [...Object.entries(MOBS).map(([key, label]) => radio(label, 'mob', key)), ...((settings.customMobs ?? []).length ? [{ type: 'separator' }, ...settings.customMobs.map((c) => radio(`🎨 ${c.name || 'My mob'}`, 'mob', `custom:${c.id}`))] : [])] },
         {
           label: '🎀 Outfit',
           submenu: [

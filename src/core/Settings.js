@@ -23,6 +23,8 @@ export const DEFAULTS = {
   checkWriting: true,
   hidden: false,
   cursorMode: false,
+  customMobs: [],
+  customPreview: null,
 };
 
 const STORAGE_KEY = 'minecraft_mob.settings.v1';
