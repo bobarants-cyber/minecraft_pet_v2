@@ -148,6 +148,21 @@ function plushShirt(p) {
   s = smin(s, Math.hypot(radial, y - PLUSH_SHIRT.hemY) - 0.009, 0.004);
   return s;
 }
+/**
+ * Plush sleeves: soft tubes down the upper arm (a bit roomier than the arm, about half its length), ending in a
+ * rolled cuff the arm comes out of.
+ */
+function plushSleeves(p) {
+  let s = 1e3;
+  for (const A of ARMS) {
+    const S = plushPlace(A.S, false), W = plushPlace(A.W, false);
+    const u = norm(sub(W, S)), E = add(S, scale(u, 0.078));
+    const tube = Math.max(roundCone(p, S, E, 0.064, 0.059), dot(sub(p, E), u));
+    const r = sub(p, E), along = dot(r, u), radial = Math.hypot(...sub(r, scale(u, along)));
+    s = Math.min(s, smin(tube, Math.hypot(radial - 0.056, along + 0.002) - 0.0085, 0.004));
+  }
+  return s;
+}
 /** The sewn-in fabric tag, hanging from the hem low on his back (left side). */
 function plushTag(p) {
   const q = local(p, [-0.085, 0.19, -0.13], 0.12, -0.55);
@@ -170,7 +185,8 @@ function parts(p) {
   // The plush's shirt is its stuffed body (sewn like a real plushie), worked out directly in plush space; the tie
   // and collar are sewn flat onto it (painted in regions.mjs), so there are no separate sleeves, collar or tie.
   d.shirt = plushShirt(p);
-  d.sleeve = d.collar = d.tie = 1e3;
+  d.sleeve = plushSleeves(p);
+  d.collar = d.tie = 1e3;
   d.tag = plushTag(p);
   return d;
 }

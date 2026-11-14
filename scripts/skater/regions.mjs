@@ -74,7 +74,7 @@ export function weightsAt(p0) {
     const fk = p[0] > 0 ? 'fingers_R' : 'fingers_L';
     w[fk] = f;
     w[armKey] = 1 - f;
-  } else if (PLUSH && name === 'arm') {
+  } else if (PLUSH && (name === 'arm' || name === 'sleeve')) {
     // A plushie's arm root is soft: right where it's sewn to the body it stays with the body and bends into the arm
     // over a few cm (a hard seam there tore into streaks when the arm swung). The shirt itself never moves.
     const a = Math.min(1, Math.max(0, d.shirt / 0.05)) ** 0.8;
@@ -291,7 +291,7 @@ export function furAt(p) {
       return 0.13;
     case 'collar': return 0.13; // short nap: longer fuzz stuck out past the collar and sleeve edges
     // (tiny non-zero values grow no fur, but tell the app which part a vertex is for the colour versions)
-    case 'sleeve': return 0.012; // crisp sleeve edges (fuzz there hung over the arm as a ragged white fringe)
+    case 'sleeve': return 0.012; // (no fuzz, still dyed as shirt) // crisp sleeve edges (fuzz there hung over the arm as a ragged white fringe)
     case 'tie': return 0.006; // clean felt tie
     case 'leg': return 0.4;
     case 'cuff': return 0; // black cuffs: fur over black reads as grey static
