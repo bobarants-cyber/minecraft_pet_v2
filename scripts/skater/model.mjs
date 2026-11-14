@@ -163,6 +163,33 @@ function plushSleeves(p) {
   }
   return s;
 }
+/** Classic/realistic shirt body: a rounded belly under a narrower chest, shoulders, a rolled hem on the boots. */
+export const CLEAN_SHIRT = { bottom: 0.246, hemY: 0.258 };
+function cleanShirt(p) {
+  const [x, y, z] = p;
+  const belly = ellipsoid(p, [0, 0.36, 0.004], [0.152, 0.165, 0.12]);
+  const chest = ellipsoid(p, [0, 0.455, 0], [0.135, 0.07, 0.104]);
+  let s = smin(belly, chest, 0.035);
+  for (const sg of [-1, 1]) s = smin(s, ellipsoid(p, [sg * 0.118, 0.47, 0], [0.048, 0.044, 0.05]), 0.025);
+  // Realistic: soft creases pressed into the cloth (drape folds low down, pulls from the armpits).
+  if (REAL) s += 0.55 * shirtCreases(x, y, z, clamp((y - 0.25) / 0.26, 0, 1));
+  s = smax(s, CLEAN_SHIRT.bottom - y, 0.02);
+  const k = Math.sqrt(Math.max(0, 1 - ((CLEAN_SHIRT.hemY - 0.36) / 0.165) ** 2));
+  const rxh = 0.152 * k - 0.003, rzh = 0.12 * k - 0.003;
+  const radial = (Math.hypot(x / rxh, (z - 0.004) / rzh) - 1) * 0.12;
+  return smin(s, Math.hypot(radial, y - CLEAN_SHIRT.hemY) - 0.007, 0.004);
+}
+/** Classic/realistic sleeves: roomy tubes about half way down the upper arm, with a rolled cuff. */
+function cleanSleeves(p) {
+  let s = 1e3;
+  for (const A of ARMS) {
+    const E = add(A.S, scale(A.u, 0.085));
+    const tube = Math.max(roundCone(p, A.S, E, 0.046, 0.041), dot(sub(p, E), A.u));
+    const r = sub(p, E), along = dot(r, A.u), radial = Math.hypot(...sub(r, scale(A.u, along)));
+    s = Math.min(s, smin(tube, Math.hypot(radial - 0.039, along + 0.002) - 0.0065, 0.003));
+  }
+  return s;
+}
 /** The sewn-in fabric tag, hanging from the hem low on his back (left side). */
 function plushTag(p) {
   const q = local(p, [-0.085, 0.19, -0.13], 0.12, -0.55);
@@ -375,6 +402,13 @@ function partsAt(p) {
       tie = smin(tie, roundCone(p, [ax, ay, zf(ay)], [bx, by, zf(by)], r, r * 0.8), 0.006);
     }
     d.tie = tie;
+    if (!PLUSH) {
+      // The new shirt (same design as the plush's, fitted to his slimmer body): one clean body that keeps its shape,
+      // longer cuffed sleeves, and the tie and collar sewn flat onto the front (painted in regions.mjs).
+      d.shirt = cleanShirt(p);
+      d.sleeve = cleanSleeves(p);
+      d.collar = d.tie = 1e3;
+    }
     if (PLUSH) {
       // Plush: a clean felt tie, a bit bigger: a round knot and a smooth blade that widens to a rounded point,
       // lying flat on the shirt (squashed against it).

@@ -45,12 +45,12 @@ export function weightsAt(p0) {
   const g = GROUP[name] ?? 'body';
   const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0, fingers_R: 0, fingers_L: 0 };
   const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';
-  if (PLUSH && (name === 'shirt' || name === 'tag')) {
+  if (name === 'shirt' || name === 'tag') {
     w.body = 1; // the plush's shirt is its stuffed body: it moves with his torso only, never with the arms
   } else if (name === 'shirt' || name === 'tie' || name === 'tag') {
     const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
-    w.hem = h;
-    w.body = 1 - h;
+    w.hem = 0;
+    w.body = 1; // (the shirt is one body that keeps its shape: it moves with his torso only)
     // The shirt never follows the arms (that dragged its shoulders out into pointed wings when he raised them):
     // it moves with his torso, and its lower part sways on the hem.
   } else if (name === 'sleeve') {
@@ -61,7 +61,7 @@ export function weightsAt(p0) {
     // cloth gently instead of tearing one row of triangles into long streaks.
     // Sewn on, the sleeve moves with the shirt; only its open end tilts part of the way with the arm, so it hangs
     // softly round the arm instead of being dragged along by it (and never pulls the shirt with it).
-    const a = SLEEVE_FOLLOW * Math.min(1, Math.max(0, d.shirt / 0.045)) ** 0.8;
+    const a = Math.min(1, Math.max(0, d.shirt / 0.05)) ** 0.8; // (same soft root as the arm inside it)
     w[armKey] = a;
     w.body = 1 - a;
   } else if (name === 'hand') {
@@ -74,7 +74,7 @@ export function weightsAt(p0) {
     const fk = p[0] > 0 ? 'fingers_R' : 'fingers_L';
     w[fk] = f;
     w[armKey] = 1 - f;
-  } else if (PLUSH && (name === 'arm' || name === 'sleeve')) {
+  } else if (name === 'arm' || name === 'sleeve') {
     // A plushie's arm root is soft: right where it's sewn to the body it stays with the body and bends into the arm
     // over a few cm (a hard seam there tore into streaks when the arm swung). The shirt itself never moves.
     const a = Math.min(1, Math.max(0, d.shirt / 0.05)) ** 0.8;
@@ -137,17 +137,21 @@ const COLLAR_LINE = lin('#cfcfd6');
  * Plush: what's sewn onto the front of the shirt (plush space): 'tie' (a felt tie: round knot, a blade that widens
  * to a point), 'line' (the stitched outline of the two collar flaps), or null for plain shirt.
  */
-export function plushShirtPaint([x, y, z]) {
+const PAINT_PLUSH = { knot: [0.402, 0.02, 0.016], blade: [0.39, 0.272, 0.25, 0.011, 0.024], tri: [[0.006, 0.452], [0.105, 0.43], [0.034, 0.37]] };
+const PAINT_CLEAN = { knot: [0.474, 0.016, 0.013], blade: [0.464, 0.33, 0.312, 0.008, 0.019], tri: [[0.008, 0.508], [0.105, 0.486], [0.034, 0.432]] };
+export function plushShirtPaint(p) { return shirtPaint(p, PAINT_PLUSH); }
+function shirtPaint([x, y, z], P) {
   if (z < 0.04) return null;
   const tx = Math.abs(x - 0.004);
-  if ((tx / 0.02) ** 2 + ((y - 0.402) / 0.016) ** 2 < 1) return 'tie';
-  if (y < 0.39 && y > 0.25) {
-    const hw = y > 0.272 ? 0.011 + ((0.39 - y) / 0.118) * 0.013 : (0.024 * (y - 0.25)) / 0.022;
+  const [ky, kx, kyr] = P.knot, [top, mid, tip, w0, w1] = P.blade;
+  if ((tx / kx) ** 2 + ((y - ky) / kyr) ** 2 < 1) return 'tie';
+  if (y < top && y > tip) {
+    const hw = y > mid ? w0 + ((top - y) / (top - mid)) * (w1 - w0) : (w1 * (y - tip)) / (mid - tip);
     if (tx < hw) return 'tie';
   }
   // Collar flaps: triangles from the neck, outlined with a fine stitch line.
   const X = Math.abs(x);
-  const tri = [[0.006, 0.452], [0.105, 0.43], [0.034, 0.37]];
+  const tri = P.tri;
   let dd = 1e3;
   for (let i = 0; i < 3; i++) {
     const [ax, ay] = tri[i], [bx, by] = tri[(i + 1) % 3];
@@ -235,10 +239,13 @@ export function colorAt(p0, n, bump = 0, flat = false) {
         const paint = plushShirtPaint(p0);
         return paint === 'tie' ? TIE : paint === 'line' ? COLLAR_LINE : SHIRT;
       }
+      const paint = shirtPaint(p, PAINT_CLEAN);
+      if (paint === 'tie') return TIE;
+      if (paint === 'line') return COLLAR_LINE;
       // Realistic Gliddy: the cloth is a touch darker down in its creases and folds (soft shading, like real cotton).
       if (VARIANT !== 'real' || flat) return SHIRT; // (flat: the edge-sharpening pass only cares about real colour edges)
       if (name !== 'shirt') return SHIRT;
-      const t = Math.min(1, Math.max(0, (y - 0.3) / 0.21));
+      const t = Math.min(1, Math.max(0, (y - 0.25) / 0.26));
       const k = Math.min(0.24, Math.max(0, shirtCreases(x, y, z, t) / 0.011) * 0.2);
       return SHIRT.map((c) => c * (1 - k));
     }

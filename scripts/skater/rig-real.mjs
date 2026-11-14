@@ -90,7 +90,7 @@ export function weightsAt(p) {
       break;
     case 'shirt': case 'tie': case 'collar': {
       // The skirt of the shirt (below the chest) hangs from four cloth bones by direction; above, it's the torso.
-      const h = name === 'collar' ? 0 : clamp((0.45 - y) / 0.15, 0, 1) ** 1.3;
+      const h = 0; // the shirt is one body that keeps its shape: torso only (no hem sway, never the arms)
       torso(1 - h);
       // (never the arms: following them dragged the shirt's shoulders out into wings)
       if (h > 0) {
@@ -106,7 +106,8 @@ export function weightsAt(p) {
       const L = Math.hypot(...sub(J.W, J.S));
       const t = dot(sub(p, J.S), norm(sub(J.W, J.S))) / L;
       // Sewn on, the sleeve moves with the chest; only its open end tilts part way with the arm.
-      if (name === 'sleeve') split(w, 'chest', `arm_${s}`, 0.25 * clamp(d.shirt / 0.045, 0, 1) ** 0.8);
+      if (name === 'sleeve') split(w, 'chest', `arm_${s}`, clamp(d.shirt / 0.05, 0, 1) ** 0.8);
+      else if (d.shirt < 0.05 && t < 0.4) split(w, 'chest', `arm_${s}`, clamp(d.shirt / 0.05, 0, 1) ** 0.8); // soft root
       else if (t < 0.1) split(w, 'chest', `arm_${s}`, smooth(-0.15, 0.1, t)); // into the shoulder
       else if (t < 0.75) split(w, `arm_${s}`, `fore_${s}`, smooth(0.38, 0.62, t)); // the elbow
       else split(w, `fore_${s}`, `hand_${s}`, smooth(0.9, 1.05, t)); // the wrist
