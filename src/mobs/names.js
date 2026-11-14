@@ -1,5 +1,5 @@
 /** The name a mob goes by when it talks to you (every version of a character uses the character's name). */
-const NAMES = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari', wolfchan: 'Wolf Chan', jiniret: 'Jiniret', moffy: 'Moffy', duck: 'Ducky' };
+const NAMES = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari', wolfchan: 'Wolf Chan', jiniret: 'Jiniret', moffy: 'Moffy', duck: 'Ducky', myCat: 'Kitty' };
 let CUSTOM = [];
 /** Custom mobs go by the names you give them. */
 export function setCustomNames(list) {
