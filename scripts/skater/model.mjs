@@ -14,6 +14,27 @@
 // Clothing is joined with sharp unions (it's cloth over a body); only the body itself is blended like clay.
 
 const len = (x, y, z) => Math.sqrt(x * x + y * y + z * z);
+/** Which Gliddy to build: '' (classic), 'real' (realistic: creased shirt, full skeleton), 'plush'. */
+export const VARIANT = globalThis.process?.env?.VARIANT ?? '';
+const REAL = VARIANT === 'real';
+const seg2 = (px, py, ax, ay, bx, by) => {
+  const ex = bx - ax, ey = by - ay, h = clamp(((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey), 0, 1);
+  return Math.hypot(px - ax - ex * h, py - ay - ey * h);
+};
+/** Realistic shirt creases: soft valleys pressed into the cloth (positive pushes the surface in). */
+export function shirtCreases(x, y, z, t) {
+  const a = Math.atan2(x, z), ax = Math.abs(x);
+  // Hanging drape folds round the skirt, uneven like real cotton, fading out up the chest.
+  let c = 0.007 * Math.sin(a * 6.5 + 0.6 + 0.9 * Math.sin(a * 2.3)) * (1 - t) ** 1.3;
+  // Diagonal pull creases from each armpit down towards the middle, front and back (two per side).
+  for (const [x0, y0, x1, y1, k] of [[0.118, 0.452, 0.04, 0.37, 1], [0.112, 0.43, 0.06, 0.34, 0.7]]) {
+    const d = seg2(ax, y, x0, y0, x1, y1);
+    c += 0.0048 * k * Math.exp(-((d / 0.007) ** 2));
+  }
+  // Little compression ripples at the waist where the shirt bunches.
+  c += 0.002 * Math.sin(y * 260 + a * 2) * Math.exp(-(((y - 0.335) / 0.02) ** 2));
+  return c;
+}
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const mix = (a, b, t) => a + (b - a) * t;
 
@@ -214,7 +235,7 @@ function parts(p) {
     const shoulder = Math.sqrt(Math.max(0, 1 - clamp((y - 0.455) / 0.06, 0, 1) ** 2));
     const rx = (0.122 + 0.036 * (1 - t) ** 1.4) * (0.55 + 0.45 * shoulder), rz = (0.09 + 0.022 * (1 - t)) * (0.7 + 0.3 * shoulder);
     // Soft cloth folds that fade out towards the chest.
-    const fold = 0.003 * Math.sin(Math.atan2(x, z) * 7 + 0.6) * (1 - t) ** 1.5;
+    const fold = REAL ? shirtCreases(x, y, z, t) : 0.003 * Math.sin(Math.atan2(x, z) * 7 + 0.6) * (1 - t) ** 1.5;
     const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz) + fold;
     const hemY = 0.305 + 0.012 * (x / 0.16) ** 2; // the hem curves up a little at the sides
     const solid = Math.max(outer, hemY - y, y - 0.515);
@@ -227,7 +248,12 @@ function parts(p) {
     let sleeve = 1e3;
     for (const A of ARMS) {
       const sb = add(A.S, scale(A.u, 0.06));
-      const outerS = roundCone(p, A.S, sb, 0.046, 0.042);
+      let outerS = roundCone(p, A.S, sb, 0.046, 0.042);
+      if (REAL) {
+        // Sleeve creases: rings that bunch near the armpit, and a fold along the underside.
+        const along = dot(sub(p, A.S), A.u);
+        outerS += 0.0028 * Math.sin(along * 210) * clamp(1 - along / 0.06, 0, 1) + 0.0015 * Math.max(0, -dot(sub(p, A.S), [0, 1, 0]) / 0.05);
+      }
       const cut = dot(sub(p, sb), A.u);
       sleeve = Math.min(sleeve, Math.max(outerS, cut - 0.004, -dot(sub(p, A.S), A.u) - 0.03) - 0.002);
     }

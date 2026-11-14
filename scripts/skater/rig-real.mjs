@@ -76,8 +76,8 @@ export function weightsAt(p) {
   const w = {};
   const torso = (k = 1) => {
     // Lower back follows the spine, the chest area follows the chest, the neck blends into the head.
-    if (y > 0.47) split(w, 'chest', 'neck', smooth(0.47, 0.51, y), k);
-    else split(w, 'spine', 'chest', smooth(0.36, 0.44, y), k);
+    // (Cloth never follows the neck: when the head tilted, a shirt top half on the neck stretched into a scratchy seam.)
+    split(w, 'spine', 'chest', smooth(0.36, 0.44, y), k);
   };
   switch (name) {
     case 'ear': case 'earFold': case 'earFuzz': {

@@ -42,6 +42,13 @@ function playEffect(effect) {
   if (effect === 'confetti') toys.burst();
   else if (effect === 'sparkle') character.emote('sparkle', 0.5);
   else if (effect === 'tada') character.trigger('tada', { then: 'idle' }, true);
+  else if (effect.startsWith('pose:')) {
+    // Realistic Gliddy strikes a pose (or relaxes); he holds it 12 s, or until told to relax.
+    const req = JSON.parse(effect.slice(5));
+    const m = character.mob;
+    if (req.relax) m.relax?.();
+    else m.setPose?.(req.pose ?? req.joints, 12);
+  }
   else if (effect.startsWith('weather:')) toys.weather(effect.slice(8));
 }
 host?.onEffect?.(({ effect }) => playEffect(effect));

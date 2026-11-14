@@ -204,9 +204,10 @@ function buildMouth() {
 }
 
 export class Skater extends Bbokari {
-  constructor() {
+  /** Other Gliddy versions (realistic, plush) pass their own model. */
+  constructor({ name = 'skater', glb = skaterGlb } = {}) {
     super(
-      buildSculptRig({ name: 'skater', glb: skaterGlb, modelHeight: MODEL_HEIGHT, headStandIn: 0.52, eyes: false }),
+      buildSculptRig({ name, glb, modelHeight: MODEL_HEIGHT, headStandIn: 0.52, eyes: false }),
       { height: SKATER_HEIGHT, halfWidth: 0.42, emoteLift: 1.0, hand: [0.12, -0.2, 0.04], armScale: 1 },
     );
     this.outfitOffset = [0, -0.265, 0.02];

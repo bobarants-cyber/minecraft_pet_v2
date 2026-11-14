@@ -66,6 +66,9 @@ export function buildSculptRig({ name, glb, modelHeight, eyes = {}, headStandIn 
     torso.remove(joints.head);
     torso.add(model);
 
+    parts.bones = bones; // every bone by name (the realistic Gliddy has a full skeleton)
+    parts.mesh = mesh;
+    parts.model = model;
     parts.head = bones.head;
     joints.head = bones.head;
     parts.arms = [bones.arm_R, bones.arm_L];

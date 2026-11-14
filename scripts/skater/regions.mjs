@@ -2,7 +2,7 @@
 // Colours from the original drawing: tan-orange fur on top of the head, ears, hands and around his sleepy eye; white
 // face; one white eye stitched with a black X, one half-closed purple eye; pink tongue; white shirt with a grey tear;
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
-import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, NOSE as NOSE_AT } from './model.mjs';
+import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, VARIANT, shirtCreases, NOSE as NOSE_AT } from './model.mjs';
 
 export const PIVOTS = { head: [0, 0.5, 0], arm_R: ARMS[1].S, arm_L: ARMS[0].S, leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
 
@@ -118,7 +118,7 @@ function isWhiteFace([x, y, z]) {
 
 const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
-export function colorAt(p, n) {
+export function colorAt(p, n, bump = 0, flat = false) {
   const [x, y, z] = p;
   const { name } = partAt(p);
   switch (name) {
@@ -167,7 +167,14 @@ export function colorAt(p, n) {
       }
       return blend(TAN, WHITE, isWhiteFace(p));
     }
-    case 'shirt': case 'sleeve': case 'collar': return SHIRT;
+    case 'shirt': case 'sleeve': case 'collar': {
+      // Realistic Gliddy: the cloth is a touch darker down in its creases and folds (soft shading, like real cotton).
+      if (VARIANT !== 'real' || flat) return SHIRT; // (flat: the edge-sharpening pass only cares about real colour edges)
+      if (name !== 'shirt') return SHIRT;
+      const t = Math.min(1, Math.max(0, (y - 0.3) / 0.21));
+      const k = Math.min(0.16, Math.max(0, shirtCreases(x, y, z, t) / 0.007) * 0.12);
+      return SHIRT.map((c) => c * (1 - k));
+    }
     case 'tie': return TIE;
     case 'arm': case 'hand': return TAN;
     case 'leg': return NAVY;

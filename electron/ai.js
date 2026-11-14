@@ -54,6 +54,8 @@ PERSONAS.gliddy = {
     'Now and then you add a 🛹, 🎶 or 🦌, but not in every message.',
 };
 
+PERSONAS.gliddyReal = PERSONAS.gliddy;
+
 // The CORTIS plushies share one personality (each colour is the same kind of fuzzy friend).
 const CORTIS = {
   name: 'CORTIS buddy',
@@ -211,6 +213,35 @@ export async function translateText({ text, from, to, model = 'llama3.2' }) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return null;
     return String(data.message?.content ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^["“](.*)["”]$/s, '$1').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Turn a free-form body request ("put your hand on your head", "scratch your ear") into joint angles for Realistic
+ * Gliddy. Returns an object of joints (degrees) or null. The pet clamps every angle to what a body can do.
+ */
+export async function poseFromText({ text, model = 'llama3.2' }) {
+  const system = `You pose a cartoon character's skeleton. Reply with ONLY a JSON object of joint angles in degrees.
+Joints (use only these; left/right are the CHARACTER'S own):
+head, neck: [nod down, turn to his left, tilt to his left]
+chest, spine: [bend forward, twist to his left, lean to his left]
+shoulderL, shoulderR: [raise arm forward, twist, raise arm out to the side]  (arms hang down at 0,0,0; straight up is 0,0,160)
+elbowL, elbowR: bend 0-150     wristL, wristR: bend -70..70     fingersL, fingersR: curl -30 (spread) .. 100 (fist)
+hipL, hipR: [lift leg forward, twist, swing out]     kneeL, kneeR: bend 0-140     ankleL, ankleR: [bend]
+earL, earR: [fold forward, turn, tilt]
+Include only the joints that need to change. Example for "wave with your left hand": {"shoulderL":[0,0,140],"elbowL":30,"fingersL":-20}`;
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, format: 'json', stream: false, options: { temperature: 0.2, num_predict: 200 }, messages: [{ role: 'system', content: system }, { role: 'user', content: text }] }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const data = await res.json().catch(() => ({}));
+    const obj = JSON.parse(String(data.message?.content ?? '{}'));
+    return obj && typeof obj === 'object' && Object.keys(obj).length ? obj : null;
   } catch {
     return null;
   }

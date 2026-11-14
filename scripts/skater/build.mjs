@@ -33,7 +33,7 @@ function refine(P, idx, rounds) {
   for (let r = 0; r < rounds; r++) {
     const N = vertexNormals(P, idx);
     const col = [];
-    for (let i = 0; i < P.length / 3; i++) col.push(colorAt([P[3 * i], P[3 * i + 1], P[3 * i + 2]], [N[3 * i], N[3 * i + 1], N[3 * i + 2]], 0).map((x) => x.toFixed(4)).join());
+    for (let i = 0; i < P.length / 3; i++) col.push(colorAt([P[3 * i], P[3 * i + 1], P[3 * i + 2]], [N[3 * i], N[3 * i + 1], N[3 * i + 2]], 0, true).map((x) => x.toFixed(4)).join());
     const ek = (a, b) => (a < b ? a * 4194304 + b : b * 4194304 + a);
     const marked = new Map();
     for (let t = 0; t < idx.length; t += 3) {

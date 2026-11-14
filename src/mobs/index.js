@@ -5,6 +5,7 @@ import { WolfChan } from '../wolfchan/WolfChan.js';
 import { Jiniret } from '../jiniret/Jiniret.js';
 import { Cortis } from '../cortis/Cortis.js';
 import { Skater } from '../skater/Skater.js';
+import { GliddyReal } from '../skater/GliddyReal.js';
 
 /** Every mob exposes the same surface: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate(). */
 export const MOBS = {
@@ -14,6 +15,7 @@ export const MOBS = {
   wolfchan: { label: 'Wolf Chan', create: () => new WolfChan() },
   jiniret: { label: 'Jiniret', create: () => new Jiniret() },
   gliddy: { label: 'Gliddy', create: () => new Skater() },
+  gliddyReal: { label: 'Gliddy (realistic)', create: () => new GliddyReal() },
   cortisYellow: { label: 'CORTIS (yellow)', create: () => new Cortis('yellow') },
   cortisWhite: { label: 'CORTIS (white)', create: () => new Cortis('white') },
   cortisBlue: { label: 'CORTIS (blue)', create: () => new Cortis('blue') },

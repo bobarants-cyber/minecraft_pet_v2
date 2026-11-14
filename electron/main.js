@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, Menu, Notification, Tray, clipboard, globalShortcut, ipcMain, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { MOBS, SIZES, loadSettings, saveSettings } from './settings.js';
 import { ReminderStore, parseCommand, formatClock } from './reminders.js';
-import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText } from './ai.js';
+import { AI_MODELS, REWRITE_MODES, askAI, personaFor, rewriteText, translateText, poseFromText } from './ai.js';
 import { Whisper } from './captions.js';
 import * as opener from './opener.js';
 import { ClassSchedule, LEAD_MINUTES, classDecision } from './schedule.js';
@@ -37,6 +37,7 @@ import { findFeedback, looksLikeFeedback } from './feedback.js';
 import * as spotify from './spotify.js';
 import * as computer from './computer.js';
 import * as fun from './fun.js';
+import { parsePose, soundsLikePose, clampJoints, POSES } from '../src/skater/poses.js';
 import * as tickets from './tickets.js';
 import http from 'node:http';
 import os from 'node:os';
@@ -627,6 +628,23 @@ ipcMain.on('chat:focus', (_e, on) => {
     win.blur();
   }
 });
+
+async function poseReply(said) {
+  const isReal = settings.mob === 'gliddyReal';
+  let req = parsePose(said);
+  if (!req && isReal && soundsLikePose(said)) {
+    const joints = await poseFromText({ text: said, model: settings.aiModel ?? 'llama3.2' });
+    if (joints) req = { joints, say: 'Like this? 🕺' };
+  }
+  if (!req) return null;
+  if (!isReal) {
+    if (!/^(?:hey |ok )?(?:gliddy|glidy|glitty)\b/i.test(said) && !String(settings.mob).startsWith('gliddy')) return null;
+    return { ok: true, kind: 'skill', text: 'Only Realistic Gliddy can do any pose (he has all the joints)! Pick him in ⚙️ Settings → Mob.' };
+  }
+  const payload = req.relax ? { relax: true } : req.pose ? { pose: req.pose } : { joints: clampJoints(req.joints) };
+  send('effect', { effect: `pose:${JSON.stringify(payload)}` });
+  return { ok: true, kind: 'skill', text: req.relax ? 'Back to normal 😌' : req.pose ? POSES[req.pose].say : req.say ?? 'Like this? 🕺' };
+}
 
 ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = settings.mob } = {}) => {
   // Recipe and fraction math, with the steps (exact, no AI guessing).
@@ -1300,6 +1318,9 @@ async function newFeatures(said) {
   // "Open visual arts" → your class.
   const cls = classByName(said);
   if (cls) return { ok: true, kind: 'action', text: await runAction({ type: 'open_class', name: cls }) };
+  // 🕺 Posing Realistic Gliddy: "do a dab", "raise your left arm", "bend your knees" (anything else body-ish asks the AI).
+  const posed = await poseReply(said);
+  if (posed) return posed;
   // 🎉 Riddles, would-you-rather, fun facts, dance party…
   const play = fun.handle(said);
   if (play) {

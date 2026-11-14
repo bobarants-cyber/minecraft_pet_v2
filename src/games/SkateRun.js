@@ -80,7 +80,7 @@ export class SkateRun {
   }
 
   get isGliddy() {
-    return this.settings.mob === 'gliddy';
+    return ['gliddy', 'gliddyReal', 'gliddyPlush'].includes(this.settings.mob);
   }
 
   start() {
