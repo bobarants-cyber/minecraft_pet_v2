@@ -8,6 +8,7 @@ import { Skater } from '../skater/Skater.js';
 import { GliddyReal } from '../skater/GliddyReal.js';
 import { GliddyPlush } from '../skater/GliddyPlush.js';
 import { Moffy } from '../moffy/Moffy.js';
+import { Duck } from '../duck/Duck.js';
 
 /** Every mob exposes the same surface: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate(). */
 export const MOBS = {
@@ -25,6 +26,7 @@ export const MOBS = {
   gliddyPlushChoco: { label: 'Gliddy plush: Chocolate', create: () => new GliddyPlush({ fur: '#a8754e', shirt: '#f1e3c8', tie: '#7a3b2a' }) },
   gliddyPlushMini: { label: 'Gliddy plush: Mini keychain', create: () => new GliddyPlush({ mini: true }) },
   moffy: { label: 'Moffy', create: () => new Moffy() },
+  duck: { label: 'Ducky', create: () => new Duck() },
   cortisYellow: { label: 'CORTIS (yellow)', create: () => new Cortis('yellow') },
   cortisWhite: { label: 'CORTIS (white)', create: () => new Cortis('white') },
   cortisBlue: { label: 'CORTIS (blue)', create: () => new Cortis('blue') },

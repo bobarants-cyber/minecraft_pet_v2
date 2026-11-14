@@ -157,6 +157,22 @@
       <ellipse cy="3.6" rx="4.6" ry="3.4" fill="#ffe2cf"/><path d="M0 2.4 C -0.8 1.4, -2.2 1.8, -1.8 2.8 C -1.4 3.4, -0.4 3.8, 0 4.4 C 0.4 3.8, 1.4 3.4, 1.8 2.8 C 2.2 1.8, 0.8 1.4, 0 2.4 Z" fill="#ff5c8a"/>`,
   };
 
+  // ---------- Ducky: white duckling, wide orange bill, glossy eyes, rosy cheeks, feather tuft, blue polka-dot bandana ----------
+  const duckBill = `<path d="M-6.4 2.6 C -6 0.4, 6 0.4, 6.4 2.6 C 6.6 4.4, 3 5.4, 0 5.2 C -3 5.4, -6.6 4.4, -6.4 2.6 Z" fill="#ffad4d" stroke="#d9772a" stroke-width=".6"/>
+    <path d="M-5 3.3 Q0 4.4 5 3.3" fill="none" stroke="#d9772a" stroke-width=".7" stroke-linecap="round"/>`;
+  const duck = {
+    fill: '#fffaf0', line: '#a8927a', shine: '#ffffff',
+    base: `<path d="M-9 10 Q0 14 9 10 L6.6 13.6 Q0 16.6 -6.6 13.6 Z" fill="#7fc8ff"/><circle r="13" fill="#fffaf0" stroke="#a8927a" stroke-width="1.6"/>
+      <path d="M-8 10.4 Q0 13.8 8 10.4 L0 17 Z" fill="#7fc8ff" stroke="#5aa8e0" stroke-width=".6"/><circle cx="-2" cy="12.6" r=".8" fill="#fff"/><circle cx="2.4" cy="13.4" r=".8" fill="#fff"/>`,
+    top: `<path class="hair" d="M0 -12.4 C 0 -18, 3 -19.5, 5 -18 M-1.4 -12.4 C -3 -16, -5.6 -16.4, -6.4 -15" fill="none" stroke="#a8927a" stroke-width="3.4" stroke-linecap="round"/>
+      <path class="hair" d="M0 -12.4 C 0 -18, 3 -19.5, 5 -18 M-1.4 -12.4 C -3 -16, -5.6 -16.4, -6.4 -15" fill="none" stroke="#fff3d6" stroke-width="2" stroke-linecap="round"/>`,
+    face: `<g class="eyes"><ellipse cx="-4.6" cy="-2.6" rx="2" ry="2.6" fill="#1e1a24"/><ellipse cx="4.6" cy="-2.6" rx="2" ry="2.6" fill="#1e1a24"/>
+      <circle cx="-5.2" cy="-3.6" r=".8" fill="#fff"/><circle cx="4" cy="-3.6" r=".8" fill="#fff"/></g>
+      <ellipse cx="-8.2" cy="1.6" rx="2" ry="1.2" fill="#ffa3b8" opacity=".9"/><ellipse cx="8.2" cy="1.6" rx="2" ry="1.2" fill="#ffa3b8" opacity=".9"/>${duckBill}`,
+    happy: `<path d="M-6.6 -2 Q-4.6 -5 -2.6 -2 M2.6 -2 Q4.6 -5 6.6 -2" fill="none" stroke="#1e1a24" stroke-width="1.4" stroke-linecap="round"/>
+      <ellipse cx="-8.2" cy="1.6" rx="2" ry="1.2" fill="#ffa3b8"/><ellipse cx="8.2" cy="1.6" rx="2" ry="1.2" fill="#ffa3b8"/>${duckBill}`,
+  };
+
   const plush = (fur, ear, lid, nose, line) => gliddy({ fur, ear, lid, nose, line, shine: '#ffffff', plush: true });
   window.CURSOR_THEMES = {
     bbokari, bee, axolotl, wolfchan, jiniret,
@@ -168,7 +184,7 @@
     gliddyPlushMidnight: plush('#9a90c2', '#8579b4', '#7a6eb0', '#6a5f9c', '#3a335c'),
     gliddyPlushChoco: plush('#a8754e', '#956541', '#8a5a38', '#7a4c2e', '#3e2414'),
     gliddyPlushMini: { ...gliddy({ plush: true, mini: true, shine: '#ffffff' }) },
-    moffy,
+    moffy, duck,
     cortisYellow: cortis(CORTIS.yellow), cortisWhite: cortis(CORTIS.white), cortisBlue: cortis(CORTIS.blue),
     cortisPink: cortis(CORTIS.pink), cortisGreen: cortis(CORTIS.green),
   };
