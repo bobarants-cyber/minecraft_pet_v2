@@ -97,6 +97,13 @@
         gap: 6px;
         margin-top: 7px;
       }
+      .kpop { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+      .kpop__row { display: flex; flex-wrap: wrap; gap: 4px; }
+      .kpop__row select { flex: 1 1 45%; min-width: 0; font: inherit; font-size: 12px; padding: 4px; border-radius: 8px; border: 1px solid rgba(0, 0, 0, 0.12); background: #fff; }
+      .kpop__colors { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+      .kpop__swatch { aspect-ratio: 1; border-radius: 50%; border: 2px solid rgba(0, 0, 0, 0.08); cursor: pointer; padding: 0; }
+      .kpop__swatch.is-on { border-color: #2b2a3a; transform: scale(1.12); }
+      .kpop__count { font-weight: 400; opacity: 0.6; font-size: 11px; }
       .mob-menu__chip {
         flex: 1;
         padding: 6px 4px;

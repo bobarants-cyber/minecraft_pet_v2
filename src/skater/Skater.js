@@ -212,6 +212,7 @@ export class Skater extends Bbokari {
     );
     this.outfitOffset = [0, -0.265, 0.02];
     this.outfitScale = 0.85;
+    this.kpopFit = [0, -0.115, 0, 0.78]; // K-pop head items: head top 0.35 above the joint, head radius 0.258
     this.headFit = { side: 0.255, cupY: 0.17, cupZ: -0.02, top: 0.38, bandZ: -0.13, square: 0.65, mouth: [0.02, 0.046, 0.17] };
     this.board = buildSkateboard();
     this.joints.torso.add(this.board);

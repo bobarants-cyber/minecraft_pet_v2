@@ -15,6 +15,7 @@ import { NotesBadge } from './interaction/NotesBadge.js';
 import { Voice } from './interaction/Voice.js';
 import { FocusBadge } from './interaction/FocusBadge.js';
 import { Wardrobe } from './character/Outfits.js';
+import { KpopCloset, buildItem, catalogSize, DESIGNS, COLORS, FINISHES } from './character/KpopCloset.js';
 import { Toys } from './character/Toys.js';
 import { PanelStack } from './interaction/PanelStack.js';
 import { petName } from './mobs/names.js';
@@ -36,6 +37,7 @@ const notesBadge = new NotesBadge({ character, host });
 const voice = new Voice({ character, chat, captions, settings, host });
 const focusBadge = new FocusBadge({ character, host });
 const wardrobe = new Wardrobe();
+const closet = new KpopCloset();
 const toys = new Toys({ character, stage, wardrobe });
 /** Effects that skills ask for (confetti when your to-do list is done, sunglasses for sunny weather…). */
 function playEffect(effect) {
@@ -85,6 +87,7 @@ const menu = new MobMenu({
   onFeed: () => toys.feed(),
   onBall: () => toys.playBall(),
   onOutfit: (name) => save({ outfit: name }),
+  onKpop: (patch) => save(patch),
   onCheck: () => host?.checkWriting?.(),
   onQuit: () => host?.quit?.(),
   onCursor: () => becomeCursor(),
@@ -218,6 +221,7 @@ const loop = new Loop((dt, t) => {
   stack.update();
   toys.update(dt);
   wardrobe.wear(character.mob, settings.outfit);
+  closet.wear(character.mob, settings.kpopHand ?? '', settings.kpopHead ?? '');
   if (!['typing', 'activity'].includes(character.stateName)) wardrobe.refresh();
   voice.update();
 });
@@ -342,4 +346,4 @@ if (!host) {
   });
 }
 
-window.mob = { stage, character, director, menu, chat, game, captions, toys, settings, screen, loop, get pet() { return character.mob; } };
+window.mob = { stage, character, director, menu, chat, game, captions, toys, settings, screen, loop, closet, kpop: { buildItem, catalogSize, DESIGNS, COLORS, FINISHES }, get pet() { return character.mob; } };

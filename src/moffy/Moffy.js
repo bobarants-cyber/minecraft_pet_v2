@@ -65,6 +65,7 @@ export class Moffy extends Bbokari {
     );
     this.outfitOffset = [0, -0.2, 0.02];
     this.outfitScale = 0.95;
+    this.kpopFit = [0, -0.084, 0, 0.91]; // K-pop head items: head top 0.503 above the joint, radius 0.30
     this.board = buildHoverboard();
     this.joints.hips.add(this.board);
     this.board.position.y = -0.005;

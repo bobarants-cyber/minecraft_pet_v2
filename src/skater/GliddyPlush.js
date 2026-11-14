@@ -21,7 +21,9 @@ export class GliddyPlush extends Skater {
     this.dyes = { fur, shirt, tie };
     this.mini = mini;
     this.boardBack = new THREE.Vector3(0.02, 0.64, -0.45); // behind his big head, not through it
-    this.armCap = 0.95; // his head overhangs his shoulders: raised arms stop out to the side
+    this.armCap = 0.95;
+    // his head overhangs his shoulders: raised arms stop out to the side
+    this.kpopFit = [0, -0.12, 0, 1.11]; // K-pop head items on the big plush head (top 0.536 above the joint, radius 0.366)
     this.mouth.visible = false;
     this.parts.ready.then(() => {
       this.#plushify();

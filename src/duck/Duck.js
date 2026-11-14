@@ -19,6 +19,7 @@ export class Duck extends Bbokari {
     );
     this.outfitOffset = [0, -0.18, 0.03];
     this.outfitScale = 0.85;
+    this.kpopFit = [0, -0.01, 0.03, 0.65]; // K-pop head items: head top 0.41 above the joint, radius 0.215
   }
 
   /** The typing scene's glasses need bead eyes; his eyes are painted on, so he skips them. */

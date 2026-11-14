@@ -1,6 +1,7 @@
 import { MOBS, nextMob } from '../mobs/index.js';
 import { GAME_LIST } from '../games/Games.js';
 import { OUTFITS } from '../character/Outfits.js';
+import { DESIGNS, COLORS, FINISHES, catalogSize, randomItem, parseItem } from '../character/KpopCloset.js';
 
 const MARGIN_PX = 8;
 const OFFSET_PX = 14;
@@ -28,6 +29,21 @@ export class MobMenu {
         <div class="mob-menu__text-label mob-menu__outfit-label">🎀 Outfit</div>
         <div class="mob-menu__chips mob-menu__chips--wrap mob-menu__outfits">
           ${Object.entries(OUTFITS).map(([k, label]) => `<button type="button" class="mob-menu__chip" data-outfit="${k}" title="${label}">${k === 'none' ? '✖' : label.split(' ')[0]}</button>`).join('')}
+        </div>
+        <div class="mob-menu__text-label">💖 K-pop items <span class="kpop__count">(${catalogSize().toLocaleString()} to mix)</span></div>
+        <div class="kpop">
+          <div class="kpop__row">
+            <select class="kpop__design">${Object.entries(DESIGNS).map(([k, d]) => `<option value="${k}">${d.emoji} ${d.label}${d.slot === 'head' ? ' (head)' : ''}</option>`).join('')}</select>
+            <select class="kpop__style"></select>
+            <select class="kpop__handle"></select>
+            <select class="kpop__finish">${Object.entries(FINISHES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+          </div>
+          <div class="kpop__colors">${Object.entries(COLORS).map(([k, v]) => `<button type="button" class="kpop__swatch" data-color="${k}" title="${k}" style="background:${v}"></button>`).join('')}</div>
+          <div class="mob-menu__chips mob-menu__chips--wrap">
+            <button type="button" class="mob-menu__chip kpop__random">🎲 Surprise me</button>
+            <button type="button" class="mob-menu__chip kpop__off" data-slot="hand">✖ Hands</button>
+            <button type="button" class="mob-menu__chip kpop__off" data-slot="head">✖ Head</button>
+          </div>
         </div>
       </div>
       <div class="mob-menu__text mob-menu__games">
@@ -114,6 +130,7 @@ export class MobMenu {
         (chip.dataset.toy === 'feed' ? onFeed : onBall)?.();
       });
     }
+    this.#setupKpop(save);
     for (const chip of this.el.querySelectorAll('.mob-menu__chip[data-outfit]')) {
       chip.addEventListener('click', () => {
         onOutfit?.(chip.dataset.outfit);
@@ -218,5 +235,39 @@ export class MobMenu {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.el.classList.remove('open');
+  }
+
+  /** The K-pop items picker: design, style, (lightstick handle), colour and finish; changes apply straight away. */
+  #setupKpop(save) {
+    const q = (c) => this.el.querySelector(c);
+    const state = { design: 'lightstick', style: 'heart', handle: 'classic', color: 'pink', finish: 'glossy' };
+    const fill = () => {
+      const d = DESIGNS[state.design];
+      q('.kpop__style').innerHTML = Object.entries(d.styles).map(([k, v]) => `<option value="${k}"${k === state.style ? ' selected' : ''}>${v}</option>`).join('');
+      q('.kpop__handle').style.display = d.handles ? '' : 'none';
+      q('.kpop__handle').innerHTML = d.handles ? Object.entries(d.handles).map(([k, v]) => `<option value="${k}"${k === state.handle ? ' selected' : ''}>${v} handle</option>`).join('') : '';
+      q('.kpop__design').value = state.design;
+      q('.kpop__finish').value = state.finish;
+      for (const b of this.el.querySelectorAll('.kpop__swatch')) b.classList.toggle('is-on', b.dataset.color === state.color);
+    };
+    const apply = () => {
+      const d = DESIGNS[state.design];
+      const id = [state.design, state.style, state.color, state.finish, ...(d.handles ? [state.handle] : [])].join('.');
+      save(d.slot === 'head' ? { kpopHead: id } : { kpopHand: id });
+    };
+    q('.kpop__design').addEventListener('change', (e) => { state.design = e.target.value; state.style = Object.keys(DESIGNS[state.design].styles)[0]; fill(); apply(); });
+    q('.kpop__style').addEventListener('change', (e) => { state.style = e.target.value; apply(); });
+    q('.kpop__handle').addEventListener('change', (e) => { state.handle = e.target.value; apply(); });
+    q('.kpop__finish').addEventListener('change', (e) => { state.finish = e.target.value; apply(); });
+    for (const b of this.el.querySelectorAll('.kpop__swatch')) b.addEventListener('click', () => { state.color = b.dataset.color; fill(); apply(); });
+    q('.kpop__random').addEventListener('click', () => {
+      const id = randomItem(Math.random() < 0.6 ? 'hand' : 'head');
+      Object.assign(state, parseItem(id));
+      if (!DESIGNS[state.design].handles) state.handle = 'classic';
+      fill();
+      save(DESIGNS[state.design].slot === 'head' ? { kpopHead: id } : { kpopHand: id });
+    });
+    for (const b of this.el.querySelectorAll('.kpop__off')) b.addEventListener('click', () => save(b.dataset.slot === 'head' ? { kpopHead: '' } : { kpopHand: '' }));
+    fill();
   }
 }
