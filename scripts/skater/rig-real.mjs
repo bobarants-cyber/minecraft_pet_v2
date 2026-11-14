@@ -92,11 +92,7 @@ export function weightsAt(p) {
       // The skirt of the shirt (below the chest) hangs from four cloth bones by direction; above, it's the torso.
       const h = name === 'collar' ? 0 : clamp((0.45 - y) / 0.15, 0, 1) ** 1.3;
       torso(1 - h);
-      if (name === 'shirt' && y > 0.36) {
-        const k = 0.5 * (1 - clamp(d.sleeve / 0.05, 0, 1)) ** 1.4;
-        for (const key of Object.keys(w)) w[key] *= 1 - k;
-        w[`arm_${s}`] = (w[`arm_${s}`] ?? 0) + k;
-      }
+      // (never the arms: following them dragged the shirt's shoulders out into wings)
       if (h > 0) {
         const a = Math.atan2(x, z);
         const parts = { hemF: Math.max(0, Math.cos(a)), hemB: Math.max(0, -Math.cos(a)), hemR: Math.max(0, Math.sin(a)), hemL: Math.max(0, -Math.sin(a)) };
@@ -109,7 +105,8 @@ export function weightsAt(p) {
       const J = ARM_JOINTS[x > 0 ? 1 : 0];
       const L = Math.hypot(...sub(J.W, J.S));
       const t = dot(sub(p, J.S), norm(sub(J.W, J.S))) / L;
-      if (name === 'sleeve') split(w, 'chest', `arm_${s}`, 0.5 + 0.5 * clamp(d.shirt / 0.05, 0, 1) ** 0.7);
+      // Sewn on, the sleeve moves with the chest; only its open end tilts part way with the arm.
+      if (name === 'sleeve') split(w, 'chest', `arm_${s}`, 0.25 * clamp(d.shirt / 0.045, 0, 1) ** 0.8);
       else if (t < 0.1) split(w, 'chest', `arm_${s}`, smooth(-0.15, 0.1, t)); // into the shoulder
       else if (t < 0.75) split(w, `arm_${s}`, `fore_${s}`, smooth(0.38, 0.62, t)); // the elbow
       else split(w, `fore_${s}`, `hand_${s}`, smooth(0.9, 1.05, t)); // the wrist

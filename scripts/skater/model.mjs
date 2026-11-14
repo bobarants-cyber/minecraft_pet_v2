@@ -288,7 +288,8 @@ function partsAt(p) {
     let sleeve = 1e3;
     for (const A of ARMS) {
       const sb = add(A.S, scale(A.u, 0.06));
-      let outerS = roundCone(p, A.S, sb, 0.046, 0.042);
+      // (plush: roomy sleeves, so his fat stuffed arms fit inside the opening and don't cut through its edge)
+      let outerS = PLUSH ? roundCone(p, A.S, sb, 0.064, 0.062) : roundCone(p, A.S, sb, 0.046, 0.042);
       if (REAL) {
         // Sleeve creases: rings that bunch near the armpit, and a fold along the underside.
         const along = dot(sub(p, A.S), A.u);

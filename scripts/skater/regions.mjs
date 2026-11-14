@@ -36,6 +36,9 @@ export function ownPart(p) {
   return { name, d };
 }
 
+/** How much of the arm's swing the end of a sleeve takes. */
+const SLEEVE_FOLLOW = 0.25;
+
 export function weightsAt(p0) {
   const { name, d } = ownPart(p0);
   const p = toOrig(p0, name);
@@ -46,20 +49,17 @@ export function weightsAt(p0) {
     const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
     w.hem = h;
     w.body = 1 - h;
-    // Shirt right next to a sleeve shares a little of the arm's movement (the other half of that soft band).
-    if (name === 'shirt' && p[1] > 0.36) {
-      const s2 = 0.5 * (1 - Math.min(1, Math.max(0, d.sleeve / 0.05))) ** 1.4;
-      w[armKey] = s2;
-      w.body *= 1 - s2;
-      w.hem *= 1 - s2;
-    }
+    // The shirt never follows the arms (that dragged its shoulders out into pointed wings when he raised them):
+    // it moves with his torso, and its lower part sways on the hem.
   } else if (name === 'sleeve') {
     const A = ARMS[p[0] > 0 ? 1 : 0];
     const along = (p[0] - A.S[0]) * A.u[0] + (p[1] - A.S[1]) * A.u[1] + (p[2] - A.S[2]) * A.u[2];
     // Only the very top of the sleeve, tucked into the shoulder, eases between body and arm.
     // Where the sleeve joins the shirt it eases between body and arm over a band, so lifting the arm stretches the
     // cloth gently instead of tearing one row of triangles into long streaks.
-    const a = 0.5 + 0.5 * Math.min(1, Math.max(0, d.shirt / 0.05)) ** 0.7;
+    // Sewn on, the sleeve moves with the shirt; only its open end tilts part of the way with the arm, so it hangs
+    // softly round the arm instead of being dragged along by it (and never pulls the shirt with it).
+    const a = SLEEVE_FOLLOW * Math.min(1, Math.max(0, d.shirt / 0.045)) ** 0.8;
     w[armKey] = a;
     w.body = 1 - a;
   } else if (name === 'hand') {

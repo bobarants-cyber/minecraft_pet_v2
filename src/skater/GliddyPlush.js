@@ -20,7 +20,7 @@ export class GliddyPlush extends Skater {
     super({ name: 'gliddy-plush', glb: plushGlb });
     this.dyes = { fur, shirt, tie };
     this.mini = mini;
-    this.boardBack = new THREE.Vector3(0.02, 0.52, -0.45); // behind his big head, not through it
+    this.boardBack = new THREE.Vector3(0.02, 0.64, -0.45); // behind his big head, not through it
     this.armCap = 0.95; // his head overhangs his shoulders: raised arms stop out to the side
     this.mouth.visible = false;
     this.parts.ready.then(() => {
