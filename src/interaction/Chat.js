@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { PIXELS_PER_UNIT } from '../core/Stage.js';
+import { petName } from '../mobs/names.js';
 
 const MARGIN_PX = 10;
 const GAP_PX = 12;
 const TOAST_MS = 12_000;
 const MAX_HISTORY = 16;
 const SLEEPING = new Set(['sleep', 'sleepy']);
-const NAMES = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' };
 const _top = new THREE.Vector3();
 
 const greeting = (name) =>
@@ -70,7 +70,7 @@ export class Chat {
   }
 
   get name() {
-    return NAMES[this.settings.mob] ?? 'Bee';
+    return petName(this.settings.mob);
   }
 
   get isOpen() {

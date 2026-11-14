@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PIXELS_PER_UNIT } from '../core/Stage.js';
+import { petName } from '../mobs/names.js';
 
-const NAMES = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' };
 const ICONS = { bee: '🐝', axolotl: '🌸', bbokari: '🐥' };
 const EDGE_PX = 12;
 const GAP_PX = 16;
@@ -45,7 +45,7 @@ export class MiniGame {
   }
 
   get petName() {
-    return NAMES[this.settings.mob] ?? 'Pet';
+    return petName(this.settings.mob, 'Pet');
   }
 
   get petIcon() {

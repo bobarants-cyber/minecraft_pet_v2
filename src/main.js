@@ -17,6 +17,7 @@ import { FocusBadge } from './interaction/FocusBadge.js';
 import { Wardrobe } from './character/Outfits.js';
 import { Toys } from './character/Toys.js';
 import { PanelStack } from './interaction/PanelStack.js';
+import { petName } from './mobs/names.js';
 
 const host = window.mobHost ?? null;
 const { settings, save } = await connectSettings();
@@ -273,7 +274,7 @@ setTimeout(() => {
   } catch {}
   if (last === today) return;
   const h = new Date().getHours();
-  const name = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' }[settings.mob] ?? 'your buddy';
+  const name = petName(settings.mob, 'your buddy');
   const hello = h < 5 ? `You’re up late! 🌙 ${name} is here.` : h < 12 ? 'Good morning! ☀️ Ready for today?' : h < 18 ? 'Good afternoon! 🌤 Nice to see you.' : 'Good evening! 🌆 How was your day?';
   chat.say(hello);
 }, 6500);

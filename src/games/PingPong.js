@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PIXELS_PER_UNIT } from '../core/Stage.js';
+import { petName } from '../mobs/names.js';
 
 /**
  * Ping pong against the pet. A small table sits at the bottom of the screen; the pet stands behind the far end
@@ -79,7 +80,7 @@ export class PingPong {
   }
 
   get petName() {
-    return { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari' }[this.settings.mob] ?? 'Pet';
+    return petName(this.settings.mob, 'Pet');
   }
 
   start() {
