@@ -55,6 +55,7 @@ PERSONAS.gliddy = {
 };
 
 PERSONAS.gliddyReal = PERSONAS.gliddy;
+for (const k of ['gliddyPlush', 'gliddyPlushPink', 'gliddyPlushMint', 'gliddyPlushBlack']) PERSONAS[k] = PERSONAS.gliddy;
 
 // The CORTIS plushies share one personality (each colour is the same kind of fuzzy friend).
 const CORTIS = {

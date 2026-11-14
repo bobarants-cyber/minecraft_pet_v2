@@ -2,7 +2,11 @@
 // Colours from the original drawing: tan-orange fur on top of the head, ears, hands and around his sleepy eye; white
 // face; one white eye stitched with a black X, one half-closed purple eye; pink tongue; white shirt with a grey tear;
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
-import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, VARIANT, shirtCreases, NOSE as NOSE_AT } from './model.mjs';
+import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, VARIANT, shirtCreases, PLUSH, PLUSH_HEAD, MOUTH as MOUTH_AT, NOSE as NOSE_AT } from './model.mjs';
+
+const HEAD_PARTS = new Set(['head', 'ear', 'earFold', 'earFuzz', 'tuft', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'mouth', 'lip']);
+/** Plush: the head is scaled up about the neck, so head colours are worked out back at the classic head's size. */
+const unscale = (p) => [p[0] / PLUSH_HEAD, 0.5 + (p[1] - 0.5) / PLUSH_HEAD, p[2] / PLUSH_HEAD];
 
 export const PIVOTS = { head: [0, 0.5, 0], arm_R: ARMS[1].S, arm_L: ARMS[0].S, leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
 
@@ -118,12 +122,22 @@ function isWhiteFace([x, y, z]) {
 
 const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
-export function colorAt(p, n, bump = 0, flat = false) {
+export function colorAt(p0, n, bump = 0, flat = false) {
+  const { name } = partAt(p0);
+  const p = PLUSH && HEAD_PARTS.has(name) ? unscale(p0) : p0;
   const [x, y, z] = p;
-  const { name } = partAt(p);
   switch (name) {
     case 'xcross': return BLACK;
-    case 'xeye': return Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry) > 0.955 ? BLACK : WHITE;
+    case 'xeye': {
+      if (Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry) > 0.955) return BLACK;
+      if (PLUSH) {
+        // The X is stitched flat into the plush's eye.
+        const cs = Math.cos(0.35), sn = Math.sin(0.35), lx = x - XEYE.c[0] - 0.004, ly = y - XEYE.c[1] + 0.004;
+        const u = cs * lx + sn * ly, v = -sn * lx + cs * ly;
+        if ((Math.abs(u) < 0.056 && Math.abs(v) < 0.017) || (Math.abs(u) < 0.017 && Math.abs(v) < 0.056)) return BLACK;
+      }
+      return WHITE;
+    }
     case 'sleepy': {
       const r = Math.hypot((x - SLEEPY.c[0]) / SLEEPY.r, (y - SLEEPY.c[1]) / SLEEPY.ry);
       if (r > 0.96) return BLACK;
@@ -153,6 +167,12 @@ export function colorAt(p, n, bump = 0, flat = false) {
     case 'earFuzz': return WHITE;
     case 'earFold': return EAR_LINE;
     case 'head': {
+      // Plush: the "w" mouth is embroidered (a plushie's face doesn't move).
+      if (PLUSH && z > 0.1) {
+        const u = Math.min(1, Math.abs(x - MOUTH_AT.c[0]) / 0.042);
+        const my = MOUTH_AT.c[1] - 0.011 * Math.sin(Math.PI * u) + (0.006 * Math.max(0, u - 0.85)) / 0.15;
+        if (Math.abs(x - MOUTH_AT.c[0]) < 0.042 && Math.abs(y - my) < 0.0036) return MOUTH;
+      }
       // The dark outline all the way round each eye (where the socket meets the eye).
       if (z > 0.05) {
         const rx = Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry);
@@ -191,4 +211,31 @@ export function colorAt(p, n, bump = 0, flat = false) {
     case 'tail': return RED;
   }
   return WHITE;
+}
+
+/** Plush fur length per part (1 = full fluffy fur; 0 = none, for the stitched eyes and nose). */
+export function furAt(p) {
+  if (!PLUSH) return 0;
+  const { name } = partAt(p);
+  const q = HEAD_PARTS.has(name) ? unscale(p) : p;
+  switch (name) {
+    case 'xeye': case 'xcross': case 'sleepy': case 'nose': case 'lid': return 0;
+    case 'earFuzz': return 1.5;
+    case 'tuft': return 1.25;
+    case 'head': {
+      // No fur over the eye outlines or the stitched mouth, so they stay crisp.
+      const rx = Math.hypot((q[0] - XEYE.c[0]) / XEYE.r, (q[1] - XEYE.c[1]) / XEYE.ry);
+      const rs = Math.hypot((q[0] - SLEEPY.c[0]) / SLEEPY.r, (q[1] - SLEEPY.c[1]) / SLEEPY.ry);
+      if (q[2] > 0.05 && (rx < 1.12 || rs < 1.12)) return 0;
+      if (q[2] > 0.1 && Math.abs(q[0] - MOUTH_AT.c[0]) < 0.05 && Math.abs(q[1] - MOUTH_AT.c[1]) < 0.025) return 0.2;
+      return 1;
+    }
+    case 'ear': case 'arm': case 'hand': return 1;
+    case 'shirt': case 'sleeve': case 'collar': return 0.3;
+    case 'tie': return 0.15;
+    case 'leg': return 0.4;
+    case 'cuff': return 0; // black cuffs: fur over black reads as grey static
+    case 'shoe': return 0; // vinyl boots: no fuzz (fur over black read as grey static)
+  }
+  return 0.5;
 }

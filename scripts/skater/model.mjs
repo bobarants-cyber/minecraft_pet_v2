@@ -17,6 +17,10 @@ const len = (x, y, z) => Math.sqrt(x * x + y * y + z * z);
 /** Which Gliddy to build: '' (classic), 'real' (realistic: creased shirt, full skeleton), 'plush'. */
 export const VARIANT = globalThis.process?.env?.VARIANT ?? '';
 const REAL = VARIANT === 'real';
+export const PLUSH = VARIANT === 'plush';
+/** Plush: how much bigger the head is (scaled about the neck). */
+export const PLUSH_HEAD = 1.14;
+const NECK = [0, 0.5, 0];
 const seg2 = (px, py, ax, ay, bx, by) => {
   const ex = bx - ax, ey = by - ay, h = clamp(((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey), 0, 1);
   return Math.hypot(px - ax - ex * h, py - ay - ey * h);
@@ -82,11 +86,17 @@ function arm(S, W, palm, thumb, hand) {
   const n = norm(sub(palm, scale(hu, dot(palm, hu))));
   return { S, W, u, hu, n, thumb };
 }
-export const ARMS = [
-  // Resting: arms hanging relaxed a little out from the body, palms facing in. (His ta-da pose is an animation.)
-  arm([-0.125, 0.485, 0.0], [-0.225, 0.335, 0.04], [1, 0.1, 0.3], 1),
-  arm([0.13, 0.485, 0.0], [0.23, 0.335, 0.04], [-1, 0.1, 0.3], -1),
-];
+export const ARMS = PLUSH
+  ? [
+      // Plush: short, chunky arms sticking out a little, with mitten hands.
+      arm([-0.13, 0.47, 0.0], [-0.215, 0.375, 0.035], [1, 0.1, 0.3], 1),
+      arm([0.135, 0.47, 0.0], [0.22, 0.375, 0.035], [-1, 0.1, 0.3], -1),
+    ]
+  : [
+      // Resting: arms hanging relaxed a little out from the body, palms facing in. (His ta-da pose is an animation.)
+      arm([-0.125, 0.485, 0.0], [-0.225, 0.335, 0.04], [1, 0.1, 0.3], 1),
+      arm([0.13, 0.485, 0.0], [0.23, 0.335, 0.04], [-1, 0.1, 0.3], -1),
+    ];
 /** Each boot (mirrored per side): its centre and how far the toe turns out. */
 export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
 /** The knuckle line of each hand (for the finger bones): a point on it, and the axis the fingers bend around. */
@@ -107,7 +117,18 @@ export const SLEEPY = { c: [0.13, 0.682], r: 0.085, ry: 0.097 };
 export const NOSE = { c: [0.006, 0.632] };
 export const MOUTH = { c: [0.008, 0.598], w: 0.046, h: 0.034 };
 
+const HEAD_KEYS = ['head', 'ear', 'earFold', 'earFuzz', 'earHollow', 'tuft', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'mouthCut', 'lip', 'lipCut'];
 function parts(p) {
+  if (!PLUSH) return partsAt(p);
+  // Plush: the whole head (ears, hair and face) is bigger, scaled about the neck.
+  const d = partsAt(p);
+  const q = [NECK[0] + (p[0] - NECK[0]) / PLUSH_HEAD, NECK[1] + (p[1] - NECK[1]) / PLUSH_HEAD, NECK[2] + (p[2] - NECK[2]) / PLUSH_HEAD];
+  const h = partsAt(q);
+  for (const k of HEAD_KEYS) if (h[k] !== undefined) d[k] = h[k] * PLUSH_HEAD;
+  return d;
+}
+
+function partsAt(p) {
   const [x, y, z] = p;
   const m = [Math.abs(x), y, z]; // mirrored for pairs
   const d = {};
@@ -136,7 +157,7 @@ function parts(p) {
     // The raised cross, tilted.
     const q = local(p, [cx + 0.004, cy - 0.004, fz + 0.006], 0.35);
     // (clipped to a thin layer over the head, so from the side it doesn't stick out past his face)
-    d.xcross = Math.max(Math.min(box(q, [0.056, 0.017, 0.03], 0.006), box(q, [0.017, 0.056, 0.03], 0.006)), headRaw - 0.011);
+    d.xcross = PLUSH ? 1e3 : Math.max(Math.min(box(q, [0.056, 0.017, 0.03], 0.006), box(q, [0.017, 0.056, 0.03], 0.006)), headRaw - 0.011);
   }
   // The sleepy eye: a big eyeball, and a heavy lid over its top half whose edge sticks out.
   {
@@ -144,7 +165,7 @@ function parts(p) {
     const es = Math.hypot((x - cx) / SLEEPY.r, (y - cy) / SLEEPY.ry);
     d.sleepy = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [SLEEPY.r, SLEEPY.ry, 0.2]), headRaw - 0.004 * Math.max(0, 1 - es * es) - 0.0006);
     // The lid stands out a little (not so far that its edge and the eye's ring read as two outlines from the side).
-    const lidShell = Math.max(ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.004, SLEEPY.ry + 0.004, 0.2]), headRaw - 0.011 * Math.max(0, 1 - es * es) - 0.001);
+    const lidShell = Math.max(ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.004, SLEEPY.ry + 0.004, 0.2]), headRaw - (PLUSH ? 0.004 : 0.011) * Math.max(0, 1 - es * es) - 0.001);
     const q = local(p, [cx, cy, 0], 0.08);
     d.lid = Math.max(lidShell, -(q[1] + 0.006)); // only above the lid line (slightly tilted); its edge juts out
   }
@@ -195,8 +216,9 @@ function parts(p) {
       }
       return d0;
     };
-    var flame = blade([[0.04, 0.77], [0.11, 0.86], [-0.03, 0.9], [-0.025, 1.0]], 0.095, 0.003, 0.0, 10);
-    var lock = blade([[0.02, 0.775], [-0.08, 0.85], [-0.06, 0.925], [0.03, 0.955]], 0.08, 0.004, -0.045, 10);
+    const hk = PLUSH ? 1.35 : 1; // plush hair is soft and chunky
+    var flame = blade([[0.04, 0.77], [0.11, 0.86], [-0.03, 0.9], [-0.025, 1.0]], 0.095 * hk, 0.003 * hk * 3, 0.0, 10);
+    var lock = blade([[0.02, 0.775], [-0.08, 0.85], [-0.06, 0.925], [0.03, 0.955]], 0.08 * hk, 0.004 * hk * 3, -0.045, 10);
     // The back lock is a copy of the big front lock, smaller, tilted a little to the left, set lower and behind it,
     // so the two read as matching wavy locks. (HAIR=A builds the older flipped curl instead.)
     if (globalThis.process?.env?.HAIR !== 'A') {
@@ -233,9 +255,10 @@ function parts(p) {
     const t = clamp((y - 0.3) / 0.21, 0, 1);
     // Hangs from rounded shoulders with only a little flare, no sharp corners at the hem.
     const shoulder = Math.sqrt(Math.max(0, 1 - clamp((y - 0.455) / 0.06, 0, 1) ** 2));
-    const rx = (0.122 + 0.036 * (1 - t) ** 1.4) * (0.55 + 0.45 * shoulder), rz = (0.09 + 0.022 * (1 - t)) * (0.7 + 0.3 * shoulder);
+    const pk = PLUSH ? [1.12, 1.3] : [1, 1]; // plush: a rounder, stuffed tummy
+    const rx = (0.122 + 0.036 * (1 - t) ** 1.4) * (0.55 + 0.45 * shoulder) * pk[0], rz = (0.09 + 0.022 * (1 - t)) * (0.7 + 0.3 * shoulder) * pk[1];
     // Soft cloth folds that fade out towards the chest.
-    const fold = REAL ? shirtCreases(x, y, z, t) : 0.003 * Math.sin(Math.atan2(x, z) * 7 + 0.6) * (1 - t) ** 1.5;
+    const fold = PLUSH ? 0 : REAL ? shirtCreases(x, y, z, t) : 0.003 * Math.sin(Math.atan2(x, z) * 7 + 0.6) * (1 - t) ** 1.5;
     const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz) + fold;
     const hemY = 0.305 + 0.012 * (x / 0.16) ** 2; // the hem curves up a little at the sides
     const solid = Math.max(outer, hemY - y, y - 0.515);
@@ -275,13 +298,13 @@ function parts(p) {
       }
       const d2 = inside ? -dd : dd;
       const t2 = clamp((y - 0.3) / 0.21, 0, 1), sh2 = Math.sqrt(Math.max(0, 1 - clamp((y - 0.455) / 0.06, 0, 1) ** 2));
-      const rx2 = (0.122 + 0.036 * (1 - t2) ** 1.4) * (0.55 + 0.45 * sh2), rz2 = (0.09 + 0.022 * (1 - t2)) * (0.7 + 0.3 * sh2);
+      const rx2 = (0.122 + 0.036 * (1 - t2) ** 1.4) * (0.55 + 0.45 * sh2) * pk[0], rz2 = (0.09 + 0.022 * (1 - t2)) * (0.7 + 0.3 * sh2) * pk[1];
       const surf = rz2 * Math.sqrt(Math.max(0, 1 - (X / rx2) ** 2)) + 0.009;
       collar = Math.min(collar, Math.max(d2 - 0.004, Math.abs(z - surf) - 0.0075));
     }
     d.collar = collar;
     // The tie: a little knot and a short ragged blade with drippy ends.
-    const zf = (yy) => { const tt = clamp((yy - 0.3) / 0.21, 0, 1), sh = Math.sqrt(Math.max(0, 1 - clamp((yy - 0.455) / 0.06, 0, 1) ** 2)); return (0.09 + 0.022 * (1 - tt)) * (0.7 + 0.3 * sh) + 0.006; };
+    const zf = (yy) => { const tt = clamp((yy - 0.3) / 0.21, 0, 1), sh = Math.sqrt(Math.max(0, 1 - clamp((yy - 0.455) / 0.06, 0, 1) ** 2)); return (0.09 + 0.022 * (1 - tt)) * (0.7 + 0.3 * sh) * pk[1] + 0.006; };
     let tie = ellipsoid(p, [0.004, 0.495, zf(0.495)], [0.016, 0.014, 0.01]);
     tie = Math.min(tie, ellipsoid(p, [0.004, 0.478, zf(0.478)], [0.013, 0.015, 0.008]));
     for (const [ax, ay, bx, by, r] of [[0.004, 0.47, 0.0, 0.42, 0.012], [0.0, 0.43, -0.01, 0.4, 0.008], [0.0, 0.43, 0.012, 0.395, 0.007], [0.012, 0.395, 0.006, 0.375, 0.006], [-0.01, 0.4, -0.016, 0.384, 0.006]]) {
@@ -294,11 +317,17 @@ function parts(p) {
   {
     let arm = 1e3, hand = 1e3;
     for (const A of ARMS) {
-      arm = Math.min(arm, roundCone(p, add(A.S, scale(A.u, 0.02)), A.W, 0.028, 0.025));
+      arm = Math.min(arm, PLUSH ? roundCone(p, add(A.S, scale(A.u, 0.02)), A.W, 0.044, 0.04) : roundCone(p, add(A.S, scale(A.u, 0.02)), A.W, 0.028, 0.025));
       // The hand: a soft palm and four fat cartoon fingers fanned out, plus a thumb.
       const H = add(A.W, scale(A.hu, 0.042));
       const v = norm(cross(A.n, A.hu));
       const q = [dot(sub(p, H), A.hu), dot(sub(p, H), v), dot(sub(p, H), A.n)];
+      if (PLUSH) {
+        // A round stuffed mitten with a little thumb nub (plushies don't have fingers).
+        const mit = smin(ellipsoid(q, [0.006, 0, 0.004], [0.058, 0.054, 0.04]), ellipsoid(q, [-0.004, 0.048 * Math.sign(A.thumb), 0.012], [0.024, 0.022, 0.02]), 0.016);
+        hand = Math.min(hand, mit);
+        continue;
+      }
       let h = ellipsoid(q, [0, 0, 0], [0.056, 0.054, 0.024]);
       for (const [ang, l] of [[-0.55, 0.05], [-0.18, 0.06], [0.18, 0.06], [0.55, 0.05]]) {
         const b = [0.036 * Math.cos(ang), 0.04 * Math.sin(ang), 0.002];
@@ -318,10 +347,10 @@ function parts(p) {
 
   // --- thin legs (navy) going into big chunky black boots: a fat rounded toe turned OUT (like the drawing), and an
   // upright ankle shaft with a rolled top that the leg disappears into ---
-  d.leg = Math.max(roundCone(m, [0.048, 0.31, 0], [0.058, 0.2, 0], 0.026, 0.025), 0.006 - Math.abs(x));
+  d.leg = Math.max(PLUSH ? roundCone(m, [0.055, 0.31, 0], [0.062, 0.2, 0], 0.04, 0.038) : roundCone(m, [0.048, 0.31, 0], [0.058, 0.2, 0], 0.026, 0.025), 0.006 - Math.abs(x));
   {
     const q = local(m, BOOT.c, 0, BOOT.ry);
-    const toe = ellipsoid(q, [0, -0.004, 0.06], [0.108, 0.084, 0.15]);
+    const toe = PLUSH ? ellipsoid(q, [0, 0.0, 0.04], [0.11, 0.095, 0.14]) : ellipsoid(q, [0, -0.004, 0.06], [0.108, 0.084, 0.15]);
     const heel = ellipsoid(q, [0.004, 0.022, -0.045], [0.088, 0.086, 0.088]);
     const shaft = roundCone(m, [0.066, 0.07, -0.006], [0.062, 0.212, -0.004], 0.06, 0.05);
     // Each boot stays on its own side of the middle: where the two boots met they fused into one blob, which then
@@ -387,4 +416,4 @@ export function partAt(p) {
   return { name: best, d };
 }
 
-export const BOUNDS = { min: [-0.44, -0.01, -0.4], max: [0.5, 1.02, 0.29] };
+export const BOUNDS = PLUSH ? { min: [-0.44, -0.01, -0.4], max: [0.5, 1.16, 0.34] } : { min: [-0.44, -0.01, -0.4], max: [0.5, 1.02, 0.29] };

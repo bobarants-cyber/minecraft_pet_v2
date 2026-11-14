@@ -6,6 +6,7 @@ import { Jiniret } from '../jiniret/Jiniret.js';
 import { Cortis } from '../cortis/Cortis.js';
 import { Skater } from '../skater/Skater.js';
 import { GliddyReal } from '../skater/GliddyReal.js';
+import { GliddyPlush } from '../skater/GliddyPlush.js';
 
 /** Every mob exposes the same surface: root, joints, face, height, halfWidth, emoteLift, applyPose(), animate(). */
 export const MOBS = {
@@ -16,6 +17,10 @@ export const MOBS = {
   jiniret: { label: 'Jiniret', create: () => new Jiniret() },
   gliddy: { label: 'Gliddy', create: () => new Skater() },
   gliddyReal: { label: 'Gliddy (realistic)', create: () => new GliddyReal() },
+  gliddyPlush: { label: 'Gliddy (plush)', create: () => new GliddyPlush() },
+  gliddyPlushPink: { label: 'Gliddy (plush, pink)', create: () => new GliddyPlush({ shirt: 0xf6a5c0 }) },
+  gliddyPlushMint: { label: 'Gliddy (plush, mint)', create: () => new GliddyPlush({ shirt: 0x9fe3c8 }) },
+  gliddyPlushBlack: { label: 'Gliddy (plush, black)', create: () => new GliddyPlush({ shirt: 0x2a2a30 }) },
   cortisYellow: { label: 'CORTIS (yellow)', create: () => new Cortis('yellow') },
   cortisWhite: { label: 'CORTIS (white)', create: () => new Cortis('white') },
   cortisBlue: { label: 'CORTIS (blue)', create: () => new Cortis('blue') },

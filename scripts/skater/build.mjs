@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRMeshQuantization, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { MeshoptEncoder } from 'meshoptimizer';
-import { colorAt, weightsAt as weightsBase, PIVOTS as PIVOTS_BASE } from './regions.mjs';
+import { colorAt, furAt, weightsAt as weightsBase, PIVOTS as PIVOTS_BASE } from './regions.mjs';
 import * as REAL from './rig-real.mjs';
 // VARIANT=real builds the realistic Gliddy: a full human-like skeleton (see rig-real.mjs).
 const IS_REAL = process.env.VARIANT === 'real';
@@ -114,6 +114,10 @@ for (let i = 0; i < n; i++) {
   list.forEach(([b, x], k) => { J[4 * i + k] = b; W[4 * i + k] = x / total; });
 }
 
+// Plush: how long the fur is at each vertex (the app grows fur shells from it; 0 everywhere for other versions).
+const FUR = new Float32Array(n);
+for (let i = 0; i < n; i++) FUR[i] = furAt(v(i));
+
 const doc = new Document();
 const buffer = doc.createBuffer();
 const mat = doc.createMaterial('skater').setRoughnessFactor(0.85).setMetallicFactor(0);
@@ -146,6 +150,7 @@ const prim = doc.createPrimitive().setMaterial(mat)
   .setAttribute('COLOR_0', acc('VEC4', C))
   .setAttribute('JOINTS_0', acc('VEC4', J))
   .setAttribute('WEIGHTS_0', acc('VEC4', W))
+  .setAttribute('_FUR', acc('SCALAR', FUR))
   .setIndices(acc('SCALAR', new Uint32Array(idx)));
 root.addChild(doc.createNode('mesh').setMesh(doc.createMesh('skater').addPrimitive(prim)).setSkin(skin));
 console.log('vertices', n, 'triangles', idx.length / 3);
