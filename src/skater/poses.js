@@ -126,7 +126,7 @@ export function parsePose(text) {
   if (/\blean\b/.test(t) && side !== 'both') return { joints: { chest: [0, 0, side === 'L' ? 20 : -20], spine: [0, 0, side === 'L' ? 12 : -12] }, say: '↔️' };
   if (/\btwist|turn your (?:body|chest)/.test(t)) return { joints: { chest: [0, side === 'R' ? -35 : 35, 0], spine: [0, side === 'R' ? -20 : 20, 0] }, say: '🌀' };
   // Legs
-  if (/\b(?:raise|lift|kick)\b.*\b(?:leg|foot|knee)\b/.test(t)) return { joints: side === 'R' ? { hipR: [70, 0, 0], kneeR: 60 } : { hipL: [70, 0, 0], kneeL: 60 }, say: '🦵' };
+  if (/\b(?:raise|lift|kick)\b.*\b(?:leg|foot|knee)\b/.test(t)) return { joints: side === 'R' ? { hipR: [95, 0, 0], kneeR: 25 } : { hipL: [95, 0, 0], kneeL: 25 }, say: '🦵' };
   if (/\bbend\b.*\bknees?\b|\bsquat\b|\bcrouch\b/.test(t)) return { joints: { ...both('knee', 50), ...both('hip', [35, 0, 0]), ...both('ankle', [-20, 0, 0]) }, say: 'Bendy 🦵' };
   // Ears
   if (/\bwiggle\b.*\bears?\b|\bears?\b.*\b(?:up|down|back)\b/.test(t)) return { joints: { earL: [/\bdown|back\b/.test(t) ? 35 : -25, 0, 15], earR: [/\bdown|back\b/.test(t) ? 35 : -25, 0, 15] }, say: '🐹' };

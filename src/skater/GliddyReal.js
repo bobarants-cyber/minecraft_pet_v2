@@ -93,6 +93,7 @@ export class GliddyReal extends Skater {
     const t = this.time;
     const r = this.ride ?? 0;
 
+    B.body.position.y = 0;
     // Spine and chest: breathing, a little of the lean, and a relaxed sway.
     B.spine.rotation.set(p.torsoPitch * 0.3 + (this.lean ?? 0) * 0.2, 0, Math.sin(t * 0.6) * 0.015);
     B.chest.rotation.set(-breath * 0.012 + p.torsoPitch * 0.2, p.torsoYaw * 0.3, 0);
@@ -296,6 +297,37 @@ export class GliddyReal extends Skater {
     // A custom pose (named or by joints) blends over the animation, then hands are kept out of the head and body.
     if (this.custom) this.#applyCustom();
     this.#keepHandsOut();
+    this.#plantFeet();
+  }
+
+  /** Feet stay flat on the floor and the hips come down as the knees bend (unless he's lifting a leg or riding). */
+  #plantFeet() {
+    const B = this.B, model = this.parts.model;
+    if (!model || (this.ride ?? 0) > 0.05) {
+      B.body.position.y = 0;
+      return;
+    }
+    const lifting = this.custom && ['hipL', 'hipR'].some((k) => this.custom.joints[k] && !this.custom.joints[k === 'hipL' ? 'hipR' : 'hipL']);
+    model.updateWorldMatrix(true, true);
+    const qModelInv = model.getWorldQuaternion(new THREE.Quaternion()).invert();
+    let lowest = Infinity;
+    for (const s of ['R', 'L']) {
+      const foot = B[`foot_${s}`];
+      const hipKey = `hip${s === 'R' ? 'L' : 'R'}`; // bone _R is his left leg
+      const lifted = lifting && this.custom.joints[hipKey];
+      if (!lifted && !(this.custom?.joints[`ankle${s === 'R' ? 'L' : 'R'}`])) {
+        // Undo whatever tilt the leg above gives it, so the sole stays level.
+        const qShin = qModelInv.clone().multiply(foot.parent.getWorldQuaternion(new THREE.Quaternion()));
+        foot.quaternion.copy(qShin.invert());
+        foot.updateWorldMatrix(false, true);
+      }
+      if (lifted) continue; // a lifted leg doesn't decide where the floor is
+      const p = foot.getWorldPosition(new THREE.Vector3());
+      model.worldToLocal(p);
+      lowest = Math.min(lowest, p.y);
+    }
+    // Bind pose ankles are at 0.2 (model units): drop the whole body by however much the lower foot has risen.
+    if (lowest < Infinity) B.body.position.y -= lowest - 0.2;
   }
 }
 
