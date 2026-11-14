@@ -2,20 +2,21 @@
 // Colours from the original drawing: tan-orange fur on top of the head, ears, hands and around his sleepy eye; white
 // face; one white eye stitched with a black X, one half-closed purple eye; pink tongue; white shirt with a grey tear;
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
-import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, VARIANT, shirtCreases, PLUSH, PLUSH_HEAD, MOUTH as MOUTH_AT, NOSE as NOSE_AT } from './model.mjs';
+import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, VARIANT, shirtCreases, PLUSH, plushOrig, plushPlace, MOUTH as MOUTH_AT, NOSE as NOSE_AT } from './model.mjs';
 
 const HEAD_PARTS = new Set(['head', 'ear', 'earFold', 'earFuzz', 'tuft', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'mouth', 'lip']);
-/** Plush: the head is scaled up about the neck, so head colours are worked out back at the classic head's size. */
-const unscale = (p) => [p[0] / PLUSH_HEAD, 0.5 + (p[1] - 0.5) / PLUSH_HEAD, p[2] / PLUSH_HEAD];
+/** Plush: a bigger head and a squat body, so colours and weights are worked out back in the classic shape. */
+const toOrig = (p, name) => (PLUSH ? plushOrig(p, HEAD_PARTS.has(name)) : p);
 
-export const PIVOTS = { head: [0, 0.5, 0], arm_R: ARMS[1].S, arm_L: ARMS[0].S, leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
+const PIVOTS0 = { head: [0, 0.5, 0], arm_R: ARMS[1].S, arm_L: ARMS[0].S, leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
+export const PIVOTS = PLUSH ? Object.fromEntries(Object.entries(PIVOTS0).map(([k, v]) => [k, plushPlace(v, false)])) : PIVOTS0;
 
 export const GROUP = {
   head: 'head', lip: 'head', ear: 'head', earFold: 'head', earFuzz: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
   nose: 'head', tongue: 'head', tooth: 'head', mouth: 'head',
   shirt: 'body', collar: 'body', tie: 'body',
   sleeve: 'arm', arm: 'arm', hand: 'arm',
-  leg: 'leg', cuff: 'leg', shoe: 'leg', tail: 'body',
+  leg: 'leg', cuff: 'leg', shoe: 'leg', tail: 'body', ...(PLUSH ? { tag: 'body' } : {}),
 };
 
 /**
@@ -35,12 +36,13 @@ export function ownPart(p) {
   return { name, d };
 }
 
-export function weightsAt(p) {
-  const { name, d } = ownPart(p);
+export function weightsAt(p0) {
+  const { name, d } = ownPart(p0);
+  const p = toOrig(p0, name);
   const g = GROUP[name] ?? 'body';
   const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0, fingers_R: 0, fingers_L: 0 };
   const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';
-  if (name === 'shirt' || name === 'tie') {
+  if (name === 'shirt' || name === 'tie' || name === 'tag') {
     const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
     w.hem = h;
     w.body = 1 - h;
@@ -124,9 +126,14 @@ const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 export function colorAt(p0, n, bump = 0, flat = false) {
   const { name } = partAt(p0);
-  const p = PLUSH && HEAD_PARTS.has(name) ? unscale(p0) : p0;
+  const p = toOrig(p0, name);
   const [x, y, z] = p;
   switch (name) {
+    case 'tag': {
+      // White satin tag with a little red heart printed on it.
+      const hx = Math.abs(x + 0.085) * 1.2, hy = y - 0.285;
+      return Math.hypot(hx - 0.004, hy) < 0.0075 || (hy < 0 && hx < 0.012 + hy * 1.2 && hy > -0.012) ? RED : WHITE;
+    }
     case 'xcross': return BLACK;
     case 'xeye': {
       if (Math.hypot((x - XEYE.c[0]) / XEYE.r, (y - XEYE.c[1]) / XEYE.ry) > 0.955) return BLACK;
@@ -185,6 +192,8 @@ export function colorAt(p0, n, bump = 0, flat = false) {
         if (rs > 0.95 && rs < 1.06) return BLACK; // the outline round the bottom, same as the X eye
         if (rs <= 0.95) return y > SLEEPY.c[1] + 0.006 ? LID : WHITE;
       }
+      // Plush: the sewing seam down the back of the head, from the crown to the neck (a slightly sunken darker line).
+      if (PLUSH && z < -0.01 && Math.abs(x) < 0.0026) return TAN.map((c) => c * 0.72);
       return blend(TAN, WHITE, isWhiteFace(p));
     }
     case 'shirt': case 'sleeve': case 'collar': {
@@ -192,7 +201,7 @@ export function colorAt(p0, n, bump = 0, flat = false) {
       if (VARIANT !== 'real' || flat) return SHIRT; // (flat: the edge-sharpening pass only cares about real colour edges)
       if (name !== 'shirt') return SHIRT;
       const t = Math.min(1, Math.max(0, (y - 0.3) / 0.21));
-      const k = Math.min(0.16, Math.max(0, shirtCreases(x, y, z, t) / 0.007) * 0.12);
+      const k = Math.min(0.24, Math.max(0, shirtCreases(x, y, z, t) / 0.011) * 0.2);
       return SHIRT.map((c) => c * (1 - k));
     }
     case 'tie': return TIE;
@@ -217,8 +226,9 @@ export function colorAt(p0, n, bump = 0, flat = false) {
 export function furAt(p) {
   if (!PLUSH) return 0;
   const { name } = partAt(p);
-  const q = HEAD_PARTS.has(name) ? unscale(p) : p;
+  const q = toOrig(p, name);
   switch (name) {
+    case 'tag': return 0;
     case 'xeye': case 'xcross': case 'sleepy': case 'nose': case 'lid': return 0;
     case 'earFuzz': return 1.5;
     case 'tuft': return 1.25;

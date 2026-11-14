@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app } from 'electron';
 
 export const SIZES = { small: 150, medium: 210, large: 290 };
-export const MOBS = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari', wolfchan: 'Wolf Chan', jiniret: 'Jiniret', gliddy: 'Gliddy', gliddyReal: 'Gliddy (realistic)', gliddyPlush: 'Gliddy (plush)', gliddyPlushPink: 'Gliddy (plush, pink)', gliddyPlushMint: 'Gliddy (plush, mint)', gliddyPlushBlack: 'Gliddy (plush, black)', cortisYellow: 'CORTIS (yellow)', cortisWhite: 'CORTIS (white)', cortisBlue: 'CORTIS (blue)', cortisPink: 'CORTIS (pink)', cortisGreen: 'CORTIS (green)' };
+export const MOBS = { bee: 'Bee', axolotl: 'Axolotl', bbokari: 'Bbokari', wolfchan: 'Wolf Chan', jiniret: 'Jiniret', gliddy: 'Gliddy', gliddyReal: 'Gliddy (realistic)', gliddyPlush: 'Gliddy (plush)', gliddyPlushStrawberry: 'Gliddy plush: Strawberry', gliddyPlushMint: 'Gliddy plush: Mint', gliddyPlushMidnight: 'Gliddy plush: Midnight', gliddyPlushChoco: 'Gliddy plush: Chocolate', gliddyPlushMini: 'Gliddy plush: Mini keychain', cortisYellow: 'CORTIS (yellow)', cortisWhite: 'CORTIS (white)', cortisBlue: 'CORTIS (blue)', cortisPink: 'CORTIS (pink)', cortisGreen: 'CORTIS (green)' };
 /** Caption translation targets, keyed by Whisper's language names. */
 export const CAPTION_LANGUAGES = {
   english: 'English',

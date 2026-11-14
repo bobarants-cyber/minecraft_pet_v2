@@ -284,7 +284,7 @@ export class Skater extends Bbokari {
     rz += r * (0.55 + stroke * 0.2 * dir);
     lz += r * (0.55 - stroke * 0.2 * dir);
     // Raised arms stop out to the side of his big head (never through it), and turn so the open palm faces you.
-    const cap = 1.4 + r * 0.4;
+    const cap = (this.armCap ?? 1.4) + r * 0.4; // (the plush's huge head needs its arms to stop lower)
     // ...and come a little forward as they go up, so the hand passes in front of his head, not into it.
     rx -= clamp(p.armRaiseR / 1.3, 0, 1) * 0.5 * (1 - r);
     lx -= clamp(p.armRaiseL / 1.3, 0, 1) * 0.5 * (1 - r);
@@ -307,7 +307,7 @@ export class Skater extends Bbokari {
     const r = ease(this.ride);
     const b = this.board;
     // On his back: upright, wheels out, slung diagonally. Riding: flat under his feet along the way he goes.
-    const back = new THREE.Vector3(0.02, 0.7, -0.3); // high enough that its end doesn't show between his legs
+    const back = this.boardBack ?? new THREE.Vector3(0.02, 0.7, -0.3); // high enough that its end doesn't show between his legs
     const under = new THREE.Vector3(0, 0.006, 0.02);
     b.position.lerpVectors(back, under, r);
     b.position.y += Math.sin(Math.PI * this.ride) * 0.15; // it swings round in an arc

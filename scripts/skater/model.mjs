@@ -18,9 +18,21 @@ const len = (x, y, z) => Math.sqrt(x * x + y * y + z * z);
 export const VARIANT = globalThis.process?.env?.VARIANT ?? '';
 const REAL = VARIANT === 'real';
 export const PLUSH = VARIANT === 'plush';
-/** Plush: how much bigger the head is (scaled about the neck). */
-export const PLUSH_HEAD = 1.14;
+/** Plush: how much bigger the head is (scaled about the neck), and how the body is squashed (short and stout). */
+export const PLUSH_HEAD = 1.42;
+const PLUSH_BODY = [1.12, 0.84, 1.12];
 const NECK = [0, 0.5, 0];
+const NECK_P = [0, 0.5 * PLUSH_BODY[1] + 0.045, 0]; // the head sits on top of the shirt (its chin hung over it)
+/** Plush → classic coordinates (head parts use the head's transform, everything else the body's). */
+export function plushOrig(p, head) {
+  if (head) return [(p[0] - NECK_P[0]) / PLUSH_HEAD + NECK[0], (p[1] - NECK_P[1]) / PLUSH_HEAD + NECK[1], (p[2] - NECK_P[2]) / PLUSH_HEAD + NECK[2]];
+  return [p[0] / PLUSH_BODY[0], p[1] / PLUSH_BODY[1], p[2] / PLUSH_BODY[2]];
+}
+/** Classic → plush coordinates (for joints). */
+export function plushPlace(q, head) {
+  if (head) return [(q[0] - NECK[0]) * PLUSH_HEAD + NECK_P[0], (q[1] - NECK[1]) * PLUSH_HEAD + NECK_P[1], (q[2] - NECK[2]) * PLUSH_HEAD + NECK_P[2]];
+  return [q[0] * PLUSH_BODY[0], q[1] * PLUSH_BODY[1], q[2] * PLUSH_BODY[2]];
+}
 const seg2 = (px, py, ax, ay, bx, by) => {
   const ex = bx - ax, ey = by - ay, h = clamp(((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey), 0, 1);
   return Math.hypot(px - ax - ex * h, py - ay - ey * h);
@@ -29,14 +41,14 @@ const seg2 = (px, py, ax, ay, bx, by) => {
 export function shirtCreases(x, y, z, t) {
   const a = Math.atan2(x, z), ax = Math.abs(x);
   // Hanging drape folds round the skirt, uneven like real cotton, fading out up the chest.
-  let c = 0.007 * Math.sin(a * 6.5 + 0.6 + 0.9 * Math.sin(a * 2.3)) * (1 - t) ** 1.3;
+  let c = 0.011 * Math.sin(a * 6.5 + 0.6 + 0.9 * Math.sin(a * 2.3)) * (1 - t) ** 1.3;
   // Diagonal pull creases from each armpit down towards the middle, front and back (two per side).
   for (const [x0, y0, x1, y1, k] of [[0.118, 0.452, 0.04, 0.37, 1], [0.112, 0.43, 0.06, 0.34, 0.7]]) {
     const d = seg2(ax, y, x0, y0, x1, y1);
-    c += 0.0048 * k * Math.exp(-((d / 0.007) ** 2));
+    c += 0.0075 * k * Math.exp(-((d / 0.0085) ** 2));
   }
   // Little compression ripples at the waist where the shirt bunches.
-  c += 0.002 * Math.sin(y * 260 + a * 2) * Math.exp(-(((y - 0.335) / 0.02) ** 2));
+  c += 0.0032 * Math.sin(y * 260 + a * 2) * Math.exp(-(((y - 0.335) / 0.02) ** 2));
   return c;
 }
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -117,13 +129,18 @@ export const SLEEPY = { c: [0.13, 0.682], r: 0.085, ry: 0.097 };
 export const NOSE = { c: [0.006, 0.632] };
 export const MOUTH = { c: [0.008, 0.598], w: 0.046, h: 0.034 };
 
+/** Plush: how much each body part is puffed up (stuffing). */
+const PUFF = { arm: 0.006, hand: 0.006, leg: 0.005, shoe: 0.006, cuff: 0.004 };
 const HEAD_KEYS = ['head', 'ear', 'earFold', 'earFuzz', 'earHollow', 'tuft', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'mouthCut', 'lip', 'lipCut'];
 function parts(p) {
   if (!PLUSH) return partsAt(p);
-  // Plush: the whole head (ears, hair and face) is bigger, scaled about the neck.
-  const d = partsAt(p);
-  const q = [NECK[0] + (p[0] - NECK[0]) / PLUSH_HEAD, NECK[1] + (p[1] - NECK[1]) / PLUSH_HEAD, NECK[2] + (p[2] - NECK[2]) / PLUSH_HEAD];
-  const h = partsAt(q);
+  // Plush: a short, stout stuffed body (squashed, and puffed up a little) under a much bigger head (scaled about the
+  // neck), the proportions of a plushie. Distances are scaled back so the field stays a true distance.
+  const b = partsAt(plushOrig(p, false));
+  const d = {};
+  const sb = Math.min(...PLUSH_BODY);
+  for (const k of Object.keys(b)) d[k] = b[k] * sb - (PUFF[k] ?? 0);
+  const h = partsAt(plushOrig(p, true));
   for (const k of HEAD_KEYS) if (h[k] !== undefined) d[k] = h[k] * PLUSH_HEAD;
   return d;
 }
@@ -252,15 +269,15 @@ function partsAt(p) {
 
   // --- shirt: hollow A-line with a rolled hem, front seam, collar, short wide sleeves ---
   {
-    const t = clamp((y - 0.3) / 0.21, 0, 1);
+    const t = PLUSH ? clamp((y - 0.255) / 0.255, 0, 1) : clamp((y - 0.3) / 0.21, 0, 1);
     // Hangs from rounded shoulders with only a little flare, no sharp corners at the hem.
     const shoulder = Math.sqrt(Math.max(0, 1 - clamp((y - 0.455) / 0.06, 0, 1) ** 2));
-    const pk = PLUSH ? [1.12, 1.3] : [1, 1]; // plush: a rounder, stuffed tummy
+    const pk = PLUSH ? [1.04, 1.18] : [1, 1]; // plush: a rounder, stuffed tummy
     const rx = (0.122 + 0.036 * (1 - t) ** 1.4) * (0.55 + 0.45 * shoulder) * pk[0], rz = (0.09 + 0.022 * (1 - t)) * (0.7 + 0.3 * shoulder) * pk[1];
     // Soft cloth folds that fade out towards the chest.
     const fold = PLUSH ? 0 : REAL ? shirtCreases(x, y, z, t) : 0.003 * Math.sin(Math.atan2(x, z) * 7 + 0.6) * (1 - t) ** 1.5;
     const outer = (Math.sqrt((x / rx) ** 2 + (z / rz) ** 2) - 1) * Math.min(rx, rz) + fold;
-    const hemY = 0.305 + 0.012 * (x / 0.16) ** 2; // the hem curves up a little at the sides
+    const hemY = (PLUSH ? 0.258 : 0.305) + 0.012 * (x / 0.16) ** 2; // (plush: a longer shirt over his stubby legs) // the hem curves up a little at the sides
     const solid = Math.max(outer, hemY - y, y - 0.515);
     let shirt = Math.max(Math.abs(outer + 0.006) - 0.006, hemY - y, y - 0.515); // a cloth shell, open at the bottom
     shirt = Math.min(shirt, Math.max(Math.abs(outer) - 0.009, Math.abs(y - hemY - 0.004) - 0.007)); // rolled hem
@@ -311,6 +328,12 @@ function partsAt(p) {
       tie = smin(tie, roundCone(p, [ax, ay, zf(ay)], [bx, by, zf(by)], r, r * 0.8), 0.006);
     }
     d.tie = tie;
+    // Plush: the sewn-in fabric tag hanging from his side seam, like every plushie has.
+    if (PLUSH) {
+      // On his back, low on the left, hanging below the hem; flat against the back (thin along z).
+      const q = local(p, [-0.085, 0.29, -0.104], 0.12, -0.55);
+      d.tag = Math.max(box(q, [0.02, 0.036, 0.0028], 0.002), y - 0.33);
+    }
   }
 
   // --- arms and hands (tan), in his pose: right arm up and out with an open palm, left arm pointing out ---
@@ -397,11 +420,12 @@ export function sdf(p) {
   s = smin(s, d.hand, 0.012);
   // ...with the clothes over it (sharp joins: cloth doesn't melt into skin).
   // At the neck the shirt melts softly into the head (a hard join left a scratchy seam of crossing surfaces).
-  s = p[1] > 0.47 ? smin(s, d.shirt, 0.012) : Math.min(s, d.shirt);
+  s = p[1] > (PLUSH ? 0.47 * PLUSH_BODY[1] : 0.47) ? smin(s, d.shirt, 0.012) : Math.min(s, d.shirt);
   s = Math.min(s, d.sleeve);
 
   s = Math.min(s, d.collar);
   s = Math.min(s, d.tie);
+  if (PLUSH) s = Math.min(s, d.tag);
   return s;
 }
 
@@ -409,11 +433,12 @@ export function sdf(p) {
 export function partAt(p) {
   const d = parts(p);
   let best = 'head', bd = Infinity;
-  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'earFuzz', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe', 'tail']) {
+  for (const k of ['head', 'lip', 'tuft', 'ear', 'earFold', 'earFuzz', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'shirt', 'sleeve', 'collar', 'tie', 'arm', 'hand', 'leg', 'cuff', 'shoe', 'tail', 'tag']) {
+    if (d[k] === undefined) continue;
     const v = Math.abs(d[k]);
     if (v < bd) { bd = v; best = k; }
   }
   return { name: best, d };
 }
 
-export const BOUNDS = PLUSH ? { min: [-0.44, -0.01, -0.4], max: [0.5, 1.16, 0.34] } : { min: [-0.44, -0.01, -0.4], max: [0.5, 1.02, 0.29] };
+export const BOUNDS = PLUSH ? { min: [-0.5, -0.01, -0.42], max: [0.52, 1.28, 0.4] } : { min: [-0.44, -0.01, -0.4], max: [0.5, 1.02, 0.29] };
