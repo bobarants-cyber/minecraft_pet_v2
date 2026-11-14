@@ -63,8 +63,8 @@ function arm(S, W, palm, thumb, hand) {
 }
 export const ARMS = [
   // Resting: arms hanging relaxed a little out from the body, palms facing in. (His ta-da pose is an animation.)
-  arm([-0.115, 0.485, 0.0], [-0.2, 0.335, 0.04], [1, 0.1, 0.3], 1),
-  arm([0.12, 0.485, 0.0], [0.205, 0.335, 0.04], [-1, 0.1, 0.3], -1),
+  arm([-0.125, 0.485, 0.0], [-0.225, 0.335, 0.04], [1, 0.1, 0.3], 1),
+  arm([0.13, 0.485, 0.0], [0.23, 0.335, 0.04], [-1, 0.1, 0.3], -1),
 ];
 /** Each boot (mirrored per side): its centre and how far the toe turns out. */
 export const BOOT = { c: [0.118, 0.084, 0.05], ry: 0.55 };
@@ -109,7 +109,9 @@ function parts(p) {
     const [cx, cy] = XEYE.c, fz = faceZ(cx, cy);
     // The eye is a thin cap that follows the curve of his head, standing just proud of it (no socket, so turning
     // him never shows a second ring, and it can't bulge out past its outline at the sides).
-    d.xeye = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [XEYE.r, XEYE.ry, 0.2]), headRaw - 0.004);
+    // It tapers to nothing at its edge, so there's no side wall to show as a thick black band from the side.
+    const ex = Math.hypot((x - cx) / XEYE.r, (y - cy) / XEYE.ry);
+    d.xeye = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [XEYE.r, XEYE.ry, 0.2]), headRaw - 0.004 * Math.max(0, 1 - ex * ex) - 0.0006);
     // The raised cross, tilted.
     const q = local(p, [cx + 0.004, cy - 0.004, fz + 0.006], 0.35);
     // (clipped to a thin layer over the head, so from the side it doesn't stick out past his face)
@@ -118,8 +120,10 @@ function parts(p) {
   // The sleepy eye: a big eyeball, and a heavy lid over its top half whose edge sticks out.
   {
     const [cx, cy] = SLEEPY.c, fz = faceZ(cx, cy);
-    d.sleepy = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [SLEEPY.r, SLEEPY.ry, 0.2]), headRaw - 0.004);
-    const lidShell = ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.01, SLEEPY.ry + 0.009, 0.066]);
+    const es = Math.hypot((x - cx) / SLEEPY.r, (y - cy) / SLEEPY.ry);
+    d.sleepy = Math.max(ellipsoid(p, [cx, cy, fz - 0.06], [SLEEPY.r, SLEEPY.ry, 0.2]), headRaw - 0.004 * Math.max(0, 1 - es * es) - 0.0006);
+    // The lid stands out a little (not so far that its edge and the eye's ring read as two outlines from the side).
+    const lidShell = Math.max(ellipsoid(p, [cx, cy - 0.004, fz - 0.04], [SLEEPY.r + 0.004, SLEEPY.ry + 0.004, 0.2]), headRaw - 0.011 * Math.max(0, 1 - es * es) - 0.001);
     const q = local(p, [cx, cy, 0], 0.08);
     d.lid = Math.max(lidShell, -(q[1] + 0.006)); // only above the lid line (slightly tilted); its edge juts out
   }
@@ -337,7 +341,8 @@ export function sdf(p) {
   s = smin(s, d.arm, 0.01);
   s = smin(s, d.hand, 0.012);
   // ...with the clothes over it (sharp joins: cloth doesn't melt into skin).
-  s = Math.min(s, d.shirt);
+  // At the neck the shirt melts softly into the head (a hard join left a scratchy seam of crossing surfaces).
+  s = p[1] > 0.47 ? smin(s, d.shirt, 0.012) : Math.min(s, d.shirt);
   s = Math.min(s, d.sleeve);
 
   s = Math.min(s, d.collar);

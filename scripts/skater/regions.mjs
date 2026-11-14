@@ -4,9 +4,9 @@
 // navy trousers; big black shoes with white soles. (His red cape became the skateboard, which is built in the app.)
 import { partAt, XEYE, SLEEPY, BOOT, ARMS, FINGERS, NOSE as NOSE_AT } from './model.mjs';
 
-export const PIVOTS = { head: [0, 0.5, 0], arm_R: [0.115, 0.49, 0], arm_L: [-0.11, 0.49, 0], leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
+export const PIVOTS = { head: [0, 0.5, 0], arm_R: ARMS[1].S, arm_L: ARMS[0].S, leg_R: [0.05, 0.3, 0], leg_L: [-0.05, 0.3, 0], hem: [0, 0.47, 0], fingers_R: FINGERS[1].K, fingers_L: FINGERS[0].K };
 
-const GROUP = {
+export const GROUP = {
   head: 'head', lip: 'head', ear: 'head', earFold: 'head', earFuzz: 'head', tuft: 'head', xeye: 'head', xcross: 'head', sleepy: 'head', lid: 'head',
   nose: 'head', tongue: 'head', tooth: 'head', mouth: 'head',
   shirt: 'body', collar: 'body', tie: 'body',
@@ -19,16 +19,20 @@ const GROUP = {
  * gradually follows a "hem" bone that sways and lifts as he moves, and the sleeves blend from the shoulder (half body,
  * half arm) to their ends (all arm), so they stretch with the arm instead of looking glued on.
  */
-export function weightsAt(p) {
+/** The part a surface point belongs to: the closest one it isn't inside of (keeps the arm and the shirt apart). */
+export function ownPart(p) {
   const { d } = partAt(p);
-  // A point on the outside of the figure sits on one part's surface and outside all the others, so the part it
-  // belongs to is the closest one it isn't inside of (this keeps the arm and the shirt beside it apart).
   let name = 'head', best = Infinity;
   for (const k of Object.keys(GROUP)) {
     const v = d[k];
     if (v === undefined || v < -0.0015) continue;
     if (v < best) { best = v; name = k; }
   }
+  return { name, d };
+}
+
+export function weightsAt(p) {
+  const { name, d } = ownPart(p);
   const g = GROUP[name] ?? 'body';
   const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0, fingers_R: 0, fingers_L: 0 };
   const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';
@@ -36,11 +40,20 @@ export function weightsAt(p) {
     const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
     w.hem = h;
     w.body = 1 - h;
+    // Shirt right next to a sleeve shares a little of the arm's movement (the other half of that soft band).
+    if (name === 'shirt' && p[1] > 0.36) {
+      const s2 = 0.5 * (1 - Math.min(1, Math.max(0, d.sleeve / 0.05))) ** 1.4;
+      w[armKey] = s2;
+      w.body *= 1 - s2;
+      w.hem *= 1 - s2;
+    }
   } else if (name === 'sleeve') {
     const A = ARMS[p[0] > 0 ? 1 : 0];
     const along = (p[0] - A.S[0]) * A.u[0] + (p[1] - A.S[1]) * A.u[1] + (p[2] - A.S[2]) * A.u[2];
     // Only the very top of the sleeve, tucked into the shoulder, eases between body and arm.
-    const a = Math.min(1, Math.max(0.8, 0.8 + (along + 0.01) / 0.03 * 0.2));
+    // Where the sleeve joins the shirt it eases between body and arm over a band, so lifting the arm stretches the
+    // cloth gently instead of tearing one row of triangles into long streaks.
+    const a = 0.5 + 0.5 * Math.min(1, Math.max(0, d.shirt / 0.05)) ** 0.7;
     w[armKey] = a;
     w.body = 1 - a;
   } else if (name === 'hand') {
@@ -94,11 +107,13 @@ function isWhiteFace([x, y, z]) {
   if (side > 2.1) return 0;
   const eyeY = (XEYE.c[1] + SLEEPY.c[1]) / 2;
   // Outside the channel, the edge sits at eye level (a touch lower on the sleepy-eye side), dropping as it wraps round.
-  let top = eyeY + (x > 0 ? 0.03 : 0.075) - 0.16 * Math.max(0, side - 0.95) ** 1.5;
+  // On the sides the edge sweeps down in a smooth curve round the cheek and ends below the ear, well before the back.
+  // Round the side the edge curves down steeply over the cheek, so from the side it's a rounded curve, not a line.
+  let top = eyeY + (x > 0 ? 0.03 : 0.075) - 0.55 * Math.max(0, side - 0.8) ** 1.25;
   // The channel between the eyes, down to the nose (its sides are the eye outlines, so it's as wide as the gap).
   const inner0 = XEYE.c[0] + XEYE.r * 0.95, inner1 = SLEEPY.c[0] - SLEEPY.r * 0.95;
   if (z > 0.05 && x > inner0 - 0.01 && x < inner1 + 0.01) top = Math.min(top, NOSE_AT.c[1] + 0.012);
-  return soft(top - y, 0.012) * soft((2.1 - side) * 0.2);
+  return soft(top - y, 0.012);
 }
 
 const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);

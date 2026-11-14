@@ -306,7 +306,7 @@ export class Skater extends Bbokari {
     const r = ease(this.ride);
     const b = this.board;
     // On his back: upright, wheels out, slung diagonally. Riding: flat under his feet along the way he goes.
-    const back = new THREE.Vector3(0.02, 0.62, -0.3);
+    const back = new THREE.Vector3(0.02, 0.7, -0.3); // high enough that its end doesn't show between his legs
     const under = new THREE.Vector3(0, 0.006, 0.02);
     b.position.lerpVectors(back, under, r);
     b.position.y += Math.sin(Math.PI * this.ride) * 0.15; // it swings round in an arc

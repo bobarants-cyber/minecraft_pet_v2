@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRMeshQuantization, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { MeshoptEncoder } from 'meshoptimizer';
-import { colorAt, weightsAt, PIVOTS } from './regions.mjs';
+import { colorAt, weightsAt as weightsBase, PIVOTS as PIVOTS_BASE } from './regions.mjs';
+import * as REAL from './rig-real.mjs';
+// VARIANT=real builds the realistic Gliddy: a full human-like skeleton (see rig-real.mjs).
+const IS_REAL = process.env.VARIANT === 'real';
+const PIVOTS = IS_REAL ? REAL.PIVOTS : PIVOTS_BASE;
+const PARENTS = IS_REAL ? REAL.PARENTS : { fingers_R: 'arm_R', fingers_L: 'arm_L' };
+const weightsAt = IS_REAL ? REAL.weightsAt : weightsBase;
 
 const { P: P0 } = JSON.parse(fs.readFileSync(process.env.WORK + '/norm.json'));
 const { idx: idx0 } = JSON.parse(fs.readFileSync(process.env.WORK + '/simp.json'));
@@ -98,7 +104,7 @@ for (let i = 0; i < n; i++) { const c = colorAt(v(i), [N[3 * i], N[3 * i + 1], N
 
 // One skinned mesh with a small skeleton: body → head, arms, legs. Each vertex follows its nearest bones and blends
 // smoothly across the joints, so moving a limb bends the surface instead of opening a seam.
-const BONES = ['body', 'head', 'arm_R', 'arm_L', 'leg_R', 'leg_L', 'hem', 'fingers_R', 'fingers_L'];
+const BONES = ['body', ...Object.keys(PIVOTS).filter((k) => k !== 'body')];
 const J = new Uint16Array(n * 4);
 const W = new Float32Array(n * 4);
 for (let i = 0; i < n; i++) {
@@ -119,9 +125,9 @@ const acc = (type, arr) => doc.createAccessor().setType(type).setArray(arr).setB
 const bones = {};
 bones.body = doc.createNode('body');
 root.addChild(bones.body);
+// Parents are created before their children (PIVOTS lists them in that order).
 for (const name of BONES.slice(1)) {
-  // Finger bones hang off their arm (so they follow it); everything else hangs off the body.
-  const parent = name.startsWith('fingers') ? 'arm' + name.slice(7) : 'body';
+  const parent = PARENTS[name] ?? 'body';
   const pp = parent === 'body' ? [0, 0, 0] : PIVOTS[parent];
   bones[name] = doc.createNode(name).setTranslation(PIVOTS[name].map((v, k) => v - pp[k]));
   bones[parent].addChild(bones[name]);

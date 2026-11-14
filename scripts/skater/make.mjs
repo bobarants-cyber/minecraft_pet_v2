@@ -13,10 +13,36 @@ const F = new Float32Array(NX * NY * NZ);
 const at = (i, j, k) => i + NX * (j + NY * k);
 console.time('sample');
 const p = [0, 0, 0];
-for (let k = 0; k < NZ; k++) for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
-  p[0] = x0 + i * STEP; p[1] = y0 + j * STEP; p[2] = z0 + k * STEP;
-  F[at(i, j, k)] = sdf(p);
+// Narrow band: sample a coarse grid first (every C-th point), and only evaluate the full field near the surface;
+// far from it the coarse value (interpolated) is plenty, since only the sign matters there. ~10x faster.
+const C = 4;
+const CX = Math.ceil((NX - 1) / C) + 1, CY = Math.ceil((NY - 1) / C) + 1, CZ = Math.ceil((NZ - 1) / C) + 1;
+const G = new Float32Array(CX * CY * CZ);
+for (let k = 0; k < CZ; k++) for (let j = 0; j < CY; j++) for (let i = 0; i < CX; i++) {
+  p[0] = x0 + i * C * STEP; p[1] = y0 + j * C * STEP; p[2] = z0 + k * C * STEP;
+  G[i + CX * (j + CY * k)] = sdf(p);
 }
+const band = STEP * C * 1.8;
+let full = 0;
+for (let k = 0; k < NZ; k++) for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+  const ci = i / C, cj = j / C, ck = k / C;
+  const i0 = Math.min(CX - 2, Math.floor(ci)), j0 = Math.min(CY - 2, Math.floor(cj)), k0 = Math.min(CZ - 2, Math.floor(ck));
+  const fx = ci - i0, fy = cj - j0, fz = ck - k0;
+  const g = (a, b, c) => G[i0 + a + CX * (j0 + b + CY * (k0 + c))];
+  let v = 0, m = Infinity;
+  for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) for (let c = 0; c < 2; c++) {
+    const gv = g(a, b, c);
+    v += gv * (a ? fx : 1 - fx) * (b ? fy : 1 - fy) * (c ? fz : 1 - fz);
+    m = Math.min(m, Math.abs(gv));
+  }
+  if (m < band) {
+    p[0] = x0 + i * STEP; p[1] = y0 + j * STEP; p[2] = z0 + k * STEP;
+    v = sdf(p);
+    full++;
+  }
+  F[at(i, j, k)] = v;
+}
+console.log('full evaluations', full, 'of', NX * NY * NZ);
 console.timeEnd('sample');
 
 // Surface nets: a vertex in every cell the surface passes through, at the average of its edge crossings.
