@@ -45,7 +45,9 @@ export function weightsAt(p0) {
   const g = GROUP[name] ?? 'body';
   const w = { body: 0, head: 0, arm_R: 0, arm_L: 0, leg_R: 0, leg_L: 0, hem: 0, fingers_R: 0, fingers_L: 0 };
   const armKey = p[0] > 0 ? 'arm_R' : 'arm_L';
-  if (name === 'shirt' || name === 'tie' || name === 'tag') {
+  if (PLUSH && (name === 'shirt' || name === 'tag')) {
+    w.body = 1; // the plush's shirt is its stuffed body: it moves with his torso only, never with the arms
+  } else if (name === 'shirt' || name === 'tie' || name === 'tag') {
     const h = Math.min(1, Math.max(0, (0.46 - p[1]) / 0.14)) ** 1.2;
     w.hem = h;
     w.body = 1 - h;
@@ -72,6 +74,12 @@ export function weightsAt(p0) {
     const fk = p[0] > 0 ? 'fingers_R' : 'fingers_L';
     w[fk] = f;
     w[armKey] = 1 - f;
+  } else if (PLUSH && name === 'arm') {
+    // A plushie's arm root is soft: right where it's sewn to the body it stays with the body and bends into the arm
+    // over a few cm (a hard seam there tore into streaks when the arm swung). The shirt itself never moves.
+    const a = Math.min(1, Math.max(0, d.shirt / 0.05)) ** 0.8;
+    w[armKey] = a;
+    w.body = 1 - a;
   } else if (g === 'arm') w[armKey] = 1;
   else if (g === 'leg') w[p[0] > 0 ? 'leg_R' : 'leg_L'] = 1;
   else w[g] = 1;
@@ -123,6 +131,32 @@ function isWhiteFace([x, y, z]) {
 }
 
 const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const COLLAR_LINE = lin('#cfcfd6');
+
+/**
+ * Plush: what's sewn onto the front of the shirt (plush space): 'tie' (a felt tie: round knot, a blade that widens
+ * to a point), 'line' (the stitched outline of the two collar flaps), or null for plain shirt.
+ */
+export function plushShirtPaint([x, y, z]) {
+  if (z < 0.04) return null;
+  const tx = Math.abs(x - 0.004);
+  if ((tx / 0.02) ** 2 + ((y - 0.402) / 0.016) ** 2 < 1) return 'tie';
+  if (y < 0.39 && y > 0.25) {
+    const hw = y > 0.272 ? 0.011 + ((0.39 - y) / 0.118) * 0.013 : (0.024 * (y - 0.25)) / 0.022;
+    if (tx < hw) return 'tie';
+  }
+  // Collar flaps: triangles from the neck, outlined with a fine stitch line.
+  const X = Math.abs(x);
+  const tri = [[0.006, 0.452], [0.105, 0.43], [0.034, 0.37]];
+  let dd = 1e3;
+  for (let i = 0; i < 3; i++) {
+    const [ax, ay] = tri[i], [bx, by] = tri[(i + 1) % 3];
+    const ex = bx - ax, ey = by - ay, wx = X - ax, wy = y - ay;
+    const h = Math.min(1, Math.max(0, (wx * ex + wy * ey) / (ex * ex + ey * ey)));
+    dd = Math.min(dd, Math.hypot(wx - ex * h, wy - ey * h));
+  }
+  return dd < 0.0022 ? 'line' : null;
+}
 
 export function colorAt(p0, n, bump = 0, flat = false) {
   const { name } = partAt(p0);
@@ -131,7 +165,7 @@ export function colorAt(p0, n, bump = 0, flat = false) {
   switch (name) {
     case 'tag': {
       // White satin tag with a little red heart printed on it.
-      const hx = Math.abs(x + 0.085) * 1.2, hy = y - 0.285;
+      const hx = Math.abs(p0[0] + 0.085) * 1.2, hy = p0[1] - 0.185;
       return Math.hypot(hx - 0.004, hy) < 0.0075 || (hy < 0 && hx < 0.012 + hy * 1.2 && hy > -0.012) ? RED : WHITE;
     }
     case 'xcross': return BLACK;
@@ -197,6 +231,10 @@ export function colorAt(p0, n, bump = 0, flat = false) {
       return blend(TAN, WHITE, isWhiteFace(p));
     }
     case 'shirt': case 'sleeve': case 'collar': {
+      if (PLUSH) {
+        const paint = plushShirtPaint(p0);
+        return paint === 'tie' ? TIE : paint === 'line' ? COLLAR_LINE : SHIRT;
+      }
       // Realistic Gliddy: the cloth is a touch darker down in its creases and folds (soft shading, like real cotton).
       if (VARIANT !== 'real' || flat) return SHIRT; // (flat: the edge-sharpening pass only cares about real colour edges)
       if (name !== 'shirt') return SHIRT;
@@ -240,8 +278,18 @@ export function furAt(p) {
       if (q[2] > 0.1 && Math.abs(q[0] - MOUTH_AT.c[0]) < 0.05 && Math.abs(q[1] - MOUTH_AT.c[1]) < 0.025) return 0.2;
       return 1;
     }
-    case 'ear': case 'arm': case 'hand': return 1;
-    case 'shirt': case 'collar': return 0.13; // short nap: longer fuzz stuck out past the collar and sleeve edges
+    case 'arm': {
+      // Fades out towards the shoulder: fuzz there spilled over the white shirt as an orange haze.
+      const S = ARMS[q[0] > 0 ? 1 : 0].S;
+      return Math.min(1, Math.max(0, (Math.hypot(q[0] - S[0], q[1] - S[1], q[2] - S[2]) - 0.035) / 0.05));
+    }
+    case 'ear': case 'hand': return 1;
+    case 'shirt':
+      if (plushShirtPaint(p) === 'tie') return 0.006; // the felt tie sewn on: no fuzz
+      // No fuzz round the armholes (it drew over the tops of his arms as streaks); 0.012 still marks it as shirt.
+      if (Math.abs(p[0]) > 0.1 && p[1] > 0.3) return 0.012;
+      return 0.13;
+    case 'collar': return 0.13; // short nap: longer fuzz stuck out past the collar and sleeve edges
     // (tiny non-zero values grow no fur, but tell the app which part a vertex is for the colour versions)
     case 'sleeve': return 0.012; // crisp sleeve edges (fuzz there hung over the arm as a ragged white fringe)
     case 'tie': return 0.006; // clean felt tie

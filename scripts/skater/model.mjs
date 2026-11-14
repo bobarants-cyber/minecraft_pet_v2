@@ -129,6 +129,31 @@ export const SLEEPY = { c: [0.13, 0.682], r: 0.085, ry: 0.097 };
 export const NOSE = { c: [0.006, 0.632] };
 export const MOUTH = { c: [0.008, 0.598], w: 0.046, h: 0.034 };
 
+/**
+ * Plush shirt = his stuffed body: a soft rounded belly under a narrower chest, little cap sleeves sewn into the
+ * shoulders, a flat-ish bottom that sits right on his boots (so no legs show) and a rolled hem round it.
+ */
+export const PLUSH_SHIRT = { bottom: 0.2, hemY: 0.214 };
+function plushShirt(p) {
+  const [x, y, z] = p;
+  const belly = ellipsoid(p, [0, 0.3, 0.004], [0.172, 0.2, 0.148]);
+  const chest = ellipsoid(p, [0, 0.4, 0], [0.15, 0.085, 0.125]);
+  let s = smin(belly, chest, 0.04);
+  for (const sg of [-1, 1]) s = smin(s, ellipsoid(p, [sg * 0.132, 0.392, 0], [0.062, 0.056, 0.064]), 0.03);
+  s = smax(s, PLUSH_SHIRT.bottom - y, 0.025);
+  // Rolled hem: a soft ring round the bottom edge.
+  const k = Math.sqrt(Math.max(0, 1 - ((PLUSH_SHIRT.hemY - 0.3) / 0.2) ** 2));
+  const rxh = 0.172 * k - 0.004, rzh = 0.148 * k - 0.004;
+  const radial = (Math.hypot(x / rxh, (z - 0.004) / rzh) - 1) * 0.14;
+  s = smin(s, Math.hypot(radial, y - PLUSH_SHIRT.hemY) - 0.009, 0.004);
+  return s;
+}
+/** The sewn-in fabric tag, hanging from the hem low on his back (left side). */
+function plushTag(p) {
+  const q = local(p, [-0.085, 0.19, -0.13], 0.12, -0.55);
+  return Math.max(box(q, [0.02, 0.03, 0.0028], 0.002), p[1] - 0.215);
+}
+
 /** Plush: how much each body part is puffed up (stuffing). */
 const PUFF = { arm: 0.006, hand: 0.006, leg: 0.005, shoe: 0.006, cuff: 0.004 };
 const HEAD_KEYS = ['head', 'ear', 'earFold', 'earFuzz', 'earHollow', 'tuft', 'xeye', 'xcross', 'sleepy', 'lid', 'nose', 'tongue', 'tooth', 'mouthCut', 'lip', 'lipCut'];
@@ -142,6 +167,11 @@ function parts(p) {
   for (const k of Object.keys(b)) d[k] = b[k] * sb - (PUFF[k] ?? 0);
   const h = partsAt(plushOrig(p, true));
   for (const k of HEAD_KEYS) if (h[k] !== undefined) d[k] = h[k] * PLUSH_HEAD;
+  // The plush's shirt is its stuffed body (sewn like a real plushie), worked out directly in plush space; the tie
+  // and collar are sewn flat onto it (painted in regions.mjs), so there are no separate sleeves, collar or tie.
+  d.shirt = plushShirt(p);
+  d.sleeve = d.collar = d.tie = 1e3;
+  d.tag = plushTag(p);
   return d;
 }
 
