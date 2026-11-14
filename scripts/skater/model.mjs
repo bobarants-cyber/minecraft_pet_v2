@@ -287,7 +287,7 @@ function partsAt(p) {
     // Short, wide sleeves at the shoulders, pointing along each (posed) arm: crisp tubes, open at the end.
     let sleeve = 1e3;
     for (const A of ARMS) {
-      const sb = add(A.S, scale(A.u, 0.06));
+      const sb = add(A.S, scale(A.u, PLUSH ? 0.04 : 0.06)); // (plush: short cap sleeves, so his arms come out cleanly)
       // (plush: roomy sleeves, so his fat stuffed arms fit inside the opening and don't cut through its edge)
       let outerS = PLUSH ? roundCone(p, A.S, sb, 0.064, 0.062) : roundCone(p, A.S, sb, 0.046, 0.042);
       if (REAL) {
@@ -329,6 +329,14 @@ function partsAt(p) {
       tie = smin(tie, roundCone(p, [ax, ay, zf(ay)], [bx, by, zf(by)], r, r * 0.8), 0.006);
     }
     d.tie = tie;
+    if (PLUSH) {
+      // Plush: a clean felt tie, a bit bigger: a round knot and a smooth blade that widens to a rounded point,
+      // lying flat on the shirt (squashed against it).
+      const flat = (yy) => [x, yy, (z - zf(yy)) * 2.6 + zf(yy)];
+      const knot = ellipsoid(flat(y), [0.004, 0.493, zf(0.493)], [0.019, 0.016, 0.026]);
+      const blade = roundCone(flat(y), [0.004, 0.474, zf(0.474)], [0.004, 0.404, zf(0.404)], 0.011, 0.021);
+      d.tie = Math.min(knot, blade) / 2.6;
+    }
     // Plush: the sewn-in fabric tag hanging from his side seam, like every plushie has.
     if (PLUSH) {
       // On his back, low on the left, hanging below the hem; flat against the back (thin along z).

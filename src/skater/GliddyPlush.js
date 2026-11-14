@@ -29,6 +29,13 @@ export class GliddyPlush extends Skater {
     });
   }
 
+  animate(dt) {
+    super.animate(dt);
+    // His board is longer than his stout little body, so on his back it peeked out at the collar and between his
+    // legs: the plush only brings it out to ride.
+    this.board.visible = this.ride > 0.04;
+  }
+
   /** Recolours the baked vertex colours for this version (only the parts each dye is for). */
   #dye(mesh) {
     const { fur, shirt, tie } = this.dyes;
@@ -41,11 +48,11 @@ export class GliddyPlush extends Skater {
     for (let i = 0; i < col.count; i++) {
       const f = furLen.getX(i);
       c.setRGB(col.getX(i), col.getY(i), col.getZ(i), THREE.LinearSRGBColorSpace);
-      if (shirt != null && Math.abs(f - 0.3) < 0.01) {
-        // Shirt, collar and sleeves (fur length 0.3): keep the cloth's own shading so folds and the hem still read.
+      if (shirt != null && (Math.abs(f - 0.13) < 0.005 || Math.abs(f - 0.012) < 0.003)) {
+        // Shirt, collar (fur 0.13) and sleeves (0.012): keep the cloth's own shading so folds and the hem still read.
         const shade = Math.min(1, (col.getX(i) + col.getY(i) + col.getZ(i)) / 3 / 0.85);
         c.set(shirt).multiplyScalar(shade);
-      } else if (tie != null && Math.abs(f - 0.15) < 0.01) {
+      } else if (tie != null && Math.abs(f - 0.006) < 0.003) {
         c.set(tie);
       } else if (fur != null) {
         // Every orange (fur, ears, ear lines, lid, nose) moves to the new colour, keeping how light or dark it was;
@@ -157,8 +164,8 @@ function furMaterial(layer) {
         float h = furHash(cell);
         float r = length(fract(c) - 0.5);
         if (h < uLayer || r > 0.5 * (1.0 - uLayer * 0.7)) discard;
-        // Deeper fur is shadowed by the fur above it.
-        diffuseColor.rgb *= mix(0.72, 1.0, uLayer);
+        // Deeper fur is only slightly shadowed by the fur above it (stronger read as grey grain on white and navy).
+        diffuseColor.rgb *= mix(0.9, 1.0, uLayer);
         diffuseColor.a = 1.0 - uLayer * 0.35;`);
   };
   return m;

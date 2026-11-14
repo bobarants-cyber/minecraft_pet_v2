@@ -241,8 +241,10 @@ export function furAt(p) {
       return 1;
     }
     case 'ear': case 'arm': case 'hand': return 1;
-    case 'shirt': case 'sleeve': case 'collar': return 0.3;
-    case 'tie': return 0.15;
+    case 'shirt': case 'collar': return 0.13; // short nap: longer fuzz stuck out past the collar and sleeve edges
+    // (tiny non-zero values grow no fur, but tell the app which part a vertex is for the colour versions)
+    case 'sleeve': return 0.012; // crisp sleeve edges (fuzz there hung over the arm as a ragged white fringe)
+    case 'tie': return 0.006; // clean felt tie
     case 'leg': return 0.4;
     case 'cuff': return 0; // black cuffs: fur over black reads as grey static
     case 'shoe': return 0; // vinyl boots: no fuzz (fur over black read as grey static)
