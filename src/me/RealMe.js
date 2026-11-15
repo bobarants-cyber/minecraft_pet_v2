@@ -8,7 +8,6 @@ const METAS = import.meta.glob('../../assets/me/*.json', { eager: true, import: 
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const rand = (a, b) => a + Math.random() * (b - a);
-const FADE = 0.45; // seconds of crossfade between clips
 
 /**
  * frameH = height of a frame on screen (world units), chosen so you're the same size in every clip.
@@ -109,6 +108,7 @@ export class RealMe {
     this.layers = [new Layer(this.view), new Layer(this.view)];
     this.cur = 0;
     this.fade = 1;
+    this.fadeTime = 0.3;
     const sh = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16, depthWrite: false }));
     sh.rotation.x = -Math.PI / 2;
     sh.scale.set(W0 * 0.42, 0.08, 1);
@@ -136,7 +136,12 @@ export class RealMe {
     const prev = this.act;
     const contiguous = prev && prev.clip === clip && Math.abs(prev.frame - a) < 1.5;
     this.act = { clip, frame: a, a, b, fps: Math.abs(fps) * Math.sign(b - a || 1), hold };
-    if (!contiguous && prev) { this.cur = 1 - this.cur; this.fade = 0; }
+    if (!contiguous && prev) {
+      this.cur = 1 - this.cur;
+      this.fade = 0;
+      // quick cuts into and out of walking (no ghostly double you), softer between the other clips
+      this.fadeTime = clip === 'walk' || prev.clip === 'walk' ? 0.16 : 0.3;
+    }
     this.layers[this.cur].set(clip, a);
   }
 
@@ -179,7 +184,13 @@ export class RealMe {
     const A = this.act;
     if (!A) return;
     const walking = this.walkAmount > 0.15 && has('walk');
-    if (walking) {
+    const held = ['carried', 'drop', 'settle'].includes(this.stateName);
+    if (held && SEATED.has(A.clip)) this.doing = null;
+    if (this.stateName === 'wave' && has('stand') && !A.waving) {
+      // the real wave from your standing video
+      this.#start('stand', 10, Math.min(42, CLIPS.stand.meta.frames - 1), CLIPS.stand.meta.fps, 0.4);
+      this.act.waving = true;
+    } else if (walking) {
       const W = CLIPS.walk.meta;
       if (A.clip !== 'walk') this.#start('walk', 0, W.frames, W.fps);
       // the walk plays at the speed you're moving (filmed at about 0.9 body heights per second)
@@ -194,7 +205,7 @@ export class RealMe {
         else this.#next();
       } else A.frame += step;
     }
-    this.fade = Math.min(1, this.fade + dt / FADE);
+    this.fade = Math.min(1, this.fade + dt / this.fadeTime);
     const cur = this.layers[this.cur], old = this.layers[1 - this.cur];
     cur.set(this.act.clip, this.act.frame);
     cur.mat.opacity = this.fade;

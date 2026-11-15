@@ -136,6 +136,8 @@ export class Character {
     root.rotation.y = this.loco.facing;
     mob.applyPose(f, breath);
 
+    mob.stateName = this.fsm.name; // mobs made from real footage pick their clip from what's going on
+    mob.stateTime = this.fsm.time;
     this.face.autoBlink = state.blink !== false;
     this.face.update(dt, t);
     mob.animate(dt);
