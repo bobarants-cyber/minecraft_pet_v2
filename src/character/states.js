@@ -631,6 +631,8 @@ STATES.typing = {
     c.loco.stop();
     c.restLift = 0;
     c.typingDone = false;
+    s.real = !!c.mob.realActivity?.('typing');
+    if (s.real) return;
     c.office ??= buildOffice();
     c.office.scale.setScalar(0.001);
     c.mob.root.add(c.office);
@@ -638,6 +640,10 @@ STATES.typing = {
     c.mob.setGlasses?.(false);
   },
   update(c, dt, t, s, p) {
+    if (s.real) {
+      if (t > 90) c.typingDone = true;
+      return c.typingDone ? then(p) : undefined;
+    }
     c.poseRate = 10;
     // Outro once the work is done: props shrink, hop off, back to what it was doing.
     if (c.typingDone && s.out === null) {
@@ -682,7 +688,8 @@ STATES.typing = {
       s.nextQ = t + 2.2 + Math.random() * 1.5;
     }
   },
-  exit(c) {
+  exit(c, s) {
+    if (s?.real) c.mob.realActivity?.(null);
     c.office?.removeFromParent();
     c.mob.setGlasses?.(false);
     c.typingDone = false;
@@ -723,6 +730,9 @@ STATES.activity = {
   attentive: false,
   enter(c, p, s) {
     s.kind = p.kind;
+    // Mobs made from real footage (the real you) act it out with their own clips instead of props.
+    s.real = !!c.mob.realActivity?.(s.kind);
+    if (s.real) { c.loco.stop(); c.restLift = 0; return; }
     s.scene = SCENES[s.kind];
     if (!s.scene) return;
     c.loco.stop();
@@ -737,6 +747,7 @@ STATES.activity = {
     if (!s.quick && s.kind !== 'meeting') c.emote(s.kind === 'music' ? 'note' : 'sparkle', 0.5);
   },
   update(c, dt, t, s) {
+    if (s.real) return c.activity !== s.kind ? 'idle' : undefined;
     if (!s.scene || c.activity !== s.kind) return 'idle';
     c.poseRate = 9;
     const tt = s.quick ? t + 1 : t;
@@ -757,6 +768,7 @@ STATES.activity = {
     s.scene.pose(c, t, s, s.parts);
   },
   exit(c, s) {
+    if (s.real) c.mob.realActivity?.(null);
     for (const o of s.placed ?? []) o.removeFromParent();
     if (s.scene?.glasses) c.mob.setGlasses?.(false);
     c.lastScene = { kind: s.kind, at: performance.now() };
