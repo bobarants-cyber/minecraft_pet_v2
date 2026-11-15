@@ -5,6 +5,8 @@ import crouchUrl from '../../assets/cat/crouch.webp?url';
 import CROUCH from '../../assets/cat/crouch.json';
 import lieUrl from '../../assets/cat/liedown.webp?url';
 import LIE from '../../assets/cat/liedown.json';
+import frontUrl from '../../assets/cat/front.webp?url';
+import FRONT from '../../assets/cat/front.json';
 import { FaceDisplay } from '../bee/face/FaceDisplay.js';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -19,6 +21,7 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
  */
 const ANIMS = {
   walk: { url: walkUrl, meta: WALK, frameH: 0.95, loop: true },
+  front: { url: frontUrl, meta: FRONT, frameH: 0.7, loop: true, noFlip: true }, // settled facing you, looking around (IMG_6644)
   sit: { url: crouchUrl, meta: CROUCH, frameH: 0.82, loop: true },
   lie: { url: lieUrl, meta: LIE, frameH: 0.8, loop: false },
 };
@@ -73,7 +76,8 @@ export class RealCat {
     this.shadow.add(sh);
     hips.add(this.shadow);
     this.parts = { loaded: true, ready: Promise.resolve(), head, arms: [], legs: [] };
-    this.#play('sit');
+    this.#play('front');
+    this.idleLoops = 0;
   }
 
   #play(name) {
@@ -106,7 +110,7 @@ export class RealCat {
     if (Math.abs(this.speed ?? 0) > 0.05) this.dir = Math.sign(this.speed);
     const a = ANIMS[this.anim];
     const still = this.anim === 'walk' ? 0 : 1;
-    this.sprite.scale.set(a.w * this.dir, a.frameH * (1 + breath * 0.006 * still), 1);
+    this.sprite.scale.set(a.w * (a.noFlip ? 1 : this.dir), a.frameH * (1 + breath * 0.006 * still), 1);
   }
 
   animate(dt) {
@@ -114,8 +118,14 @@ export class RealCat {
     const sleepy = /asleep|sleepy/.test(this.face?.expression ?? '');
     if (this.walkAmount > 0.15) this.#play('walk');
     else if (sleepy) this.#play('lie');
-    else if (this.anim !== 'sit' && (this.anim === 'walk' || this.anim === 'lie')) this.#play('sit');
+    else if (this.anim === 'walk' || this.anim === 'lie') { this.#play('front'); this.idleLoops = 0; }
     const a = ANIMS[this.anim], m = a.meta;
+    // idle: mostly sitting facing you; every few loops she does the tail-swishing crouch, then turns back
+    if ((this.anim === 'front' || this.anim === 'sit') && this.frame + dt * m.fps >= m.frames) {
+      this.idleLoops++;
+      const next = this.anim === 'front' && this.idleLoops % 3 === 0 ? 'sit' : 'front';
+      if (next !== this.anim) { this.#play(next); return; }
+    }
     // the walk plays at the speed she's moving (the clip was filmed at about 0.9 body lengths per second)
     const rate = this.anim === 'walk' ? clamp(Math.abs(this.speed ?? 0) / 0.9, 0.5, 1.6) : 1;
     this.frame += dt * m.fps * rate;
