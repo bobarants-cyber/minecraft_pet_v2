@@ -11,6 +11,7 @@ const NAMES = {
 NAMES.gliddy = String.raw`gl[iey]+d+[iy]e?|glitt?y|gladd?y|glid[ie]y`;
 NAMES.gliddyReal = NAMES.gliddy;
 for (const k of ['gliddyPlush', 'gliddyPlushStrawberry', 'gliddyPlushMint', 'gliddyPlushMidnight', 'gliddyPlushChoco', 'gliddyPlushMini']) NAMES[k] = NAMES.gliddy;
+NAMES.myCat = String.raw`mi[ck]e?y?|mykey|maik`;
 NAMES.duck = String.raw`duck(?:y|ie)?|ducki`;
 NAMES.moffy = String.raw`m[ao]f+[iey]+e?|m[ao]ph[iy]|muffy`;
 for (const c of ['Yellow', 'White', 'Blue', 'Pink', 'Green']) NAMES[`cortis${c}`] = String.raw`c[ou]rt[iey]s|curtis|cortez|kortis`;
@@ -25,7 +26,7 @@ export function findWake(text, mob = 'bbokari') {
   if (greet) return { question: tidy(greet[1]) };
   // "Bbokari, what's …" at the start (a name on its own in the middle of a sentence doesn't count).
   const lead = new RegExp(String.raw`^(?:${name})\b[\s,!.?:-]*(.*)$`, 'i').exec(t);
-  if (lead && (mob === 'bbokari' || mob === 'wolfchan' || mob === 'jiniret' || mob === 'gliddy' || mob.startsWith('gliddy') || mob === 'moffy' || mob === 'duck' || mob.startsWith('cortis') || /[,!.]/.test(t.slice(0, 12)))) return { question: tidy(lead[1]) };
+  if (lead && (mob === 'bbokari' || mob === 'wolfchan' || mob === 'jiniret' || mob === 'gliddy' || mob.startsWith('gliddy') || mob === 'moffy' || mob === 'duck' || mob === 'myCat' || mob.startsWith('cortis') || /[,!.]/.test(t.slice(0, 12)))) return { question: tidy(lead[1]) };
   return null;
 }
 
