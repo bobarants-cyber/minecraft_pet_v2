@@ -7,6 +7,14 @@ import crouchUrl from '../../assets/cat/crouch.webp?url';
 import CROUCH from '../../assets/cat/crouch.json';
 import lieUrl from '../../assets/cat/liedown.webp?url';
 import LIE from '../../assets/cat/liedown.json';
+import loafRugUrl from '../../assets/cat/loafrug.webp?url';
+import LOAF_RUG from '../../assets/cat/loafrug.json';
+import loafSofaUrl from '../../assets/cat/loafsofa.webp?url';
+import LOAF_SOFA from '../../assets/cat/loafsofa.json';
+import sitTallUrl from '../../assets/cat/sittall.webp?url';
+import SIT_TALL from '../../assets/cat/sittall.json';
+import curledUrl from '../../assets/cat/curled.webp?url';
+import CURLED from '../../assets/cat/curled.json';
 import { FaceDisplay } from '../bee/face/FaceDisplay.js';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -26,6 +34,11 @@ const CLIPS = {
   front: { url: frontUrl, meta: FRONT, frameH: 0.72, noFlip: true },
   crouch: { url: crouchUrl, meta: CROUCH, frameH: 0.82 },
   lie: { url: lieUrl, meta: LIE, frameH: 0.8 },
+  // poses from the user's photos of her: she settles into one for a while, breathing
+  loafRug: { url: loafRugUrl, meta: LOAF_RUG, frameH: 0.5, still: true }, // loaf on the rug, eyes closed (side)
+  loafSofa: { url: loafSofaUrl, meta: LOAF_SOFA, frameH: 0.58, still: true, noFlip: true }, // loaf facing you, sleepy eyes
+  sitTall: { url: sitTallUrl, meta: SIT_TALL, frameH: 0.92, still: true, noFlip: true }, // sitting up tall, looking at you
+  curled: { url: curledUrl, meta: CURLED, frameH: 0.42, still: true }, // curled up asleep (how she sleeps)
 };
 
 /** One layer of her picture (two of them crossfade when she changes what she's doing). */
@@ -134,6 +147,10 @@ export class RealCat {
     } else if (pick === 'swish') {
       const [a, b] = span('crouch', 18, 45);
       this.#start('crouch', a, b, rand(8, 11), Math.random() < 0.3 ? rand(0.5, 1.5) : 0);
+    } else if (pick === 'loaf') {
+      this.#start(Math.random() < 0.5 ? 'loafRug' : 'loafSofa', 0, 0, 1, rand(5, 12));
+    } else if (pick === 'sittall') {
+      this.#start('sitTall', 0, 0, 1, rand(3, 7));
     } else if (pick === 'liedown') {
       // lie down, stay a while (breathing), then get back up (the same clip backwards)
       const n = CLIPS.lie.meta.frames - 1;
@@ -143,10 +160,12 @@ export class RealCat {
   }
 
   #choose() {
-    const w = { look: 0.55, swish: 0.3, liedown: 0.15 };
+    const w = { look: 0.36, swish: 0.18, loaf: 0.2, sittall: 0.14, liedown: 0.12 };
+    if (this.lastKind === 'loaf') w.loaf = 0;
+    if (this.lastKind === 'sittall') w.sittall = 0;
     if (this.lastKind === 'liedown') w.liedown = 0;
     if (this.lastKind === 'swish') w.swish *= 0.4;
-    let r = Math.random() * (w.look + w.swish + w.liedown);
+    let r = Math.random() * Object.values(w).reduce((s, v) => s + v, 0);
     for (const [k, v] of Object.entries(w)) if ((r -= v) <= 0) return k;
     return 'look';
   }
@@ -162,7 +181,7 @@ export class RealCat {
     this.view.rotation.y = -this.root.rotation.y;
     this.shadow.rotation.y = -this.root.rotation.y;
     if (Math.abs(this.speed ?? 0) > 0.05) this.dir = Math.sign(this.speed);
-    const still = this.act?.clip === 'walk' ? 0 : 1;
+    const still = this.act?.clip === 'walk' ? 0 : CLIPS[this.act?.clip]?.still ? 2.2 : 1; // poses breathe a bit more
     for (const L of this.layers) L.place(this.dir, breath * 0.006 * still);
   }
 
@@ -177,10 +196,12 @@ export class RealCat {
       A.frame = (A.frame + dt * WALK.fps * clamp(Math.abs(this.speed ?? 0) / 0.9, 0.5, 1.6)) % WALK.frames;
     } else if (A.clip === 'walk') {
       this.#next('look');
-    } else if (sleepy && !(A.clip === 'lie' && A.b > A.a)) {
-      this.#start('lie', A.clip === 'lie' ? A.frame : 0, CLIPS.lie.meta.frames - 1, 9, 1e9); // lie down and stay
-    } else if (!sleepy && A.clip === 'lie' && A.hold > 1e8) {
-      this.#start('lie', A.frame, 0, 9); // woke up: get up
+    } else if (sleepy && A.clip !== 'curled' && !A.sleep) {
+      // sleepy: lie down, then curl up asleep (her photo) until she wakes
+      this.#start('lie', A.clip === 'lie' ? A.frame : 0, CLIPS.lie.meta.frames - 1, 9, 1.2, () => this.#start('curled', 0, 0, 1, 1e9));
+      this.act.sleep = true;
+    } else if (!sleepy && (A.clip === 'curled' || A.sleep)) {
+      this.#next('look'); // woke up
     } else {
       // play the current stretch; at its end hold (if asked), then move on
       const end = A.b;
