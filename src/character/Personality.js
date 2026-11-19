@@ -1,3 +1,5 @@
+import { routinesFor } from './Signatures.js';
+
 const rand = (a, b) => a + Math.random() * (b - a);
 
 function weightedPick(options) {
@@ -39,6 +41,7 @@ export class Personality {
           ['sad', 0.2],
           ['wave', 0.25],
         ];
+    if (routinesFor(c)) options.push(['signature', c.socialMode ? 1.2 : 1.0]); // its own routines, in order
     const name = weightedPick(options);
     if (name !== 'walk') return name;
 

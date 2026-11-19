@@ -1,5 +1,6 @@
 import { SEAT_HEIGHT, buildOffice } from './Props.js';
 import { SCENES } from './Scenes.js';
+import { SIGNATURE_STATE } from './Signatures.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -879,3 +880,6 @@ STATES.umbrella = {
 };
 
 export const ACTIONS = ['idle', 'happy', 'sad', 'sleepy', 'sleep', 'wake', 'curious', 'surprised', 'excited', 'wave', 'dance', 'pet', 'tada'];
+
+// Each pet's own routines (src/character/Signatures.js).
+STATES.signature = SIGNATURE_STATE;
