@@ -6,6 +6,8 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 /** The GLB is height 1 (feet at y = 0, face towards +z); his height in world units. */
 const MODEL_HEIGHT = 1.26; // the user's chosen proportions: size 1.4, head 1.12, chubby 1.05
 const HEAD = 1.12, CHUB = 1.05;
+/** Where the second pocket arm sits (offset x, y, z from the mirror, then tilt forward, tilt out): beside his body, into his pocket. */
+const POCKET_FIX = [-0.03, 0, -0.045, 0, 0.1];
 export const SUNOO_HEIGHT = MODEL_HEIGHT;
 
 /**
@@ -32,6 +34,7 @@ export class SunooFigure extends Bbokari {
       m.scale.set(MODEL_HEIGHT * CHUB, MODEL_HEIGHT, MODEL_HEIGHT); // wider, not deeper (the shirt's back stays put)
       m.userData.baseScale = MODEL_HEIGHT; // (the customizer scales from here)
       this.parts.head.scale.set(HEAD / CHUB, HEAD, HEAD);
+      this.pocket2Home = this.parts.bones.pocket2.position.clone();
       this.vsign = 0; // 0 = both hands in his pockets (his usual pose), 1 = the V sign
     });
   }
@@ -82,7 +85,9 @@ export class SunooFigure extends Bbokari {
     this.parts.arms[0].rotation.set(fwd, 0, 0); // his left: always in the pocket (or forward to hold things)
     if (b?.vsign) {
       // aimed out at his own pocket (the mirror of his left hand about his legs, not at his middle)
-      b.pocket2.rotation.set(fwd - 0.6 * ss(out), 0, -0.18 - 0.9 * ss(out));
+      const fx = this.pocketFix ?? POCKET_FIX;
+      b.pocket2.position.set(this.pocket2Home.x + fx[0], this.pocket2Home.y + fx[1], this.pocket2Home.z + fx[2]);
+      b.pocket2.rotation.set(fwd - 0.6 * ss(out) + fx[3], 0, fx[4] - 0.9 * ss(out));
       b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
       b.vsign.rotation.set(0.5 * (1 - ss(up)), 0, -1.3 * (1 - ss(up)));
       b.vsign.scale.setScalar(v >= 0.5 ? 1 : 0.0001);
