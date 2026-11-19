@@ -26,7 +26,7 @@ export class SunooFigure extends Bbokari {
     this.outfitScale = 0.85;
     this.kpopFit = [0, 0.08, 0.02, 0.85];
     // headphones sized to his big head (head-local model units)
-    this.headFit = { side: 0.235, cupY: 0.15, cupZ: -0.01, top: 0.42, bandZ: -0.05, square: 0.75, mouth: [0, 0.06, 0.2] };
+    this.headFit = { side: 0.215, cupY: 0.115, cupZ: -0.005, top: 0.425, bandZ: -0.03, square: 0.75, mouth: [0, 0.03, 0.2] }; // cups on his ears, just outside the hair
     this.parts.ready.then(() => {
       const m = this.parts.model;
       m.scale.set(MODEL_HEIGHT * CHUB, MODEL_HEIGHT, MODEL_HEIGHT); // wider, not deeper (the shirt's back stays put)
