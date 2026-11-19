@@ -81,7 +81,8 @@ export class SunooFigure extends Bbokari {
     const ss = (x) => x * x * (3 - 2 * x);
     this.parts.arms[0].rotation.set(fwd, 0, 0); // his left: always in the pocket (or forward to hold things)
     if (b?.vsign) {
-      b.pocket2.rotation.set(fwd - 0.6 * ss(out), 0, -0.9 * ss(out));
+      // aimed out at his own pocket (the mirror of his left hand about his legs, not at his middle)
+      b.pocket2.rotation.set(fwd - 0.6 * ss(out), 0, -0.18 - 0.9 * ss(out));
       b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
       b.vsign.rotation.set(0.5 * (1 - ss(up)), 0, -1.3 * (1 - ss(up)));
       b.vsign.scale.setScalar(v >= 0.5 ? 1 : 0.0001);
