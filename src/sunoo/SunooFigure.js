@@ -12,7 +12,7 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const MODEL_HEIGHT = 1.26; // the user's chosen proportions: size 1.4, head 1.12, chubby 1.05
 const HEAD = 1.12, CHUB = 1.05;
 /** Where the second pocket arm sits (offset x, y, z from the mirror, then tilt forward, tilt out): beside his body, into his pocket. */
-const POCKET_FIX = [0, 0, 0, 0.2, -0.3]; // no shift (the arm stays in its sleeve): swung back and out to his pocket
+const POCKET_FIX = [0, 0, 0, 0, 0]; // an exact mirror of his left arm (the shirt's right half is mirrored too)
 export const SUNOO_HEIGHT = MODEL_HEIGHT;
 
 /**
@@ -104,6 +104,11 @@ export class SunooFigure extends Bbokari {
       }
       b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
       b.sleeve2?.scale.setScalar(v < 0.5 ? 1 : 0.0001);
+      b.shirtR?.scale.setScalar(v >= 0.5 ? 1 : 0.0001);
+      // fists (made from his V-sign hand) come out of the pockets with the arms when he holds something
+      const show = reach > 0.25 ? 1 : 0.0001;
+      if (b.fist_L) { b.fist_L.rotation.copy(this.parts.arms[0].rotation); b.fist_L.scale.setScalar(show); }
+      if (b.fist_R) { b.fist_R.position.copy(b.pocket2.position); b.fist_R.rotation.copy(b.pocket2.rotation); b.fist_R.scale.setScalar(v < 0.5 ? show : 0.0001); }
       b.vsign.rotation.set(0.5 * (1 - ss(up)), 0, -1.3 * (1 - ss(up)));
       b.vsign.scale.setScalar(v >= 0.5 ? 1 : 0.0001);
     }
