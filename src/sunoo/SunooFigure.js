@@ -7,7 +7,7 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const MODEL_HEIGHT = 1.26; // the user's chosen proportions: size 1.4, head 1.12, chubby 1.05
 const HEAD = 1.12, CHUB = 1.05;
 /** Where the second pocket arm sits (offset x, y, z from the mirror, then tilt forward, tilt out): beside his body, into his pocket. */
-const POCKET_FIX = [-0.03, 0, -0.045, 0, 0.1];
+const POCKET_FIX = [-0.065, -0.025, -0.035, 0, 0];
 export const SUNOO_HEIGHT = MODEL_HEIGHT;
 
 /**
