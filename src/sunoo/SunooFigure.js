@@ -26,35 +26,31 @@ export class SunooFigure extends Bbokari {
     this.outfitScale = 0.85;
     this.kpopFit = [0, 0.08, 0.02, 0.85];
     // headphones sized to his big head (head-local model units)
-    this.headFit = { side: 0.175, cupY: 0.13, cupZ: -0.01, top: 0.34, bandZ: -0.05, square: 0.75, mouth: [0, 0.06, 0.2] };
+    this.headFit = { side: 0.235, cupY: 0.15, cupZ: -0.01, top: 0.42, bandZ: -0.05, square: 0.75, mouth: [0, 0.06, 0.2] };
     this.parts.ready.then(() => {
       const m = this.parts.model;
       m.scale.set(MODEL_HEIGHT * CHUB, MODEL_HEIGHT, MODEL_HEIGHT); // wider, not deeper (the shirt's back stays put)
       m.userData.baseScale = MODEL_HEIGHT; // (the customizer scales from here)
       this.parts.head.scale.set(HEAD / CHUB, HEAD, HEAD);
-      this.#setHands(false);
+      this.vsign = 0; // 0 = both hands in his pockets (his usual pose), 1 = the V sign
     });
   }
 
-  /** Both hands in his pockets (true) or the V sign (false): the raised arm and the second pocket arm swap. */
-  #setHands(pockets) {
-    const b = this.parts.bones;
-    if (!b?.vsign) return;
-    this.pockets = pockets;
-    b.vsign.scale.setScalar(pockets ? 0.0001 : 1);
-    b.pocket2.scale.setScalar(pockets ? 1 : 0.0001);
+  /** He shows his V sign for a bit (from a reaction, his cute routine, or now and then on his own). */
+  peace(secs = 4) {
+    this.vsignUntil = this.time + secs;
   }
 
   animate(dt) {
     super.animate(dt);
     if (!this.parts.loaded) return;
-    // now and then he puts both hands in his pockets for a while, then back to his V sign
-    this.handT = (this.handT ?? 8 + Math.random() * 10) - dt;
-    if (this.handT <= 0) {
-      const pockets = !this.pockets;
-      this.#setHands(pockets);
-      this.handT = pockets ? 6 + Math.random() * 10 : 12 + Math.random() * 20;
-    }
+    const st = this.stateName;
+    // the V sign for happy moments and waves, and now and then on his own; otherwise hands in his pockets
+    if (['wave', 'happy', 'tada', 'excited'].includes(st) && !(this.vsignUntil > this.time)) this.peace(3.5);
+    this.idleT = (this.idleT ?? 14 + Math.random() * 14) - dt;
+    if (this.idleT <= 0 && st === 'idle') { this.peace(4 + Math.random() * 3); this.idleT = 18 + Math.random() * 22; }
+    const want = this.vsignUntil > this.time && !this.holding ? 1 : 0;
+    this.vsign += Math.sign(want - this.vsign) * Math.min(Math.abs(want - this.vsign), dt / 0.7);
   }
 
   /** His eyes are part of the figure (no bead eyes for the typing glasses to sit on). */
@@ -74,8 +70,23 @@ export class SunooFigure extends Bbokari {
     const rock = Math.sin(this.walkPhase) * 0.08 * this.walkAmount;
     j.torso.rotation.set(clamp(p.torsoPitch * 0.4, -0.25, 0.25), p.torsoYaw * 0.6, clamp(p.torsoRoll * 0.5, -0.3, 0.3) + rock);
     if (!this.parts.loaded) return;
-    // both arms keep their sculpted pose (hand in the pocket, the V sign)
-    for (const a of this.parts.arms) a.rotation.set(0, 0, 0);
+    const b = this.parts.bones;
+    // holding something (a controller, the keyboard): both arms come forward out of the pockets
+    const reach = clamp((Math.max(p.armSwingL, p.armSwingR) - 0.4) / 0.5, 0, 1);
+    this.holding = reach > 0.3;
+    const fwd = -1.15 * reach;
+    // the V-sign swap is a real move: the pocket arm swings out and up, then the V-sign arm swings up into place
+    const v = this.vsign ?? 0;
+    const out = clamp(v / 0.5, 0, 1), up = clamp((v - 0.5) / 0.5, 0, 1);
+    const ss = (x) => x * x * (3 - 2 * x);
+    this.parts.arms[0].rotation.set(fwd, 0, 0); // his left: always in the pocket (or forward to hold things)
+    if (b?.vsign) {
+      b.pocket2.rotation.set(fwd - 0.6 * ss(out), 0, -0.9 * ss(out));
+      b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
+      b.vsign.rotation.set(0.5 * (1 - ss(up)), 0, -1.3 * (1 - ss(up)));
+      b.vsign.scale.setScalar(v >= 0.5 ? 1 : 0.0001);
+    }
+    this.parts.arms[1].rotation.set(0, 0, 0);
     // stiff toy legs: a little swing as he walks
     const [legR, legL] = this.parts.legs;
     const stride = Math.sin(this.walkPhase) * 0.22 * this.walkAmount;

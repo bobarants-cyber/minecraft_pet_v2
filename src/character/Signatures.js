@@ -22,6 +22,7 @@ const M = {
   tiptoe: (c, k) => { c.overlay.crouch = 0.04; c.overlay.torsoRoll = Math.sin(k * Math.PI * 6) * 0.07; c.target.headYaw = Math.sin(k * Math.PI * 2) * 0.5; },
   pose: (c, k) => { const b = smooth(0, 0.25, k) * (1 - smooth(0.8, 1, k)); c.target.armRaiseR = 2.2 * b; c.target.headRoll = -0.2 * b; c.overlay.torsoRoll = 0.08 * b; },
   still: () => {},
+  peace: (c, k) => { c.mob.peace?.(2.5); c.target.headRoll = -0.25 * bell(k); }, // the V sign (figures that have one)
 };
 
 /** A step: [seconds, move, emote?, expression?]. */
@@ -64,7 +65,7 @@ const ROUTINES = {
   ],
   // the little figure: cute, sunny and a bit shy (his arms are sculpted in place, so it's all head, body and hops)
   sunoo: [
-    [[1.2, M.tilt(-1), 'heart'], [1.2, M.tilt(1), 'heart'], [1.4, M.hop(2, 0.07), 'sparkle'], [1.4, M.shy, 'heart']],
+    [[1.2, M.tilt(-1), 'heart'], [2.4, M.peace, 'sparkle'], [1.2, M.tilt(1), 'heart'], [1.4, M.hop(2, 0.07), 'sparkle'], [1.4, M.shy, 'heart']],
     [[1.6, M.sway(2, 0.12), 'note'], [1.0, M.hop(1, 0.11), 'sparkle'], [1.2, M.tilt(1), 'heart']],
     [[1.4, M.bounce, 'sparkle'], [1.6, M.shy, 'heart'], [1.0, M.nod]],
   ],
