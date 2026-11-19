@@ -100,7 +100,7 @@ export class SunooFigure extends Bbokari {
         this.parts.arms[0].localToWorld(_a.set(...TIP_L));
         b.pocket2.localToWorld(_b.set(...TIP_R));
         const mid = j.torso.worldToLocal(_a.add(_b).multiplyScalar(0.5));
-        for (const o of j.torso.children) if (o !== this.parts.model && o.name !== 'model' && o.isObject3D && o.userData.full) o.position.lerp(mid.clone().add(new THREE.Vector3(0, 0.01, 0.02)), reach);
+        for (const o of j.torso.children) if (o !== this.parts.model && o.name !== 'model' && o.isObject3D && o.userData.full) o.position.lerp(mid.clone().add(new THREE.Vector3(0, -0.006, 0.02)), reach);
       }
       b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
       b.sleeve2?.scale.setScalar(v < 0.5 ? 1 : 0.0001);
