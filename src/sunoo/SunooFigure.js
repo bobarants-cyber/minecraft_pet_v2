@@ -1,13 +1,18 @@
 import figureGlb from '../../assets/models/sunoo.glb?inline';
 import { buildSculptRig } from '../bbokari/BbokariRig.js';
+import * as THREE from 'three';
 import { Bbokari } from '../bbokari/Bbokari.js';
+
+const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+/** The hand end of each pocket arm, from its shoulder joint (model units). */
+const TIP_L = [-0.017, -0.133, 0.026], TIP_R = [0.014, -0.14, 0.004];
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 /** The GLB is height 1 (feet at y = 0, face towards +z); his height in world units. */
 const MODEL_HEIGHT = 1.26; // the user's chosen proportions: size 1.4, head 1.12, chubby 1.05
 const HEAD = 1.12, CHUB = 1.05;
 /** Where the second pocket arm sits (offset x, y, z from the mirror, then tilt forward, tilt out): beside his body, into his pocket. */
-const POCKET_FIX = [-0.065, -0.025, -0.035, 0, 0];
+const POCKET_FIX = [0, 0, 0, 0.2, -0.3]; // no shift (the arm stays in its sleeve): swung back and out to his pocket
 export const SUNOO_HEIGHT = MODEL_HEIGHT;
 
 /**
@@ -77,18 +82,28 @@ export class SunooFigure extends Bbokari {
     // holding something (a controller, the keyboard): both arms come forward out of the pockets
     const reach = clamp((Math.max(p.armSwingL, p.armSwingR) - 0.4) / 0.5, 0, 1);
     this.holding = reach > 0.3;
-    const fwd = -1.15 * reach;
+    const fwd = -0.85 * reach;   // down and forward to his lap
+    const inward = 0.3 * reach;  // and in, so the hands meet in front of him
     // the V-sign swap is a real move: the pocket arm swings out and up, then the V-sign arm swings up into place
     const v = this.vsign ?? 0;
     const out = clamp(v / 0.5, 0, 1), up = clamp((v - 0.5) / 0.5, 0, 1);
     const ss = (x) => x * x * (3 - 2 * x);
-    this.parts.arms[0].rotation.set(fwd, 0, 0); // his left: always in the pocket (or forward to hold things)
+    this.parts.arms[0].rotation.set(fwd, 0, -inward); // his left: always in the pocket (or forward to hold things)
     if (b?.vsign) {
       // aimed out at his own pocket (the mirror of his left hand about his legs, not at his middle)
       const fx = this.pocketFix ?? POCKET_FIX;
       b.pocket2.position.set(this.pocket2Home.x + fx[0], this.pocket2Home.y + fx[1], this.pocket2Home.z + fx[2]);
-      b.pocket2.rotation.set(fwd - 0.6 * ss(out) + fx[3], 0, fx[4] - 0.9 * ss(out));
+      b.pocket2.rotation.set(fwd - 0.6 * ss(out) + fx[3], 0, fx[4] + inward - 0.9 * ss(out));
+      // whatever he's holding (the controller) goes between his hands
+      if (reach > 0.05) {
+        this.parts.model.updateMatrixWorld(true);
+        this.parts.arms[0].localToWorld(_a.set(...TIP_L));
+        b.pocket2.localToWorld(_b.set(...TIP_R));
+        const mid = j.torso.worldToLocal(_a.add(_b).multiplyScalar(0.5));
+        for (const o of j.torso.children) if (o !== this.parts.model && o.name !== 'model' && o.isObject3D && o.userData.full) o.position.lerp(mid.clone().add(new THREE.Vector3(0, 0.01, 0.02)), reach);
+      }
       b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
+      b.sleeve2?.scale.setScalar(v < 0.5 ? 1 : 0.0001);
       b.vsign.rotation.set(0.5 * (1 - ss(up)), 0, -1.3 * (1 - ss(up)));
       b.vsign.scale.setScalar(v >= 0.5 ? 1 : 0.0001);
     }
