@@ -5,7 +5,9 @@ import { Bbokari } from '../bbokari/Bbokari.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 /** The hand end of each pocket arm, from its shoulder joint (model units). */
-const TIP_L = [-0.017, -0.133, 0.026], TIP_R = [0.014, -0.14, 0.004];
+const TIP_L = [-0.02, -0.17, 0.03], TIP_R = [0.017, -0.177, 0.008]; // (the middle of each fist)
+/** Where the controller sits from the middle of his fists (torso units): under them, not inside. */
+const CTRL_OFF = [0, -0.04, 0];
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 /** The GLB is height 1 (feet at y = 0, face towards +z); his height in world units. */
@@ -82,8 +84,8 @@ export class SunooFigure extends Bbokari {
     // holding something (a controller, the keyboard): both arms come forward out of the pockets
     const reach = clamp((Math.max(p.armSwingL, p.armSwingR) - 0.4) / 0.5, 0, 1);
     this.holding = reach > 0.3;
-    const fwd = -0.85 * reach;   // down and forward to his lap
-    const inward = 0.3 * reach;  // and in, so the hands meet in front of him
+    const fwd = -1.2 * reach;    // forward, holding it up in front of his chest (clear of his loose shirt)
+    const inward = 0.25 * reach; // and in, so the hands meet in front of him
     // the V-sign swap is a real move: the pocket arm swings out and up, then the V-sign arm swings up into place
     const v = this.vsign ?? 0;
     const out = clamp(v / 0.5, 0, 1), up = clamp((v - 0.5) / 0.5, 0, 1);
@@ -100,7 +102,7 @@ export class SunooFigure extends Bbokari {
         this.parts.arms[0].localToWorld(_a.set(...TIP_L));
         b.pocket2.localToWorld(_b.set(...TIP_R));
         const mid = j.torso.worldToLocal(_a.add(_b).multiplyScalar(0.5));
-        for (const o of j.torso.children) if (o !== this.parts.model && o.name !== 'model' && o.isObject3D && o.userData.full) o.position.lerp(mid.clone().add(new THREE.Vector3(0, -0.006, 0.02)), reach);
+        for (const o of j.torso.children) if (o !== this.parts.model && o.name !== 'model' && o.isObject3D && o.userData.full) o.position.lerp(mid.clone().add(new THREE.Vector3(...(this.ctrlOff ?? CTRL_OFF))), reach);
       }
       b.pocket2.scale.setScalar(v < 0.5 ? 1 : 0.0001);
       b.sleeve2?.scale.setScalar(v < 0.5 ? 1 : 0.0001);
