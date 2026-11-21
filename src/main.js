@@ -292,7 +292,7 @@ host?.onFaceAway?.((ev) => {
   else if (ev.type === 'unlocked') {
     character.trigger('surprised', { then: 'happy' }, true);
     character.emote('heart', 0.5);
-    chat.say('Face ID ✅ Welcome back! I missed you 💛');
+    chat.say(ev.source === 'mac' ? (ev.glance ? '👁 Unlocked with a glance! Welcome back 💛' : 'Welcome back! I missed you 💛') : 'Face ID ✅ Welcome back! I missed you 💛');
   }
 });
 host?.onActivity?.(({ kind }) => {

@@ -623,6 +623,9 @@ function startFaceAway() {
   faceAway = new FaceAwayBridge(onFaceAwayEvent);
   faceAway.start();
   if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) faStart(); // starts with the pet
+  // The real Mac lock (Glance unlocks it with your face): the pet sleeps while locked and cheers when you're back.
+  powerMonitor.on('lock-screen', () => send('faceaway', { type: 'locked', source: 'mac' }));
+  powerMonitor.on('unlock-screen', () => send('faceaway', { type: 'unlocked', source: 'mac', glance: fs.existsSync(GLANCE_APP) }));
   app.on('before-quit', stopFaceAwayApp);
 }
 // Every FaceAway option you'd type in Terminal, as settings (Bbokari restarts FaceAway with them).
@@ -775,6 +778,12 @@ function faceAwayChat(text) {
   if (/^(build|update) face ?away$/.test(t)) { faceAwayBuild(); return '🔨 On it!'; }
   return null;
 }
+const GLANCE_APP = '/Applications/Glance.app';
+const GLANCE_DOWNLOAD = 'https://github.com/jonnyoo/glance/releases/latest';
+function openGlance() {
+  if (fs.existsSync(GLANCE_APP)) shell.openPath(GLANCE_APP);
+  else { shell.openExternal(GLANCE_DOWNLOAD); send('say', { text: '👁 Download Glance.dmg there, open it and drag Glance to Applications. Then it unlocks your real Mac lock screen with your face (and I’ll cheer when it does)!' }); }
+}
 function faceAwayMenu() {
   const t = faceAwayState.theme;
   const theme = (name, label) => ({ label, type: 'radio', checked: t === name, click: () => faceAway?.command('theme', { name }) });
@@ -785,6 +794,7 @@ function faceAwayMenu() {
       { label: faceAwayState.watching ? '👀 Watching is on' : 'Watching is off', enabled: false }]),
     { label: faceAwayState.watching ? 'Turn watching off' : 'Turn watching on', click: () => faceAway?.command('watch', { on: !faceAwayState.watching }) },
     { label: '🔒 Lock with Face ID', click: () => faceAway?.command('lock') },
+    { label: fs.existsSync(GLANCE_APP) ? '👁 Glance (real Mac Face ID unlock)' : '👁 Get Glance (real Mac Face ID unlock)…', click: openGlance },
     { label: '🚨 Panic', click: () => faceAway?.command('panic') },
     { label: '🏠 Home screen', click: () => faceAway?.command('home') },
     { label: '🎭 Decoy screen', submenu: [['school', '🏫 School'], ['update', '⚙️ Software update'], ['black', '⬛ Black']].map(([name, label]) => ({ label, type: 'radio', checked: faceAwayState.decoy === name, click: () => (faceAway?.command('decoy', { name }), applySettings({ faceAwayOpts: { ...faOpts(), decoy: name } })) })) },
