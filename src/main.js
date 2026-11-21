@@ -275,7 +275,26 @@ host?.onQuiz?.((q) => chat.showQuiz(q));
 // React to what you're doing (the Mac side tells us: video, writing, music, meeting, gaming, coding, reading, drawing).
 let seenActivity = null;
 let focusing = false;
-const applyActivity = () => (character.activity = focusing ? 'coding' : settings.reactToActivity ? seenActivity : null);
+let faceTheme = null; // FaceAway's theme: the pet matches it while nothing else is going on
+const THEMED = new Set(['hacker', 'glass', 'midnight', 'sunset']);
+const applyActivity = () => {
+  let a = focusing ? 'coding' : settings.reactToActivity ? seenActivity : null;
+  if (faceTheme === 'hacker' && (a === 'coding' || a === 'writing')) a = 'hacker'; // hacker theme: coding is hacking
+  if (!a && THEMED.has(faceTheme)) a = faceTheme;
+  character.activity = a;
+};
+// FaceAway (Face ID lock, panic screen, themes) tells us what it's doing.
+host?.onFaceAway?.((ev) => {
+  if (ev.type === 'theme') { faceTheme = ev.name; applyActivity(); character.emote('sparkle', 0.5); }
+  else if (ev.type === 'watching' && ev.on) { character.trigger('curious', { then: 'idle' }, true); character.emote('exclaim', 0.5); chat.say('🛡️ Watching is on. I’ll keep an eye out with you!'); }
+  else if (ev.type === 'watching') character.emote('sparkle', 0.4);
+  else if (ev.type === 'locked') { character.face.setExpression('sleepy'); character.trigger('sleep', {}, true); }
+  else if (ev.type === 'unlocked') {
+    character.trigger('surprised', { then: 'happy' }, true);
+    character.emote('heart', 0.5);
+    chat.say('Face ID ✅ Welcome back! I missed you 💛');
+  }
+});
 host?.onActivity?.(({ kind }) => {
   seenActivity = kind;
   applyActivity();

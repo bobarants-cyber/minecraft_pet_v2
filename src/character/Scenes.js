@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SEAT_HEIGHT, box, buildChair, buildGlasses, buildOffice, mat } from './Props.js';
+import { THEME_SCENES } from './ThemeScenes.js';
 
 /**
  * Little scenes the pet acts out depending on what you're doing (see electron/activity.js): watching a video,
@@ -606,3 +607,6 @@ function place(obj, x, y, z) {
   obj.position.set(x, y, z);
   return obj;
 }
+
+// FaceAway's themes (hacker, liquid glass, midnight, sunset): src/character/ThemeScenes.js
+Object.assign(SCENES, THEME_SCENES);

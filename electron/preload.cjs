@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('mobHost', {
   speak: (text) => ipcRenderer.send('voice:speak', text),
   onSpeaking: (fn) => ipcRenderer.on('speaking', (_e, s) => fn(s)),
   onActivity: (fn) => ipcRenderer.on('activity', (_e, a) => fn(a)),
+  onFaceAway: (fn) => ipcRenderer.on('faceaway', (_e, ev) => fn(ev)),
+  faceAwayCommand: (type, extra = {}) => ipcRenderer.send('faceaway:command', { type, ...extra }),
   onWellbeing: (fn) => ipcRenderer.on('wellbeing', (_e, w) => fn(w)),
   onFocus: (fn) => ipcRenderer.on('focus', (_e, f) => fn(f)),
   onEffect: (fn) => ipcRenderer.on('effect', (_e, f) => fn(f)),

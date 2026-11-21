@@ -28,6 +28,7 @@ import * as presenton from './presenton.js';
 import { recipePhotos, testKey as testPixabayKey } from './photos.js';
 import { fillTemplate } from './fillTemplate.js';
 import * as inbox from './inbox.js';
+import { FaceAwayBridge } from './faceaway.js';
 import { Memory } from './memory.js';
 import { Diary } from './diary.js';
 import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
@@ -440,6 +441,7 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
     ...(settings.cursorMode ? [{ label: '   Hide the normal arrow (only Bbokari)', type: 'checkbox', checked: settings.cursorHideArrow, click: (i) => (applySettings({ cursorHideArrow: i.checked }), showRealArrow(), setTimeout(hideRealArrow, 700)) }] : []),
+    { label: '🛡️ FaceAway', submenu: faceAwayMenu() },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
     { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
@@ -612,6 +614,45 @@ function pollIdle() {
     if (ASLEEP.has(beeState)) command('trigger', { name: 'wake', surprised: true });
   }
 }
+
+// ---------- FaceAway (Face ID lock, panic screen, themes): the pet reacts, and can drive it ----------
+let faceAway = null;
+const faceAwayState = { watching: false, theme: null, hiddenBefore: null, seen: false };
+function startFaceAway() {
+  if (process.platform !== 'darwin') return;
+  faceAway = new FaceAwayBridge(onFaceAwayEvent);
+  faceAway.start();
+}
+function onFaceAwayEvent(ev) {
+  faceAwayState.seen = true;
+  // a stranger or the panic screen: the pet disappears at once (it mustn't give anything away), and comes back after
+  if (ev.type === 'stranger' || ev.type === 'panic') {
+    if (faceAwayState.hiddenBefore === null) faceAwayState.hiddenBefore = !!settings.hidden;
+    if (!settings.hidden) applySettings({ hidden: true });
+  } else if (ev.type === 'panicEnd' || ev.type === 'unlocked') {
+    if (faceAwayState.hiddenBefore === false) applySettings({ hidden: false });
+    faceAwayState.hiddenBefore = null;
+  }
+  if (ev.type === 'watching') faceAwayState.watching = !!ev.on;
+  if (ev.type === 'theme') faceAwayState.theme = ev.name ?? null;
+  send('faceaway', ev);
+  buildTray();
+}
+function faceAwayMenu() {
+  const t = faceAwayState.theme;
+  const theme = (name, label) => ({ label, type: 'radio', checked: t === name, click: () => faceAway?.command('theme', { name }) });
+  return [
+    { label: faceAwayState.seen ? (faceAwayState.watching ? '👀 Watching is on' : 'Watching is off') : 'Start FaceAway with: ./faceaway --app', enabled: false },
+    { label: faceAwayState.watching ? 'Turn watching off' : 'Turn watching on', click: () => faceAway?.command('watch', { on: !faceAwayState.watching }) },
+    { label: '🔒 Lock with Face ID', click: () => faceAway?.command('lock') },
+    { label: '🚨 Panic', click: () => faceAway?.command('panic') },
+    { label: '🏠 Home screen', click: () => faceAway?.command('home') },
+    { type: 'separator' },
+    { label: 'Theme (FaceAway and me)', enabled: false },
+    theme('clean', 'Clean'), theme('midnight', 'Midnight'), theme('sunset', 'Sunset'), theme('hacker', '💻 Hacker'), theme('glass', '🫧 Liquid Glass'),
+  ];
+}
+ipcMain.on('faceaway:command', (_e, { type, ...extra } = {}) => faceAway?.command(type, extra));
 
 ipcMain.handle('settings:get', () => settings);
 ipcMain.on('settings:set', (_e, patch) => applySettings(patch));
@@ -2429,6 +2470,7 @@ ipcMain.on('state', (_e, name) => {
 app.whenReady().then(() => {
   app.dock?.hide();
   createWindow();
+  startFaceAway();
   reminders = new ReminderStore({
     file: path.join(app.getPath('userData'), 'reminders.json'),
     onFire: fireReminder,
