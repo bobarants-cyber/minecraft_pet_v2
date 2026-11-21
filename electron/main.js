@@ -722,7 +722,7 @@ async function faceAwayAddFace(name) {
   if (!name) return;
   const was = faceAwayRunning();
   if (was) stopFaceAwayApp(); // the camera is needed for this
-  send('say', { text: `📸 Look at the camera, ${name}! Turn your head a little left and right while I learn your face…` });
+  send('say', { text: `📸 Look at the camera, ${name}! Then turn your head where the blue light sweeps — the ring fills up as I learn your face.` });
   const r = await runFaceAway(['--add', name]);
   send('say', { text: r.ok ? `✅ Added ${name}! FaceAway will recognize them now.` : `Couldn’t add ${name}: ${r.text.split('\n').slice(-2).join(' ')}`, error: !r.ok });
   if (was || settings.faceAwayAuto !== false) faStart();

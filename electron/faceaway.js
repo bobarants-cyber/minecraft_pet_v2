@@ -75,15 +75,21 @@ export function buildFaceAway(onLine = () => {}) {
     try {
       fs.mkdirSync(FACEAWAY_DIR, { recursive: true });
       const repo = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'faceaway');
-      for (const f of ['FaceAway.swift', 'GlanceFace.swift', 'LICENSE-glance.txt']) fs.copyFileSync(path.join(repo, f), path.join(FACEAWAY_DIR, f));
+      // FaceAway + Glance's recognition (GlanceFace) + Glance's setup screen and unlock pill (GlanceUI), with its videos
+      for (const f of ['FaceAway.swift', 'GlanceFace.swift', 'GlanceUI.swift', 'LICENSE-glance.txt', 'unlockanimation.mp4', 'unsuccessfulunlockanimation.mp4', 'unlockstatic.png']) fs.copyFileSync(path.join(repo, f), path.join(FACEAWAY_DIR, f));
+      // with several files, Swift runs the one called main.swift
+      fs.copyFileSync(path.join(repo, 'FaceAway.swift'), path.join(FACEAWAY_DIR, 'main.swift'));
       fs.cpSync(path.join(repo, 'ArcFace.mlpackage'), path.join(FACEAWAY_DIR, 'ArcFace.mlpackage'), { recursive: true });
       // the new model means new face samples: drop the compiled copy so it's rebuilt
       fs.rmSync(path.join(os.homedir(), 'Library', 'Application Support', 'FaceAway', 'ArcFace.mlmodelc'), { recursive: true, force: true });
     } catch (e) { return resolve({ ok: false, text: e.message }); }
-    const p = spawn('swiftc', ['-O', 'FaceAway.swift', 'GlanceFace.swift', '-o', 'faceaway'], { cwd: FACEAWAY_DIR });
+    // macOS 14 or newer (Glance's SwiftUI animations need it)
+    const target = `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macos14.0`;
+    const p = spawn('swiftc', ['-O', '-target', target, 'main.swift', 'GlanceFace.swift', 'GlanceUI.swift', '-o', 'faceaway'], { cwd: FACEAWAY_DIR });
     let err = '';
     p.stderr.on('data', (d) => { err += d; onLine(String(d)); });
     p.on('error', (e) => resolve({ ok: false, text: `Couldn’t run swiftc (${e.message}). Install the Xcode Command Line Tools once.` }));
+    p.on('close', (code) => { try { fs.writeFileSync(path.join(FACEAWAY_DIR, 'build.log'), err); } catch {} });
     p.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, text: err.split('\n').filter((l) => /error:/.test(l)).slice(0, 4).join('\n') || 'Build failed.' }));
   });
 }
@@ -99,6 +105,7 @@ export function runFaceAway(args, { input = null, onLine = () => {} } = {}) {
     p.stderr.on('data', take);
     if (input !== null) { p.stdin.write(input + '\n'); p.stdin.end(); }
     p.on('error', (e) => resolve({ ok: false, text: e.message }));
+    p.on('close', (code) => { try { fs.writeFileSync(path.join(FACEAWAY_DIR, 'build.log'), err); } catch {} });
     p.on('close', (code) => resolve({ ok: code === 0, text: out.trim() }));
   });
 }

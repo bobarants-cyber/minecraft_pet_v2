@@ -1123,68 +1123,21 @@ final class HUD {
     }
 }
 
-// MARK: - Face ID-style animation
+// MARK: - Face ID animation (Glance's pill and scan videos — see GlanceUI.swift)
 
-/// A small panel in the middle of the screen with a Face ID-style face glyph.
-/// success: face → spinning ring → green check. failure: face → ring → red cross that shakes.
-/// progress: face with a ring that fills up (used while learning a face).
+/// Glance's Face ID look. On a Mac without a notch it's Glance's floating pill at the top centre of the screen:
+/// waiting → the still; recognised → Glance's unlock video (blue scan → check); not recognised → the failure video.
 final class FaceIDOverlay {
-    private var window: NSWindow?
-    private var root: CALayer?
-    private let size: CGFloat = 240
-    private let glyph: CGFloat = 110
-    private var progressRing: CAShapeLayer?
-    private var generation = 0
+    private let pill = GlancePill()
+    /// While the lock screen is up, the pill stays open (waiting) after a failure.
+    var holdOpen = false
 
     static let blue = NSColor(calibratedRed: 0.16, green: 0.47, blue: 1.0, alpha: 1)
     static let cyan = NSColor(calibratedRed: 0.35, green: 0.85, blue: 1.0, alpha: 1)
     static let green = NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.40, alpha: 1)
     static let red = NSColor(calibratedRed: 1.0, green: 0.27, blue: 0.23, alpha: 1)
 
-    var isVisible: Bool { window != nil }
-
-    // MARK: Building blocks
-
-    private func makeWindow() -> CALayer {
-        dismissNow()
-        let screen = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let frame = NSRect(x: screen.midX - size / 2, y: screen.midY - size / 2, width: size, height: size)
-        let w = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
-        w.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)   // above the decoy
-        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        w.isOpaque = false
-        w.hasShadow = false
-        w.backgroundColor = .clear
-        w.ignoresMouseEvents = true
-        w.isReleasedWhenClosed = false
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: size, height: size))
-        view.wantsLayer = true
-        let panel = view.layer!
-        panel.backgroundColor = NSColor(calibratedWhite: 0.98, alpha: 0.94).cgColor
-        panel.cornerRadius = 36
-        w.contentView = view
-        w.setFrame(frame, display: true)
-        w.orderFrontRegardless()
-        window = w
-        root = panel
-        generation += 1
-        return panel
-    }
-
-    /// A shape layer the size of the glyph, centered a little above the middle.
-    private func shape(_ path: CGPath, color: NSColor, width: CGFloat = 6) -> CAShapeLayer {
-        let l = CAShapeLayer()
-        l.frame = CGRect(x: (size - glyph) / 2, y: (size - glyph) / 2 + 18, width: glyph, height: glyph)
-        l.path = path
-        l.strokeColor = color.cgColor
-        l.fillColor = nil
-        l.lineWidth = width
-        l.lineCap = .round
-        l.lineJoin = .round
-        return l
-    }
-
-    private func facePath() -> CGPath { FaceIDOverlay.facePath(size: glyph) }
+    var isVisible: Bool { pill.isOpen }
 
     /// Corner brackets, two eyes, a nose and a smile, in a box `s` points wide.
     static func facePath(size s: CGFloat) -> CGPath {
@@ -1206,132 +1159,12 @@ final class FaceIDOverlay {
         return p
     }
 
-    private func circlePath(scale: CGFloat = 0.46) -> CGPath {
-        let p = CGMutablePath()
-        let r = glyph * scale
-        p.addEllipse(in: CGRect(x: glyph / 2 - r, y: glyph / 2 - r, width: r * 2, height: r * 2))
-        return p
-    }
-
-    private func checkPath() -> CGPath {
-        let s = glyph, p = CGMutablePath()
-        p.move(to: CGPoint(x: s * 0.31, y: s * 0.50))
-        p.addLine(to: CGPoint(x: s * 0.45, y: s * 0.37))
-        p.addLine(to: CGPoint(x: s * 0.71, y: s * 0.64))
-        return p
-    }
-
-    private func crossPath() -> CGPath {
-        let s = glyph, p = CGMutablePath()
-        p.move(to: CGPoint(x: s * 0.35, y: s * 0.35)); p.addLine(to: CGPoint(x: s * 0.65, y: s * 0.65))
-        p.move(to: CGPoint(x: s * 0.65, y: s * 0.35)); p.addLine(to: CGPoint(x: s * 0.35, y: s * 0.65))
-        return p
-    }
-
-    private func label(_ text: String, color: NSColor) -> CATextLayer {
-        let t = CATextLayer()
-        t.string = text
-        t.font = NSFont.systemFont(ofSize: 17, weight: .semibold)
-        t.fontSize = 17
-        t.foregroundColor = color.cgColor
-        t.alignmentMode = .center
-        t.contentsScale = window?.backingScaleFactor ?? 2
-        t.frame = CGRect(x: 8, y: 26, width: size - 16, height: 24)
-        return t
-    }
-
-    /// Keyframe animation over the whole sequence (`total` seconds).
-    private func keys(_ path: String, _ values: [Any], _ times: [Double], total: Double, start: CFTimeInterval) -> CAKeyframeAnimation {
-        let a = CAKeyframeAnimation(keyPath: path)
-        a.values = values
-        a.keyTimes = times.map { NSNumber(value: $0) }
-        a.duration = total
-        a.beginTime = start
-        a.fillMode = .both
-        a.isRemovedOnCompletion = false
-        return a
-    }
-
-    // MARK: Sequences
-
-    func success(_ text: String) { play(text, ok: true) }
-    func failure(_ text: String) { play(text, ok: false) }
-
-    private func play(_ text: String, ok: Bool) {
-        let panel = makeWindow()
-        let total: Double = ok ? 2.1 : 1.5
-        let t0 = CACurrentMediaTime()
-        let finish = ok ? FaceIDOverlay.green : FaceIDOverlay.red
-        let blue = FaceIDOverlay.blue.cgColor, cyan = FaceIDOverlay.cyan.cgColor
-        // Fractions of the sequence: face shows, turns into the ring, ring settles into the result.
-        let ringIn = ok ? 0.24 : 0.20, settle = ok ? 0.56 : 0.48
-
-        let face = shape(facePath(), color: FaceIDOverlay.blue)
-        face.add(keys("opacity", [0, 1, 1, 0, 0], [0, 0.06, ringIn - 0.04, ringIn + 0.06, 1], total: total, start: t0), forKey: "o")
-        face.add(keys("strokeColor", [blue, blue, cyan, cyan], [0, 0.08, ringIn, 1], total: total, start: t0), forKey: "c")
-        face.add(keys("transform.scale", [0.92, 1, 1, 0.8, 0.8], [0, 0.06, ringIn - 0.04, ringIn + 0.06, 1], total: total, start: t0), forKey: "s")
-        panel.addSublayer(face)
-
-        // Two rings spinning out of phase look like the swirling 3D ring.
-        for (n, phase) in [0.0, 0.5].enumerated() {
-            let ring = shape(circlePath(), color: FaceIDOverlay.cyan, width: n == 0 ? 4 : 2.5)
-            ring.add(keys("opacity", [0, 0, 1, 1, 0, 0], [0, ringIn - 0.02, ringIn + 0.06, settle - 0.04, settle + 0.03, 1],
-                          total: total, start: t0), forKey: "o")
-            ring.add(keys("transform.rotation.z", [phase, phase + .pi * 3], [0, 1], total: total, start: t0), forKey: "r")
-            ring.add(keys("transform.scale.x", [1, 1, 0.3, 0.9, 0.25, 1, 1],
-                          [0, ringIn, ringIn + 0.08, ringIn + 0.16, ringIn + 0.24, settle, 1], total: total, start: t0), forKey: "x")
-            ring.add(keys("strokeColor", [blue, blue, cyan, finish.cgColor, finish.cgColor],
-                          [0, ringIn, (ringIn + settle) / 2, settle, 1], total: total, start: t0), forKey: "c")
-            panel.addSublayer(ring)
-        }
-
-        let circle = shape(circlePath(), color: finish, width: 5)
-        circle.add(keys("opacity", [0, 0, 1, 1], [0, settle - 0.02, settle + 0.04, 1], total: total, start: t0), forKey: "o")
-        panel.addSublayer(circle)
-
-        let mark = shape(ok ? checkPath() : crossPath(), color: finish, width: 6)
-        mark.add(keys("strokeEnd", [0, 0, 1, 1], [0, settle + 0.02, settle + 0.16, 1], total: total, start: t0), forKey: "e")
-        if !ok {
-            let shake = keys("transform.translation.x", [0, 0, -14, 14, -9, 9, -4, 0],
-                             [0, settle + 0.16, 0.72, 0.78, 0.84, 0.90, 0.95, 1], total: total, start: t0)
-            mark.add(shake, forKey: "shake")
-            circle.add(shake, forKey: "shake")
-        }
-        panel.addSublayer(mark)
-
-        let words = label(text, color: ok ? NSColor(calibratedWhite: 0.15, alpha: 1) : FaceIDOverlay.red)
-        words.add(keys("opacity", [0, 0, 1, 1], [0, settle, settle + 0.1, 1], total: total, start: t0), forKey: "o")
-        panel.addSublayer(words)
-
-        let g = generation
-        DispatchQueue.main.asyncAfter(deadline: .now() + total + 0.7) { [weak self] in
-            guard let self = self, self.generation == g else { return }
-            self.dismissNow()
-        }
-    }
-
-    /// Face glyph with a ring around it that fills from 0 to 1.
-    func progress(_ fraction: Double) {
-        if progressRing == nil || window == nil {
-            let panel = makeWindow()
-            let track = shape(circlePath(scale: 0.68), color: NSColor(calibratedWhite: 0.85, alpha: 1), width: 5)
-            panel.addSublayer(track)
-            let ring = shape(circlePath(scale: 0.68), color: FaceIDOverlay.green, width: 5)
-            ring.strokeEnd = 0
-            panel.addSublayer(ring)
-            panel.addSublayer(shape(facePath(), color: FaceIDOverlay.blue, width: 5))
-            panel.addSublayer(label("Move your head slowly", color: NSColor(calibratedWhite: 0.35, alpha: 1)))
-            progressRing = ring
-        }
-        progressRing?.strokeEnd = CGFloat(max(0, min(1, fraction)))
-    }
-
-    func dismissNow() {
-        window?.orderOut(nil)
-        window = nil
-        root = nil
-        progressRing = nil
-    }
+    /// The lock screen is up: the pill opens and waits for a face.
+    func scanning() { holdOpen = true; pill.show(.idle) }
+    func success(_ text: String) { holdOpen = false; pill.play(.success, thenClose: true) }
+    func failure(_ text: String) { pill.play(.failure, thenClose: !holdOpen) }
+    func progress(_ fraction: Double) { pill.show(.idle) }
+    func dismissNow() { holdOpen = false; pill.hide() }
 }
 
 // MARK: - Face-unlock lock screen
@@ -3003,75 +2836,42 @@ final class Enroller {
     let name: String
     let options: Options
     private var watcher: FaceWatcher!
-    private var prints: [FacePrint] = []
-    private var lastSample = Date.distantPast
-    private var lastWarning = Date.distantPast
-    private let wanted = 40
-    private let overlay = FaceIDOverlay()
+    private let glance = GlanceEnrollment()
 
     init(name: String, options: Options) {
         self.name = name
         self.options = options
     }
 
+    /// Glance's face setup: the black pill panel with the camera inside the ring, and the blue sweep across the
+    /// screen pointing where to turn your head (straight, then the eight directions). The ring fills as each
+    /// direction is captured, then the checkmark draws.
     func start() {
-        print("""
-
-        Adding "\(name)". Sit in front of the Mac like you normally do, alone.
-        Over the next ~10 seconds, look at the screen and slowly move your head a little:
-        left, right, up, down. If you wear glasses sometimes, do it again later with them.
-
-        """)
-        watcher = FaceWatcher(checksPerSecond: 15, minSize: options.minSize) { [weak self] pixels, faces in
-            self?.frame(pixels, faces)
+        print("Adding \"\(name)\". Look at the camera, then turn your head where the blue light sweeps.")
+        watcher = FaceWatcher(checksPerSecond: 15, minSize: 0.01) { [weak self] pixels, _ in
+            self?.glance.frame(pixels)
         }
         watcher.start()
-    }
-
-    // Runs on the camera queue.
-    private func frame(_ pixels: CVPixelBuffer, _ faces: [CGRect]) {
-        guard prints.count < wanted else { return }
-        let now = Date()
-        guard faces.count == 1 else {
-            if faces.count > 1, now.timeIntervalSince(lastWarning) > 2 {
-                lastWarning = now
-                print("\rOnly \(name) should be in view.            ")
+        glance.done = { [weak self] samples in
+            guard let self else { return }
+            guard let samples else {
+                self.watcher.stop()
+                print("Cancelled.")
+                exit(1)
             }
-            return
-        }
-        guard now.timeIntervalSince(lastSample) >= 0.25 else { return }
-        // Only learn from clear views, the same bar recognition uses later.
-        guard (faceQualities(pixels, [faces[0]]).first ?? 1) >= Float(options.minQuality),
-              fullyInFrame(faces[0]) else {
-            if now.timeIntervalSince(lastWarning) > 2 {
-                lastWarning = now
-                print("\rFace the screen a bit more (that view was too unclear).   ")
-            }
-            return
-        }
-        guard let fp = featurePrint(of: pixels, box: faces[0]) else { return }
-        lastSample = now
-        prints.append(fp)
-        print("\rCaptured \(prints.count)/\(wanted)   ", terminator: "")
-        fflush(stdout)
-        let fraction = Double(prints.count) / Double(wanted)
-        DispatchQueue.main.async { self.overlay.progress(fraction) }
-        if prints.count >= wanted { finish() }
-    }
-
-    private func finish() {
-        let samples = prints
-        DispatchQueue.main.async {
             do {
                 let total = try FaceStore.add(samples, to: self.name)
-                print("\n\nSaved \"\(self.name)\" (\(total) samples).")
-                print("Test it with:  ./faceaway --check")
-                self.overlay.success("Saved")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { exit(0) }
+                print("Saved \"\(self.name)\" (\(total) samples).")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.watcher.stop() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                    self.glance.ui.close()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(0) }
+                }
             } catch {
                 fail("Couldn't save: \(error.localizedDescription)")
             }
         }
+        glance.begin(session: watcher.session)
     }
 }
 
@@ -3450,6 +3250,7 @@ final class Controller {
                 if strangerSince == nil {
                     strangerSince = Date()
                     softLock.setMessage("Not recognized", alert: true)
+                    if options.faceID { faceIDOverlay.failure("Not recognized") }   // Glance's red shake, then waits again
                 }
                 if options.softLockSeconds > 0, let since = strangerSince,
                    Date().timeIntervalSince(since) >= options.softLockSeconds {
@@ -3544,6 +3345,7 @@ final class Controller {
         Bridge.emit(["type": stranger ? "stranger" : "locked"])
         strangerSince = stranger ? Date() : nil
         softLock.show()
+        if options.faceID { faceIDOverlay.scanning() }   // Glance's pill opens and waits for your face
         updateCamera()
         onStateChange()
         if stranger {
@@ -3558,6 +3360,7 @@ final class Controller {
     private func escalateToMacLock() {
         guard softLocked, !screenLocked else { return }
         say("A stranger kept trying — switching to the Mac lock.", .alert)
+        faceIDOverlay.dismissNow()
         EventLog.add("Stranger kept trying — Mac locked")
         screenLocked = true
         lockScreen()
@@ -3632,6 +3435,7 @@ final class Controller {
         }
         if softLocked {
             strangerSince = nil
+            faceIDOverlay.dismissNow()
             softLock.dismiss()
             softLocked = false
             softTrust = 0
