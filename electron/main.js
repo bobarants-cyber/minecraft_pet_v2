@@ -28,7 +28,7 @@ import * as presenton from './presenton.js';
 import { recipePhotos, testKey as testPixabayKey } from './photos.js';
 import { fillTemplate } from './fillTemplate.js';
 import * as inbox from './inbox.js';
-import { FaceAwayBridge } from './faceaway.js';
+import { FaceAwayBridge, buildFaceAway, runFaceAway, startFaceAwayApp, stopFaceAwayApp, faceAwayRunning, FACEAWAY_BIN } from './faceaway.js';
 import { Memory } from './memory.js';
 import { Diary } from './diary.js';
 import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
@@ -622,6 +622,120 @@ function startFaceAway() {
   if (process.platform !== 'darwin') return;
   faceAway = new FaceAwayBridge(onFaceAwayEvent);
   faceAway.start();
+  if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) faStart(); // starts with the pet
+  app.on('before-quit', stopFaceAwayApp);
+}
+// Every FaceAway option you'd type in Terminal, as settings (Bbokari restarts FaceAway with them).
+const FA_FLAGS = [
+  ['home', '--home', '🏠 Home screen on the desktop'], ['panicButton', '--panic-button', '🚨 Floating PANIC button'],
+  ['faceUnlock', '--face-unlock', '🔒 Face ID lock screen'], ['faceid', '--faceid', '✅ Face ID animation'],
+  ['voice', '--voice', '🗣 Voice (“Access denied” / “Welcome back”)'], ['alarm', '--alarm', '🚨 Alarm when a stranger is caught'],
+  ['mute', '--mute', '🔇 Mute and pause music while hidden'], ['gestures', '--gestures', '✋ Gestures (palm or covered camera hides)'],
+  ['hud', '--hud', '🎯 Live targeting window'], ['hacker', '--hacker', '💻 Hacker terminal with status line'],
+  ['back', '--back', '↩️ Go back to my tab when I return'], ['onlyMe', '--only-me', '👤 Ignore a second face'],
+  ['strict', '--strict', '⚠️ Strict: hide whenever my face isn’t visible'], ['noPhotos', '--no-photos', '📷 Don’t save photos of strangers'],
+  ['noLock', '--no-lock', '🔓 Never lock the Mac'], ['noHotkeys', '--no-hotkeys', '⌨️ Turn off the panic keys'],
+];
+const FA_VALUES = [
+  ['textMe', '--text-me', '💬 Text me when a stranger is caught', 'Phone number or Apple ID email'],
+  ['schoolName', '--school-name', '🏫 School name on the decoy', 'School name'],
+  ['tab', '--tab', '🗂 Switch to a tab containing', 'Text in the tab’s title or URL'],
+  ['url', '--url', '🔗 Switch to this web page', 'https://…'],
+  ['browser', '--browser', '🌐 Browser', 'chrome, safari, brave, edge or chromium'],
+  ['lockAfter', '--lock-after', '⏱ Face-lock after away (seconds)', 'Seconds (0 = don’t)'],
+  ['unlockTime', '--unlock-time', '⏱ Real Mac lock after a stranger tries (seconds)', 'Seconds'],
+  ['delay', '--delay', '⏱ Switch after my face is gone (seconds)', 'Seconds (e.g. 0.6)'],
+  ['grace', '--grace', '⏱ Wait after unlocking before locking again (seconds)', 'Seconds'],
+  ['tolerance', '--tolerance', '🎚 Face match looseness (lower = stricter)', 'e.g. 1.0'],
+  ['minSize', '--min-size', '🎚 Ignore faces smaller than (fraction)', 'e.g. 0.06'],
+  ['minQuality', '--min-quality', '🎚 Only judge faces this clear (0–1)', 'e.g. 0.3'],
+  ['rate', '--rate', '🎚 Face checks per second', 'e.g. 30'],
+];
+const faOpts = () => settings.faceAwayOpts ?? {};
+function faArgs() {
+  const o = faOpts(), a = [];
+  for (const [k, flag] of FA_FLAGS) if (o[k]) a.push(flag);
+  for (const [k, flag] of FA_VALUES) if (o[k] !== undefined && o[k] !== '') a.push(flag, String(o[k]));
+  if (o.decoy) a.push('--decoy', o.decoy);
+  if (o.theme) a.push('--theme', o.theme);
+  return a;
+}
+function faStart() {
+  return startFaceAwayApp(faArgs(), (why) => send('say', { text: `FaceAway stopped: ${why || 'it quit right after starting.'}${/password/i.test(why) ? ' Set one in 🛡️ FaceAway → 🔑 Set panic password…' : ''}`, error: true }));
+}
+function faSet(patch) {
+  applySettings({ faceAwayOpts: { ...faOpts(), ...patch } });
+  if (faceAwayRunning()) { stopFaceAwayApp(); setTimeout(faStart, 400); }
+  buildTray();
+}
+function faceAwayOptionsMenu() {
+  const o = faOpts();
+  return [
+    ...FA_FLAGS.map(([k, , label]) => ({ label, type: 'checkbox', checked: !!o[k], click: (i) => faSet({ [k]: i.checked }) })),
+    { type: 'separator' },
+    ...FA_VALUES.map(([k, , label, hint]) => ({ label: o[k] !== undefined && o[k] !== '' ? `${label}: ${o[k]}` : `${label}…`, click: async () => {
+      const v = await askForm(label.replace(/^\S+ /, ''), [{ label: `${hint} (leave empty to turn off)` }]);
+      if (v) faSet({ [k]: v[0].trim() });
+    } })),
+  ];
+}
+/** A small form window (static local page: name / password fields, no web content). Resolves with the values or null. */
+let formSeq = 0;
+function askForm(title, fields) {
+  return new Promise((resolve) => {
+    const id = ++formSeq;
+    const w = new BrowserWindow({ width: 360, height: 120 + fields.length * 58, title, resizable: false, alwaysOnTop: true,
+      webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false } });
+    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const html = `<!doctype html><meta charset=utf-8><body style="font:14px -apple-system,sans-serif;margin:18px;background:#fffdf5">
+      <b>${esc(title)}</b><form id=f>${fields.map((f, i) => `<label style="display:block;margin-top:10px">${esc(f.label)}<br>
+      <input name=f${i} type=${f.password ? 'password' : 'text'} style="width:100%;padding:6px;font-size:14px;border:1px solid #ccc;border-radius:8px" ${i === 0 ? 'autofocus' : ''}></label>`).join('')}
+      <div style="margin-top:14px;text-align:right"><button type=button id=c>Cancel</button> <button style="background:#ffd23f;border:0;border-radius:8px;padding:6px 14px;font-weight:600">OK</button></div></form>
+      <script>const {ipcRenderer}=require('electron');const f=document.getElementById('f');
+      f.onsubmit=(e)=>{e.preventDefault();ipcRenderer.send('faceaway:form',${id},[...f.querySelectorAll('input')].map(i=>i.value));};
+      document.getElementById('c').onclick=()=>ipcRenderer.send('faceaway:form',${id},null);</script>`;
+    w.setMenu(null);
+    w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    const done = (_e, fid, values) => { if (fid !== id) return; ipcMain.removeListener('faceaway:form', done); if (!w.isDestroyed()) w.close(); resolve(values); };
+    ipcMain.on('faceaway:form', done);
+    w.on('closed', () => done(null, id, null));
+  });
+}
+async function faceAwayAddFace(name) {
+  if (!name) { const v = await askForm('Add a face to FaceAway', [{ label: 'Whose face? (e.g. Me, Mom)' }]); name = v?.[0]?.trim(); }
+  if (!name) return;
+  const was = faceAwayRunning();
+  if (was) stopFaceAwayApp(); // the camera is needed for this
+  send('say', { text: `📸 Look at the camera, ${name}! Turn your head a little left and right while I learn your face…` });
+  const r = await runFaceAway(['--add', name]);
+  send('say', { text: r.ok ? `✅ Added ${name}! FaceAway will recognize them now.` : `Couldn’t add ${name}: ${r.text.split('\n').slice(-2).join(' ')}`, error: !r.ok });
+  if (was || settings.faceAwayAuto !== false) faStart();
+}
+async function faceAwayPassword() {
+  const v = await askForm('Panic screen password (not your Mac password)', [{ label: 'New password (4+ characters)', password: true }, { label: 'Type it again', password: true }]);
+  if (!v) return;
+  if (v[0] !== v[1]) return send('say', { text: 'The two passwords didn’t match. Try again from the 🛡️ FaceAway menu.', error: true });
+  const r = await runFaceAway(['--set-password-stdin'], { input: v[0] });
+  send('say', { text: r.ok ? '🔑 Panic password saved.' : `Couldn’t save it: ${r.text}`, error: !r.ok });
+  if (r.ok && faceAwayRunning()) { stopFaceAwayApp(); faStart(); } // so the panic screen uses it
+}
+async function faceAwayPeople() {
+  const r = await runFaceAway(['--people']);
+  send('say', { text: r.ok ? `👥 ${r.text || 'Nobody added yet.'}` : r.text, error: !r.ok });
+}
+async function faceAwayRemove() {
+  const v = await askForm('Remove someone from FaceAway', [{ label: 'Name' }]);
+  const name = v?.[0]?.trim();
+  if (!name) return;
+  const r = await runFaceAway(['--remove', name]);
+  send('say', { text: r.ok ? `🗑️ Removed ${name}.` : r.text, error: !r.ok });
+}
+async function faceAwayBuild() {
+  send('say', { text: '🔨 Building FaceAway… (about a minute)' });
+  const r = await buildFaceAway();
+  if (!r.ok) return send('say', { text: `Build problem:\n${r.text}`, error: true });
+  stopFaceAwayApp(); faStart();
+  send('say', { text: '✅ FaceAway built and started (the eye in your menu bar).' });
 }
 function onFaceAwayEvent(ev) {
   faceAwayState.seen = true;
@@ -635,18 +749,56 @@ function onFaceAwayEvent(ev) {
   }
   if (ev.type === 'watching') faceAwayState.watching = !!ev.on;
   if (ev.type === 'theme') faceAwayState.theme = ev.name ?? null;
+  if (ev.type === 'decoy') faceAwayState.decoy = ev.name ?? null;
   send('faceaway', ev);
   buildTray();
+}
+/** Chat commands for FaceAway. Returns the reply, or null if it isn't one. */
+function faceAwayChat(text) {
+  const t = text.toLowerCase().replace(/[.!?]+$/, '');
+  if (!faceAway) return null;
+  const not = faceAwayState.seen ? '' : ' (start FaceAway with ./faceaway --app if nothing happens)';
+  if (/^(panic|panic mode|panic button)$/.test(t)) { faceAway.command('panic'); return `🚨 Panic screen on.${not}`; }
+  if (/^(lock|lock (my )?(mac|computer|screen)|face ?id lock)$/.test(t)) { faceAway.command('lock'); return `🔒 Locked with Face ID.${not}`; }
+  const w = t.match(/^(?:turn )?(?:watch(?:ing)?|guard(?: mode)?) (on|off)$|^(?:turn )?(on|off) (?:watch(?:ing)?|guard(?: mode)?)$/);
+  if (w) { const on = (w[1] ?? w[2]) === 'on'; faceAway.command('watch', { on }); return on ? `👀 Watching is on. I’ll keep an eye out too!${not}` : `Watching off.${not}`; }
+  const th = t.match(/^(?:(?:set|change|switch)(?: the)? theme to |)(clean|midnight|sunset|hacker|liquid glass|glass)(?: theme| mode)?$/);
+  if (th) { const name = th[1] === 'liquid glass' ? 'glass' : th[1]; faceAway.command('theme', { name }); return `✨ Theme: ${th[1]}.${not}`; }
+  const d = t.match(/^(?:use |set |change (?:the )?decoy to |)(school|update|black)(?: decoy| screen)?$/);
+  if (d && /decoy|screen|^use|^set|^change/.test(t)) { faceAway.command('decoy', { name: d[1] }); return `🎭 Decoy screen: ${d[1]}.${not}`; }
+  if (/^(show |open )?(my )?home ?screen$/.test(t)) { faceAway.command('home'); return `🏠 Home screen.${not}`; }
+  const add = t.match(/^(?:add|learn|save) (?:a |my )?face(?: (?:of|for|as))? ?(.*)$/);
+  if (add) { faceAwayAddFace(text.slice(text.length - add[1].length).trim() || null); return add[1] ? '📸 Getting the camera ready…' : '👤 Type their name in the little window.'; }
+  if (/^(set|change) (my |the )?(panic )?password$/.test(t)) { faceAwayPassword(); return '🔑 Type it in the little window (it stays private).'; }
+  if (/^(who can use my (mac|computer)|list (faces|people))$/.test(t)) { faceAwayPeople(); return '👥 Checking…'; }
+  if (/^(start|open|run) face ?away$/.test(t)) { const r = faStart(); return r.ok ? '▶️ FaceAway is running (the eye in your menu bar).' : r.text; }
+  if (/^(build|update) face ?away$/.test(t)) { faceAwayBuild(); return '🔨 On it!'; }
+  return null;
 }
 function faceAwayMenu() {
   const t = faceAwayState.theme;
   const theme = (name, label) => ({ label, type: 'radio', checked: t === name, click: () => faceAway?.command('theme', { name }) });
+  const built = fs.existsSync(FACEAWAY_BIN);
   return [
-    { label: faceAwayState.seen ? (faceAwayState.watching ? '👀 Watching is on' : 'Watching is off') : 'Start FaceAway with: ./faceaway --app', enabled: false },
+    ...(!built ? [{ label: '🔨 Build FaceAway (from FaceAway.swift in Downloads)', click: faceAwayBuild }] : [
+      { label: faceAwayRunning() ? '⏹ Stop FaceAway' : '▶️ Start FaceAway', click: () => (faceAwayRunning() ? stopFaceAwayApp() : faStart(), setTimeout(buildTray, 500)) },
+      { label: faceAwayState.watching ? '👀 Watching is on' : 'Watching is off', enabled: false }]),
     { label: faceAwayState.watching ? 'Turn watching off' : 'Turn watching on', click: () => faceAway?.command('watch', { on: !faceAwayState.watching }) },
     { label: '🔒 Lock with Face ID', click: () => faceAway?.command('lock') },
     { label: '🚨 Panic', click: () => faceAway?.command('panic') },
     { label: '🏠 Home screen', click: () => faceAway?.command('home') },
+    { label: '🎭 Decoy screen', submenu: [['school', '🏫 School'], ['update', '⚙️ Software update'], ['black', '⬛ Black']].map(([name, label]) => ({ label, type: 'radio', checked: faceAwayState.decoy === name, click: () => (faceAway?.command('decoy', { name }), applySettings({ faceAwayOpts: { ...faOpts(), decoy: name } })) })) },
+    { type: 'separator' },
+    { label: '👤 Add a face…', click: () => faceAwayAddFace() },
+    { label: '👥 Who can use my Mac', click: faceAwayPeople },
+    { label: '🗑️ Remove someone…', click: faceAwayRemove },
+    { label: '🔑 Set panic password…', click: faceAwayPassword },
+    { label: '🔍 Live face test (who it sees)', click: () => (faceAwayRunning() && stopFaceAwayApp(), runFaceAway(['--check']).then(() => settings.faceAwayAuto !== false && faStart())) },
+    { label: '💻 Make my whole Mac look like a hacker’s', click: () => runFaceAway(['--hacker-mac', 'on']).then((r) => send('say', { text: r.ok ? '💻 Hacker Mac on.' : r.text, error: !r.ok })) },
+    { label: '↩️ Put my Mac’s look back', click: () => runFaceAway(['--hacker-mac', 'off']).then((r) => send('say', { text: r.ok ? 'Back to normal.' : r.text, error: !r.ok })) },
+    { label: '⚙️ FaceAway options', submenu: faceAwayOptionsMenu() },
+    { label: '🔨 Update FaceAway (rebuild)', click: faceAwayBuild },
+    { label: 'Start FaceAway with me', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
     { type: 'separator' },
     { label: 'Theme (FaceAway and me)', enabled: false },
     theme('clean', 'Clean'), theme('midnight', 'Midnight'), theme('sunset', 'Sunset'), theme('hacker', '💻 Hacker'), theme('glass', '🫧 Liquid Glass'),
@@ -701,6 +853,9 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   // Recipe and fraction math, with the steps (exact, no AI guessing).
   const math = recipeMath(text);
   if (math) return { ok: true, kind: 'skill', text: math };
+  // FaceAway by chat: "panic", "lock my mac", "watch on", "hacker theme", "school decoy", "home screen"
+  const fa = faceAwayChat(String(text).trim());
+  if (fa) return { ok: true, kind: 'skill', text: fa };
   // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
   const answer = await answerOffer(String(text).trim());
   if (answer) return answer;
