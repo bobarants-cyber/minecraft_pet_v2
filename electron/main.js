@@ -663,8 +663,21 @@ function faArgs() {
   if (o.theme) a.push('--theme', o.theme);
   return a;
 }
+// FaceAway keeps running: if it stops on its own it's started again (up to 5 times in 2 minutes), and we say why.
+let faRestarts = [];
 function faStart() {
-  return startFaceAwayApp(faArgs(), (why) => send('say', { text: `FaceAway stopped: ${why || 'it quit right after starting.'}${/password/i.test(why) ? ' Set one in 🛡️ FaceAway → 🔑 Set panic password…' : ''}`, error: true }));
+  return startFaceAwayApp(faArgs(), (why, ranMs) => {
+    const needsPassword = /password/i.test(why);
+    faRestarts = faRestarts.filter((t) => Date.now() - t < 120000);
+    if (!needsPassword && faRestarts.length < 5 && settings.faceAwayAuto !== false) {
+      faRestarts.push(Date.now());
+      setTimeout(faStart, ranMs < 3000 ? 3000 : 1000);
+      if (faRestarts.length >= 2) send('say', { text: `FaceAway closed by itself (${why || 'no reason given'}). I restarted it. 🔁` });
+    } else {
+      send('say', { text: needsPassword ? '🛡️ FaceAway needs a panic password first: 🛡️ FaceAway → More → 🔑 Set panic password…' : `FaceAway keeps closing: ${why || 'no reason given'}. The details are in FaceAway/faceaway.log; send me the last lines.`, error: true });
+    }
+    buildTray();
+  });
 }
 function faSet(patch) {
   applySettings({ faceAwayOpts: { ...faOpts(), ...patch } });
@@ -788,30 +801,32 @@ function faceAwayMenu() {
   const t = faceAwayState.theme;
   const theme = (name, label) => ({ label, type: 'radio', checked: t === name, click: () => faceAway?.command('theme', { name }) });
   const built = fs.existsSync(FACEAWAY_BIN);
+  if (!built) return [{ label: '🔨 Set up FaceAway (uses FaceAway.swift in Downloads)', click: faceAwayBuild }, { label: fs.existsSync(GLANCE_APP) ? '👁 Glance' : '👁 Get Glance (Face ID unlock)…', click: openGlance }];
+  const on = faceAwayRunning();
   return [
-    ...(!built ? [{ label: '🔨 Build FaceAway (from FaceAway.swift in Downloads)', click: faceAwayBuild }] : [
-      { label: faceAwayRunning() ? '⏹ Stop FaceAway' : '▶️ Start FaceAway', click: () => (faceAwayRunning() ? stopFaceAwayApp() : faStart(), setTimeout(buildTray, 500)) },
-      { label: faceAwayState.watching ? '👀 Watching is on' : 'Watching is off', enabled: false }]),
-    { label: faceAwayState.watching ? 'Turn watching off' : 'Turn watching on', click: () => faceAway?.command('watch', { on: !faceAwayState.watching }) },
-    { label: '🔒 Lock with Face ID', click: () => faceAway?.command('lock') },
-    { label: fs.existsSync(GLANCE_APP) ? '👁 Glance (real Mac Face ID unlock)' : '👁 Get Glance (real Mac Face ID unlock)…', click: openGlance },
-    { label: '🚨 Panic', click: () => faceAway?.command('panic') },
-    { label: '🏠 Home screen', click: () => faceAway?.command('home') },
-    { label: '🎭 Decoy screen', submenu: [['school', '🏫 School'], ['update', '⚙️ Software update'], ['black', '⬛ Black']].map(([name, label]) => ({ label, type: 'radio', checked: faceAwayState.decoy === name, click: () => (faceAway?.command('decoy', { name }), applySettings({ faceAwayOpts: { ...faOpts(), decoy: name } })) })) },
-    { type: 'separator' },
+    { label: on ? (faceAwayState.watching ? '🟢 Protecting you' : '⚪ FaceAway is ready') : '🔴 FaceAway is off', enabled: false },
+    ...(on ? [] : [{ label: '▶️ Turn FaceAway on', click: () => (faStart(), setTimeout(buildTray, 600)) }]),
+    { label: '👀 Hide my screen when I look away', type: 'checkbox', checked: faceAwayState.watching, enabled: on, click: (i) => faceAway?.command('watch', { on: i.checked }) },
+    { label: fs.existsSync(GLANCE_APP) ? '🔒 Lock (unlock with Glance)' : '🔒 Lock now', enabled: on, click: () => faceAway?.command('lock') },
+    { label: '🚨 Panic', enabled: on, click: () => faceAway?.command('panic') },
+    { label: '🏠 Home screen', enabled: on, click: () => faceAway?.command('home') },
+    { label: '✨ Theme', submenu: ['clean', 'midnight', 'sunset', 'hacker', 'glass'].map((n) => ({ label: { clean: 'Clean', midnight: 'Midnight', sunset: 'Sunset', hacker: '💻 Hacker', glass: '🫧 Liquid Glass' }[n], type: 'radio', checked: t === n, click: () => (faceAway?.command('theme', { name: n }), applySettings({ faceAwayOpts: { ...faOpts(), theme: n } })) })) },
     { label: '👤 Add a face…', click: () => faceAwayAddFace() },
-    { label: '👥 Who can use my Mac', click: faceAwayPeople },
-    { label: '🗑️ Remove someone…', click: faceAwayRemove },
-    { label: '🔑 Set panic password…', click: faceAwayPassword },
-    { label: '🔍 Live face test (who it sees)', click: () => (faceAwayRunning() && stopFaceAwayApp(), runFaceAway(['--check']).then(() => settings.faceAwayAuto !== false && faStart())) },
-    { label: '💻 Make my whole Mac look like a hacker’s', click: () => runFaceAway(['--hacker-mac', 'on']).then((r) => send('say', { text: r.ok ? '💻 Hacker Mac on.' : r.text, error: !r.ok })) },
-    { label: '↩️ Put my Mac’s look back', click: () => runFaceAway(['--hacker-mac', 'off']).then((r) => send('say', { text: r.ok ? 'Back to normal.' : r.text, error: !r.ok })) },
-    { label: '⚙️ FaceAway options', submenu: faceAwayOptionsMenu() },
-    { label: '🔨 Update FaceAway (rebuild)', click: faceAwayBuild },
-    { label: 'Start FaceAway with me', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
     { type: 'separator' },
-    { label: 'Theme (FaceAway and me)', enabled: false },
-    theme('clean', 'Clean'), theme('midnight', 'Midnight'), theme('sunset', 'Sunset'), theme('hacker', '💻 Hacker'), theme('glass', '🫧 Liquid Glass'),
+    { label: 'More', submenu: [
+      { label: fs.existsSync(GLANCE_APP) ? '👁 Glance (Face ID unlock)' : '👁 Get Glance (Face ID unlock)…', click: openGlance },
+      { label: '🎭 Decoy screen', submenu: [['school', '🏫 School'], ['update', '⚙️ Software update'], ['black', '⬛ Black']].map(([name, label]) => ({ label, type: 'radio', checked: (faceAwayState.decoy ?? faOpts().decoy) === name, click: () => (faceAway?.command('decoy', { name }), applySettings({ faceAwayOpts: { ...faOpts(), decoy: name } })) })) },
+      { label: '👥 Who can use my Mac', click: faceAwayPeople },
+      { label: '🗑️ Remove someone…', click: faceAwayRemove },
+      { label: '🔑 Set panic password…', click: faceAwayPassword },
+      { label: '🔍 Live face test', click: () => (faceAwayRunning() && stopFaceAwayApp(), runFaceAway(['--check']).then(() => settings.faceAwayAuto !== false && faStart())) },
+      { label: '💻 Make my whole Mac look like a hacker’s', click: () => runFaceAway(['--hacker-mac', 'on']).then((r) => send('say', { text: r.ok ? '💻 Hacker Mac on.' : r.text, error: !r.ok })) },
+      { label: '↩️ Put my Mac’s look back', click: () => runFaceAway(['--hacker-mac', 'off']).then((r) => send('say', { text: r.ok ? 'Back to normal.' : r.text, error: !r.ok })) },
+      { label: '⚙️ All options', submenu: faceAwayOptionsMenu() },
+      { label: '🔨 Update FaceAway', click: faceAwayBuild },
+      { label: on ? '⏹ Turn FaceAway off' : '▶️ Turn FaceAway on', click: () => (on ? stopFaceAwayApp() : faStart(), setTimeout(buildTray, 600)) },
+      { label: 'Turn FaceAway on with me', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
+    ] },
   ];
 }
 ipcMain.on('faceaway:command', (_e, { type, ...extra } = {}) => faceAway?.command(type, extra));

@@ -110,11 +110,17 @@ export function startFaceAwayApp(args = [], onEarlyExit = () => {}) {
   const started = Date.now();
   let out = '';
   const p = spawn(FACEAWAY_BIN, ['--app', ...args], { cwd: FACEAWAY_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
-  const keep = (d) => (out = (out + d).slice(-2000));
+  let log = null;
+  try { log = fs.createWriteStream(path.join(FACEAWAY_DIR, 'faceaway.log'), { flags: 'a' }); log.write(`\n--- started ${new Date().toLocaleString()} ---\n`); } catch {}
+  const keep = (d) => { out = (out + d).slice(-2000); log?.write(d); };
   p.stdout.on('data', keep);
   p.stderr.on('data', keep);
   // if it stops right away, say why (e.g. "Choose a password for the panic screen first")
-  p.on('close', (code) => { if (Date.now() - started < 8000 && !p.killedByUs) onEarlyExit(out.trim().split('\n').slice(-2).join(' ')); });
+  // if it stops without being asked to, say why (e.g. "Choose a password for the panic screen first")
+  p.on('close', (code, signal) => {
+    log?.end(`--- stopped (code ${code}${signal ? ', ' + signal : ''}) ---\n`);
+    if (!p.killedByUs) onEarlyExit(out.trim().split('\n').slice(-2).join(' '), Date.now() - started);
+  });
   appProc = p;
   appProc.on('error', () => (appProc = null));
   return { ok: true };
