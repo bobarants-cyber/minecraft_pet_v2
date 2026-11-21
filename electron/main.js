@@ -625,7 +625,7 @@ function startFaceAway() {
   if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) faStart(); // starts with the pet
   // The real Mac lock (Glance unlocks it with your face): the pet sleeps while locked and cheers when you're back.
   powerMonitor.on('lock-screen', () => send('faceaway', { type: 'locked', source: 'mac' }));
-  powerMonitor.on('unlock-screen', () => send('faceaway', { type: 'unlocked', source: 'mac', glance: fs.existsSync(GLANCE_APP) }));
+  powerMonitor.on('unlock-screen', () => send('faceaway', { type: 'unlocked', source: 'mac' }));
   app.on('before-quit', stopFaceAwayApp);
 }
 // Every FaceAway option you'd type in Terminal, as settings (Bbokari restarts FaceAway with them).
@@ -751,7 +751,7 @@ async function faceAwayBuild() {
   const r = await buildFaceAway();
   if (!r.ok) return send('say', { text: `Build problem:\n${r.text}`, error: true });
   stopFaceAwayApp(); faStart();
-  send('say', { text: '✅ FaceAway built and started (the eye in your menu bar).' });
+  send('say', { text: '✅ FaceAway built and started with Glance’s face recognition built in. Re-add your face once (🛡️ FaceAway → 👤 Add a face…), because the new recognition needs new samples.' });
 }
 function onFaceAwayEvent(ev) {
   faceAwayState.seen = true;
@@ -791,30 +791,23 @@ function faceAwayChat(text) {
   if (/^(build|update) face ?away$/.test(t)) { faceAwayBuild(); return '🔨 On it!'; }
   return null;
 }
-const GLANCE_APP = '/Applications/Glance.app';
-const GLANCE_DOWNLOAD = 'https://github.com/jonnyoo/glance/releases/latest';
-function openGlance() {
-  if (fs.existsSync(GLANCE_APP)) shell.openPath(GLANCE_APP);
-  else { shell.openExternal(GLANCE_DOWNLOAD); send('say', { text: '👁 Download Glance.dmg there, open it and drag Glance to Applications. Then it unlocks your real Mac lock screen with your face (and I’ll cheer when it does)!' }); }
-}
 function faceAwayMenu() {
   const t = faceAwayState.theme;
   const theme = (name, label) => ({ label, type: 'radio', checked: t === name, click: () => faceAway?.command('theme', { name }) });
   const built = fs.existsSync(FACEAWAY_BIN);
-  if (!built) return [{ label: '🔨 Set up FaceAway (uses FaceAway.swift in Downloads)', click: faceAwayBuild }, { label: fs.existsSync(GLANCE_APP) ? '👁 Glance' : '👁 Get Glance (Face ID unlock)…', click: openGlance }];
+  if (!built) return [{ label: '🔨 Set up FaceAway', click: faceAwayBuild }];
   const on = faceAwayRunning();
   return [
     { label: on ? (faceAwayState.watching ? '🟢 Protecting you' : '⚪ FaceAway is ready') : '🔴 FaceAway is off', enabled: false },
     ...(on ? [] : [{ label: '▶️ Turn FaceAway on', click: () => (faStart(), setTimeout(buildTray, 600)) }]),
     { label: '👀 Hide my screen when I look away', type: 'checkbox', checked: faceAwayState.watching, enabled: on, click: (i) => faceAway?.command('watch', { on: i.checked }) },
-    { label: fs.existsSync(GLANCE_APP) ? '🔒 Lock (unlock with Glance)' : '🔒 Lock now', enabled: on, click: () => faceAway?.command('lock') },
+    { label: '🔒 Lock (Face ID unlock)', enabled: on, click: () => faceAway?.command('lock') },
     { label: '🚨 Panic', enabled: on, click: () => faceAway?.command('panic') },
     { label: '🏠 Home screen', enabled: on, click: () => faceAway?.command('home') },
     { label: '✨ Theme', submenu: ['clean', 'midnight', 'sunset', 'hacker', 'glass'].map((n) => ({ label: { clean: 'Clean', midnight: 'Midnight', sunset: 'Sunset', hacker: '💻 Hacker', glass: '🫧 Liquid Glass' }[n], type: 'radio', checked: t === n, click: () => (faceAway?.command('theme', { name: n }), applySettings({ faceAwayOpts: { ...faOpts(), theme: n } })) })) },
     { label: '👤 Add a face…', click: () => faceAwayAddFace() },
     { type: 'separator' },
     { label: 'More', submenu: [
-      { label: fs.existsSync(GLANCE_APP) ? '👁 Glance (Face ID unlock)' : '👁 Get Glance (Face ID unlock)…', click: openGlance },
       { label: '🎭 Decoy screen', submenu: [['school', '🏫 School'], ['update', '⚙️ Software update'], ['black', '⬛ Black']].map(([name, label]) => ({ label, type: 'radio', checked: (faceAwayState.decoy ?? faOpts().decoy) === name, click: () => (faceAway?.command('decoy', { name }), applySettings({ faceAwayOpts: { ...faOpts(), decoy: name } })) })) },
       { label: '👥 Who can use my Mac', click: faceAwayPeople },
       { label: '🗑️ Remove someone…', click: faceAwayRemove },

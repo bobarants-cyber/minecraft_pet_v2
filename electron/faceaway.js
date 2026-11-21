@@ -74,12 +74,13 @@ export function buildFaceAway(onLine = () => {}) {
   return new Promise((resolve) => {
     try {
       fs.mkdirSync(FACEAWAY_DIR, { recursive: true });
-      const dl = path.join(os.homedir(), 'Downloads', 'FaceAway.swift');
-      const src = path.join(FACEAWAY_DIR, 'FaceAway.swift');
-      if (fs.existsSync(dl) && (!fs.existsSync(src) || fs.statSync(dl).mtimeMs > fs.statSync(src).mtimeMs)) fs.copyFileSync(dl, src);
-      if (!fs.existsSync(src)) return resolve({ ok: false, text: 'FaceAway.swift isn’t in your FaceAway folder or Downloads yet.' });
+      const repo = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'faceaway');
+      for (const f of ['FaceAway.swift', 'GlanceFace.swift', 'LICENSE-glance.txt']) fs.copyFileSync(path.join(repo, f), path.join(FACEAWAY_DIR, f));
+      fs.cpSync(path.join(repo, 'ArcFace.mlpackage'), path.join(FACEAWAY_DIR, 'ArcFace.mlpackage'), { recursive: true });
+      // the new model means new face samples: drop the compiled copy so it's rebuilt
+      fs.rmSync(path.join(os.homedir(), 'Library', 'Application Support', 'FaceAway', 'ArcFace.mlmodelc'), { recursive: true, force: true });
     } catch (e) { return resolve({ ok: false, text: e.message }); }
-    const p = spawn('swiftc', ['-O', 'FaceAway.swift', '-o', 'faceaway'], { cwd: FACEAWAY_DIR });
+    const p = spawn('swiftc', ['-O', 'FaceAway.swift', 'GlanceFace.swift', '-o', 'faceaway'], { cwd: FACEAWAY_DIR });
     let err = '';
     p.stderr.on('data', (d) => { err += d; onLine(String(d)); });
     p.on('error', (e) => resolve({ ok: false, text: `Couldn’t run swiftc (${e.message}). Install the Xcode Command Line Tools once.` }));
