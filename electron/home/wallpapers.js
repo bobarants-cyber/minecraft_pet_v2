@@ -15,7 +15,7 @@ export const GRADIENTS = {
   forest: ['#0f2a1d', [0.2, 0.7, 0.8, '#2d6a4f'], [0.8, 0.3, 0.7, '#95d5b2'], [0.6, 0.9, 0.5, '#d8f3dc']],
   mono: ['#d9d9de', [0.2, 0.2, 0.7, '#ffffff'], [0.8, 0.8, 0.8, '#9a9aa6']],
 };
-export const ANIMATED = { aurora: '🌌 Aurora', lava: '🌋 Lava', stars: '⭐ Stars', waves: '🌊 Waves' };
+export const ANIMATED = { winter: '❄️ Winter night', aurora: '🌌 Aurora', lava: '🌋 Lava', stars: '⭐ Stars', waves: '🌊 Waves' };
 
 function paintGradient(g, w, h, spec) {
   const [base, ...blobs] = spec;
@@ -66,6 +66,53 @@ export function createWallpaper(spec, width, height) {
   if (spec?.type === 'animated') {
     wp.animated = true;
     const kind = spec.value;
+    if (kind === 'winter') {
+      // a snowy night: moon, mountains, pines, a warm little window, and snow falling
+      const scene = document.createElement('canvas');
+      scene.width = W; scene.height = H;
+      const s = scene.getContext('2d');
+      const sky = s.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, '#0a1030'); sky.addColorStop(0.6, '#26305e'); sky.addColorStop(1, '#5b6aa0');
+      s.fillStyle = sky; s.fillRect(0, 0, W, H);
+      for (let i = 0; i < 120; i++) { s.fillStyle = `rgba(255,255,255,${rand(0.2, 0.8)})`; s.fillRect(rand(0, W), rand(0, H * 0.5), 1, 1); }
+      const mx = W * 0.75, my = H * 0.18, mr = Math.min(W, H) * 0.06;
+      const glow = s.createRadialGradient(mx, my, mr * 0.5, mx, my, mr * 4);
+      glow.addColorStop(0, 'rgba(255,250,220,0.35)'); glow.addColorStop(1, 'rgba(255,250,220,0)');
+      s.fillStyle = glow; s.fillRect(0, 0, W, H);
+      s.fillStyle = '#f6f1dc'; s.beginPath(); s.arc(mx, my, mr, 0, 7); s.fill();
+      s.fillStyle = 'rgba(200,190,160,0.35)'; for (const [dx, dy, r] of [[-0.3, -0.2, 0.2], [0.25, 0.15, 0.15], [-0.1, 0.35, 0.1]]) { s.beginPath(); s.arc(mx + dx * mr, my + dy * mr, r * mr, 0, 7); s.fill(); }
+      const ridge = (base, amp, color, snow, seed) => {
+        s.fillStyle = color; s.beginPath(); s.moveTo(0, H);
+        const pts = [];
+        for (let x = 0; x <= W; x += W / 12) { const y = base - Math.abs(Math.sin(x / W * 7 + seed)) * amp - Math.sin(x / W * 19 + seed * 2) * amp * 0.15; pts.push([x, y]); s.lineTo(x, y); }
+        s.lineTo(W, H); s.fill();
+        if (snow) { s.fillStyle = 'rgba(235,240,255,0.85)'; for (const [x, y] of pts) if (y < base - amp * 0.55) { s.beginPath(); s.moveTo(x - W / 40, y + amp * 0.18); s.lineTo(x, y); s.lineTo(x + W / 40, y + amp * 0.18); s.fill(); } }
+      };
+      ridge(H * 0.62, H * 0.3, '#3a4678', true, 1.3);
+      ridge(H * 0.75, H * 0.18, '#2c3763', true, 4.1);
+      s.fillStyle = '#e9eef9'; s.fillRect(0, H * 0.82, W, H); // snowy ground
+      const pine = (x, y, h) => {
+        s.fillStyle = '#16283d';
+        for (let i = 0; i < 4; i++) { const w = h * (0.5 - i * 0.09), yy = y - i * h * 0.22; s.beginPath(); s.moveTo(x - w / 2, yy); s.lineTo(x, yy - h * 0.35); s.lineTo(x + w / 2, yy); s.fill(); s.fillStyle = 'rgba(240,245,255,0.9)'; s.fillRect(x - w / 2 + 2, yy - 2, w - 4, 2); s.fillStyle = '#16283d'; }
+      };
+      for (let i = 0; i < 14; i++) pine(rand(0, W), H * rand(0.8, 0.9), H * rand(0.12, 0.22));
+      // a cabin with a warm window
+      const cx = W * 0.22, cy = H * 0.86, cw = W * 0.1;
+      s.fillStyle = '#5a3a26'; s.fillRect(cx, cy - cw * 0.55, cw, cw * 0.55);
+      s.fillStyle = '#eef3ff'; s.beginPath(); s.moveTo(cx - cw * 0.12, cy - cw * 0.5); s.lineTo(cx + cw / 2, cy - cw * 0.95); s.lineTo(cx + cw * 1.12, cy - cw * 0.5); s.fill();
+      const win = s.createRadialGradient(cx + cw * 0.3, cy - cw * 0.28, 0, cx + cw * 0.3, cy - cw * 0.28, cw * 0.5);
+      win.addColorStop(0, 'rgba(255,200,110,0.6)'); win.addColorStop(1, 'rgba(255,200,110,0)');
+      s.fillStyle = win; s.fillRect(cx - cw, cy - cw * 1.2, cw * 3, cw * 1.5);
+      s.fillStyle = '#ffc56b'; s.fillRect(cx + cw * 0.18, cy - cw * 0.4, cw * 0.24, cw * 0.18);
+      const flakes = Array.from({ length: 200 }, () => ({ x: Math.random(), y: Math.random(), r: rand(0.6, 2), sp: rand(0.02, 0.06), ph: rand(0, 6) }));
+      wp.draw = (t) => {
+        g.drawImage(scene, 0, 0);
+        g.fillStyle = 'rgba(255,255,255,0.85)';
+        for (const f of flakes) { const y = ((f.y + t * f.sp) % 1) * H, x = (f.x + Math.sin(t * 0.5 + f.ph) * 0.01) * W; g.beginPath(); g.arc(x, y, f.r, 0, 7); g.fill(); }
+      };
+      wp.draw(0);
+      return wp;
+    }
     if (kind === 'stars') {
       const stars = Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), r: rand(0.3, 1.6), tw: rand(0, 6), sp: rand(0.002, 0.01) }));
       wp.draw = (t) => {

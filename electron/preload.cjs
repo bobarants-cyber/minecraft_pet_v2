@@ -79,3 +79,13 @@ contextBridge.exposeInMainWorld('homeHost', {
   onLeave: (fn) => ipcRenderer.on('home:leave', () => fn()),
   stopSaver: () => ipcRenderer.send('saver:stop'),
 });
+
+// ❄️ the snow overlay
+contextBridge.exposeInMainWorld('snowHost', {
+  onWins: (fn) => ipcRenderer.on('snow:wins', (_e, d) => fn(d)),
+  onCursor: (fn) => ipcRenderer.on('snow:cursor', (_e, p) => fn(p)),
+  onConfig: (fn) => ipcRenderer.on('snow:config', (_e, c) => fn(c)),
+  onScreen: (fn) => ipcRenderer.on('snow:screen', (_e, s) => fn(s)),
+  onDo: (fn) => ipcRenderer.on('snow:do', (_e, w) => fn(w)),
+  grab: (on) => ipcRenderer.send('snow:grab', on),
+});

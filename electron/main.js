@@ -41,6 +41,7 @@ import * as fun from './fun.js';
 import { parsePose, soundsLikePose, clampJoints, POSES } from '../src/skater/poses.js';
 import * as tickets from './tickets.js';
 import { createHomeScreen, SAVERS } from './homescreen.js';
+import { createSnow } from './snow.js';
 import { weatherData } from './skills.js';
 import http from 'node:http';
 import os from 'node:os';
@@ -443,6 +444,7 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
     ...(settings.cursorMode ? [{ label: '   Hide the normal arrow (only Bbokari)', type: 'checkbox', checked: settings.cursorHideArrow, click: (i) => (applySettings({ cursorHideArrow: i.checked }), showRealArrow(), setTimeout(hideRealArrow, 700)) }] : []),
+    { label: `❄️ Let it snow${snow?.config.mode !== 'off' && snow ? ' (on)' : ''}`, submenu: snowMenu() },
     { label: '🏠 Home screen', submenu: homeMenu() },
     { label: '🛡️ FaceAway', submenu: faceAwayMenu() },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
@@ -840,6 +842,41 @@ function setupHomeScreen() {
   });
 }
 
+// ---------- ❄️ snow on your desktop (snow.js, snow/) ----------
+let snow = null;
+function snowMenu() {
+  const c = snow?.config ?? { mode: 'off', amount: 'medium', fx: {} };
+  const fx = (key, label) => ({ label, type: 'checkbox', checked: c.fx[key] !== false, click: (i) => snow.set({ fx: { [key]: i.checked } }) });
+  return [
+    ...[['off', 'Off'], ['on', 'On (over everything)'], ['desktop', 'Desktop only']].map(([mode, label]) => ({ label, type: 'radio', checked: c.mode === mode, click: () => snow.set({ mode }) })),
+    { type: 'separator' },
+    { label: 'How much snow', submenu: [['light', 'Light'], ['medium', 'Medium'], ['heavy', 'Heavy']].map(([amount, label]) => ({ label, type: 'radio', checked: c.amount === amount, click: () => snow.set({ amount }) })) },
+    { label: '🌨 Start a blizzard', click: () => snow.blizzard() },
+    { label: '🛷 Send the sleigh', click: () => snow.sleigh() },
+    { label: '💨 Blow it away', enabled: c.mode !== 'off', click: () => snow.wind() },
+    { type: 'separator' },
+    fx('piles', 'Snow piles up on windows'),
+    fx('snowmen', 'Snowmen move in'),
+    fx('fights', 'Snowball fights'),
+    fx('sleigh', 'Sleigh when I switch apps'),
+    fx('wind', 'Shake the mouse to clear it'),
+    { label: 'Battery saver (30 fps)', type: 'checkbox', checked: !!c.saver, click: (i) => snow.set({ saver: i.checked }) },
+    { type: 'separator' },
+    { label: 'Tip: drag along the snow to roll a snowball, throw it at a window. Stack 3 for a snowman!', enabled: false },
+  ];
+}
+/** Chat: "let it snow", "stop the snow", "blizzard", "send the sleigh", "snow only on the desktop". */
+function snowChat(text) {
+  const t = text.toLowerCase().replace(/[!.?]+$/, '').trim();
+  if (!snow) return null;
+  if (/^(stop|no more|turn off|end)( the)? snow(ing|fall)?$|^snow off$/.test(t)) { snow.set({ mode: 'off' }); return '☀️ The snow stopped. Say “let it snow” any time!'; }
+  if (/^(let it snow|make it snow|snow|start (the )?snow(ing)?|snow on|it'?s snowing)$/.test(t)) { snow.set({ mode: 'on' }); return '❄️ Let it snow! Drag along the snow to roll a snowball and throw it, stack three for a snowman, and shake the mouse to blow it all away.'; }
+  if (/snow.*(only|just).*desktop|desktop.*only.*snow/.test(t)) { snow.set({ mode: 'desktop' }); return '❄️ Snow only on the desktop now (behind your windows).'; }
+  if (/^(start a |a )?blizzard$/.test(t)) { snow.blizzard(); return '🌨 Blizzard!'; }
+  if (/^(send|call)( the| a)? (sleigh|santa|reindeer)$/.test(t)) { snow.sleigh(); return '🛷 Here comes the sleigh!'; }
+  return null;
+}
+
 function homeMenu() {
   const s = homeScreen?.saver ?? {};
   return [
@@ -984,6 +1021,8 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   const math = recipeMath(text);
   if (math) return { ok: true, kind: 'skill', text: math };
   // FaceAway by chat: "panic", "lock my mac", "watch on", "hacker theme", "school decoy", "home screen"
+  const snowy = snowChat(String(text).trim());
+  if (snowy) return { ok: true, kind: 'skill', text: snowy };
   const home = homeChat(String(text).trim());
   if (home) return { ok: true, kind: 'skill', text: home };
   const fa = faceAwayChat(String(text).trim());
@@ -1505,6 +1544,7 @@ ipcMain.handle('hub:run', (_e, id) => {
     home: () => homeScreen?.openFront(),
     homeEdit: () => homeScreen?.edit(),
     saver: () => homeScreen?.startSaver(),
+    snow: () => snow?.set({ mode: snow.config.mode === 'off' ? 'on' : 'off' }),
     chat: () => command('chat'),
     check: () => checkWritingNow(),
     notes: () => (notes ? send('say', { text: `I’m already taking notes (${notes.title}) 📝` }) : (startNotes({ title: 'Notes' }), send('say', { text: 'Okay! I’m listening and taking notes 📝 Say “stop notes” when you’re done.' }))),
@@ -2791,6 +2831,7 @@ app.whenReady().then(() => {
     focusLeft: () => (focus ? focus.endAt - Date.now() : null),
   });
   setupHomeScreen();
+  snow = createSnow({ getSettings: () => settings, applySettings: (p) => (applySettings(p), buildTray()), say: (text, error) => send('say', { text, error }) });
   buildTray();
   setInterval(checkClasses, 15_000);
   setInterval(checkWriting, 6000);
