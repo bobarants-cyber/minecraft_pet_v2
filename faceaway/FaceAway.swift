@@ -3123,6 +3123,8 @@ final class Controller {
     private let faceIDOverlay = FaceIDOverlay()
     private let softLock = SoftLock()
     private var softLocked = false
+    private var softStrangerStreak = 0
+    private var softLockReadyAt = Date.distantPast
     private var softTrust = 0
     private var strangerSince: Date?           // a stranger has been trying to unlock since
     private var presentSinceTrusted = false   // you were recognized and haven't left since
@@ -3284,7 +3286,7 @@ final class Controller {
             // Too blurry, tilted or lowered to judge fairly: skip it rather than call it a stranger.
             guard quality[i] >= Float(options.minQuality), fullyInFrame(top[i]),
                   let print = featurePrint(of: pixels, box: top[i]),
-                  let match = identify(print, among: people, tolerance: Float(options.tolerance))
+                  let match = identify(print, among: people, tolerance: Float(options.tolerance) * (softLocked ? 1.12 : 1))
             else { return Seen(match: nil, sure: false) }
             return Seen(match: match, sure: true)
         }
@@ -3379,12 +3381,18 @@ final class Controller {
         guard let primary = seen.first, primary.sure else { return }
 
         if softLocked {
+            // A moment to settle after locking (otherwise it opens again the instant you press the lock key).
+            if Date() < softLockReadyAt { return }
             if primary.isTrusted {
                 strangerSince = nil
+                softStrangerStreak = 0
                 softTrust += 1
-                // Two clear matches in a row (~0.4 s), like Face ID: look, and it opens.
+                // Two clear matches (~0.4 s), like Face ID: look, and it opens. A miss in between doesn't reset it.
                 if softTrust >= 2, let name = primary.match?.name { softUnlock(name) }
             } else {
+                // One bad look is probably you at an angle or in bad light: only ~2 s of clearly "not you" counts.
+                softStrangerStreak += 1
+                guard softStrangerStreak >= 10 else { return }
                 softTrust = 0
                 if strangerSince == nil {
                     strangerSince = Date()
@@ -3491,6 +3499,8 @@ final class Controller {
         softLocked = true
         holding = true
         softTrust = 0
+        softStrangerStreak = 0
+        softLockReadyAt = Date().addingTimeInterval(reason == "Lock key" || reason == "You texted lock" ? 3 : 1)
         textedThisLock = stranger && options.textTo != nil   // catchIntruder has just texted
         Bridge.emit(["type": stranger ? "stranger" : "locked"])
         strangerSince = stranger ? Date() : nil
