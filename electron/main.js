@@ -728,6 +728,7 @@ function faArgs() {
   // text, away → Face ID lock. Bbokari's menu bar icon runs it (no second eye in the menu bar).
   const a = ['--guard', '--no-status-item'];
   if (o.guard !== false) a.push('--watch');
+  if (o.textMe && o.askFirst !== false) a.push('--ask-first', '--ask-timeout', String(o.askTimeout ?? 120));
   for (const [k, flag] of FA_FLAGS) if (o[k]) a.push(flag);
   for (const [k, flag] of FA_VALUES) if (o[k] !== undefined && o[k] !== '') a.push(flag, String(o[k]));
   if (o.hideLook && o.decoy) a.push('--decoy', o.decoy); // hiding the screen when you look away is optional now
@@ -835,6 +836,7 @@ function onFaceAwayEvent(ev) {
     faceAwayState.hiddenBefore = null;
   }
   if (ev.type === 'watching') faceAwayState.watching = !!ev.on;
+  if (ev.type === 'needFullDisk' && !faceAwayState.toldFullDisk) { faceAwayState.toldFullDisk = true; send('say', { text: '📱 I texted you “Lock computer?”, but I can’t read your answer yet. 🛡️ FaceAway → 🤔 When it’s not me → 🔓 Let FaceAway read my replies shows how (one time).', error: true }); }
   if (ev.type === 'theme') faceAwayState.theme = ev.name ?? null;
   if (ev.type === 'decoy') faceAwayState.decoy = ev.name ?? null;
   send('faceaway', ev);
@@ -1088,6 +1090,15 @@ function faceAwayMenu() {
       const v = await askForm('Text me if it’s not me', [{ label: 'Your phone number or Apple ID email (iMessage). Leave empty to turn off.' }]);
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
+    { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
+      { label: 'Text me “Lock computer?” and I answer YES or NO', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
+      { label: 'Lock right away (and text me)', type: 'radio', checked: o.askFirst === false, click: () => faSet({ askFirst: false }) },
+      { type: 'separator' },
+      { label: 'If I don’t answer:', enabled: false },
+      ...[[60, 'Lock after 1 minute'], [120, 'Lock after 2 minutes'], [300, 'Lock after 5 minutes'], [0, 'Never lock by itself']].map(([t, label]) => ({ label, type: 'radio', checked: Number(o.askTimeout ?? 120) === t, click: () => faSet({ askTimeout: t }) })),
+      { type: 'separator' },
+      { label: '🔓 Let FaceAway read my YES / NO replies…', click: fullDiskHelp },
+    ] },
     { label: `⏱ Lock when I walk away: ${AWAY_TIMES.find(([t]) => t === away)?.[1] ?? `${away} s`}`, submenu: AWAY_TIMES.map(([t, label]) => ({ label, type: 'radio', checked: away === t, click: () => faSet({ lockAfter: t }) })) },
     { label: `🙈 Hide my screen when I look away${o.hideLook ? ': on' : ''}`, submenu: [
       { label: 'Off', type: 'radio', checked: !o.hideLook, click: () => faSet({ hideLook: false }) },
@@ -1113,6 +1124,14 @@ function faceAwayMenu() {
       { label: 'Start FaceAway with Bbokari', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
     ] },
   ];
+}
+/** Reading your YES / NO replies needs Full Disk Access (Messages keeps them in a protected file). */
+function fullDiskHelp() {
+  dialog.showMessageBox({ type: 'info', buttons: ['Open Full Disk Access', 'Later'], defaultId: 0, message: 'Let FaceAway read your YES / NO replies',
+    detail: 'FaceAway texts you “Lock computer?” through Messages. To see your answer it has to read Messages on this Mac, which macOS only allows with Full Disk Access.\n\n'
+      + 'In the list, click + and add both:\n• ~/FaceAway/faceaway  (press ⌘⇧G and paste ~/FaceAway)\n• Electron  (in your minecraft_pet_v2 folder → node_modules → electron → dist)\n\nThen turn FaceAway off and on (or restart Bbokari).\n\n'
+      + 'Without it you still get the text, and FaceAway locks if you don’t answer in time.' })
+    .then((r) => r.response === 0 && shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'));
 }
 /** macOS's own lock always wants the password. To make FaceAway's Face ID lock the only one, macOS must stop asking
  *  for the password after sleep or the screen saver: that's one switch in System Settings (only you can flip it). */

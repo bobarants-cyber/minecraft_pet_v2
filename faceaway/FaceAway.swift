@@ -724,6 +724,85 @@ func textMe(_ to: String, message: String, photo: URL?) {
     }
 }
 
+// MARK: - Your answers by text ("Lock computer?" → YES / NO)
+
+/// Reads the replies you send back from your phone, from the Messages app's database on this Mac.
+/// (macOS only lets apps read it with Full Disk Access.)
+enum Replies {
+    static let db = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Messages/chat.db").path
+
+    static func sqlite(_ sql: String) -> (ok: Bool, out: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        p.arguments = ["-readonly", "-separator", "\u{1F}", db, sql]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()
+        do { try p.run() } catch { return (false, "") }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus == 0, String(data: data, encoding: .utf8) ?? "")
+    }
+
+    /// The newest message's number, or nil if FaceAway isn't allowed to read Messages.
+    static func lastRow() -> Int? {
+        let r = sqlite("SELECT IFNULL(MAX(ROWID),0) FROM message;")
+        return r.ok ? Int(r.out.trimmingCharacters(in: .whitespacesAndNewlines)) : nil
+    }
+
+    /// Newer macOS keeps the text inside a blob: the words follow "NSString", a '+' and a length.
+    static func text(fromHexBody hex: String) -> String? {
+        guard hex.count >= 32 else { return nil }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(hex.count / 2)
+        var i = hex.startIndex
+        while i < hex.endIndex {
+            let j = hex.index(i, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
+            if let b = UInt8(hex[i..<j], radix: 16) { bytes.append(b) }
+            i = j
+        }
+        let marker = Array("NSString".utf8)
+        guard bytes.count > marker.count + 4,
+              let m = (0...(bytes.count - marker.count)).first(where: { Array(bytes[$0..<($0 + marker.count)]) == marker }) else { return nil }
+        var k = m + marker.count
+        while k < bytes.count && bytes[k] != 0x2B { k += 1 }
+        k += 1
+        guard k < bytes.count else { return nil }
+        var len = Int(bytes[k])
+        k += 1
+        if len == 0x81, k + 1 < bytes.count { len = Int(bytes[k]) | (Int(bytes[k + 1]) << 8); k += 2 }
+        guard len > 0, k + len <= bytes.count else { return nil }
+        return String(bytes: bytes[k..<(k + len)], encoding: .utf8)
+    }
+
+    /// Is this Messages handle (phone number or email) the person we texted?
+    static func samePerson(_ handle: String, _ to: String) -> Bool {
+        let a = handle.filter(\.isNumber), b = to.filter(\.isNumber)
+        if b.count >= 7 && a.count >= 7 { return a.hasSuffix(String(b.suffix(9))) || b.hasSuffix(String(a.suffix(9))) }
+        return handle.lowercased() == to.lowercased()
+    }
+
+    /// A YES (true) or NO (false) from `to` in the messages after row `after`, and the newest row seen.
+    static func answer(from to: String, after: Int) -> (answer: Bool?, last: Int) {
+        let r = sqlite("SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),'') FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID WHERE m.ROWID > \(after) ORDER BY m.ROWID;")
+        guard r.ok else { return (nil, after) }
+        var last = after
+        var result: Bool?
+        for line in r.out.split(separator: "\n") {
+            let f = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
+            guard f.count >= 4, let id = Int(f[0]) else { continue }
+            last = max(last, id)
+            guard samePerson(f[1], to) else { continue }
+            var t = f[2]
+            if t.isEmpty { t = text(fromHexBody: f[3]) ?? "" }
+            let word = t.lowercased().components(separatedBy: CharacterSet.letters.inverted).first(where: { !$0.isEmpty }) ?? ""
+            if ["yes", "y", "yeah", "yep", "yup", "lock", "si", "sí", "ok", "okay"].contains(word) { result = true }
+            if ["no", "n", "nope", "nah", "dont", "don"].contains(word) { result = false }
+        }
+        return (result, last)
+    }
+}
+
 // MARK: - Auto-mute
 
 final class Media {
@@ -2643,6 +2722,8 @@ struct Options {
     var guardMode = false      // --guard: Face ID is the lock; no decoy or tab switching unless asked for
     var startWatching = false  // --watch: start with the camera checking who's there
     var noStatusItem = false   // --no-status-item: no eye in the menu bar (Bbokari's menu runs FaceAway)
+    var askFirst = false       // --ask-first: text "Lock computer?" and wait for YES / NO instead of locking at once
+    var askTimeout: Double = 120 // --ask-timeout: no answer in this many seconds → lock (0 = never)
 }
 
 let usage = """
@@ -2692,6 +2773,9 @@ EXTRAS
                     happens; nobody for --lock-after seconds → Face ID lock; a stranger → Face ID lock,
                     a photo and a text (--text-me). No decoy or tab switching unless you ask for one.
   --watch           With --app: start with watching on
+  --ask-first       With --text-me: when a stranger sits down, text "Lock computer? Reply YES or NO" and
+                    do what you answer (reading replies needs Full Disk Access)
+  --ask-timeout S   No answer in this many seconds → lock (default: 120, 0 = never)
   --no-status-item  With --app: no eye in the menu bar (when Bbokari's menu runs FaceAway)
 
 HOME SCREEN AND PANIC BUTTON
@@ -2802,6 +2886,8 @@ func parseOptions() -> Options {
         case "--guard": o.guardMode = true
         case "--watch": o.startWatching = true
         case "--no-status-item": o.noStatusItem = true
+        case "--ask-first": o.askFirst = true
+        case "--ask-timeout": o.askTimeout = number(a)
         case "--home": o.home = true
         case "--home-only": o.mode = .homeOnly; o.home = true
         case "--panic-button": o.panicButton = true
@@ -3291,13 +3377,15 @@ final class Controller {
         if primary.isTrusted {
             unknownStreak = 0
             presentSinceTrusted = true
+            cancelAsk()
             return
         }
         unknownStreak += 1
         // A stranger sitting down: 3 clear checks (~0.6 s). But if you were recognized and
         // never left, it takes 12 clear checks (~2.5 s): it's far more likely just you at an angle.
         let needed = presentSinceTrusted ? 12 : 3
-        if lockEnabled && unknownStreak >= needed && !screenLocked && Date() >= graceUntil {
+        if lockEnabled && unknownStreak >= needed && !screenLocked && Date() >= graceUntil
+            && !asking && Date() >= strangerOKUntil {
             unknownStreak = 0
             presentSinceTrusted = false
             catchIntruder()
@@ -3316,9 +3404,10 @@ final class Controller {
     }
 
     private func catchIntruder() {
+        let ask = options.askFirst && options.textTo != nil && options.faceUnlock
         hide(reason: "Intruder detected")
-        say("INTRUDER DETECTED — locking the Mac.", .alert)
-        EventLog.add("INTRUDER at the Mac — locked")
+        say(ask ? "Someone else is at the Mac — asking you by text." : "INTRUDER DETECTED — locking the Mac.", .alert)
+        EventLog.add(ask ? "Someone else at the Mac" : "INTRUDER at the Mac — locked")
 
         var photoURL: URL?
         if options.photos, let data = pendingPhoto, let url = Intruders.save(data) {
@@ -3328,6 +3417,12 @@ final class Controller {
             EventLog.add("Photo: \(url.path)")
         }
         pendingPhoto = nil
+
+        // Ask you first: "Lock computer?" by text, and do what you answer.
+        if ask {
+            askToLock(photo: photoURL)
+            return
+        }
 
         if options.voice || options.alarm { media.unmute() }   // they need to hear it
         if options.alarm { playAlarm() }
@@ -3384,6 +3479,72 @@ final class Controller {
         }
         say("\(reason) — locked. Look at the camera to unlock.", stranger ? .alert : .info)
         EventLog.add("Face-locked: \(reason)")
+    }
+
+    // "Lock computer?" by text
+    private var asking = false
+    private var askTimer: Timer?
+    private var askRow = -1
+    private var askStarted = Date()
+    private var strangerOKUntil = Date.distantPast   // you answered NO: don't ask again until then
+
+    private func askToLock(photo: URL?) {
+        guard let to = options.textTo, !asking else { return }
+        asking = true
+        askStarted = Date()
+        askRow = Replies.lastRow() ?? -1
+        var msg = "🚨 FaceAway: someone who isn't you is at your Mac (\(clock.string(from: Date()))). Lock computer? Reply YES or NO."
+        if options.askTimeout > 0 { msg += " If you don't answer in \(formatDuration(Int(options.askTimeout))), I'll lock it." }
+        textMe(to, message: msg, photo: photo)
+        say("Asked you by text whether to lock.", .alert)
+        EventLog.add("Asked by text: lock computer?")
+        Bridge.emit(["type": "asking"])
+        if askRow < 0 {
+            say("Can't read your replies: give FaceAway Full Disk Access (System Settings → Privacy & Security).", .alert)
+            Bridge.emit(["type": "needFullDisk"])
+        }
+        askTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollAnswer() }
+    }
+
+    private func pollAnswer() {
+        guard asking, let to = options.textTo else { return }
+        if askRow >= 0 {
+            let (answer, last) = Replies.answer(from: to, after: askRow)
+            askRow = last
+            if let lock = answer { finishAsk(lock: lock, timedOut: false); return }
+        } else if let row = Replies.lastRow() {
+            askRow = row   // access was just given: replies from now on count
+        }
+        if options.askTimeout > 0 && Date().timeIntervalSince(askStarted) >= options.askTimeout {
+            finishAsk(lock: true, timedOut: true)
+        }
+    }
+
+    private func finishAsk(lock: Bool, timedOut: Bool) {
+        askTimer?.invalidate()
+        askTimer = nil
+        asking = false
+        guard let to = options.textTo else { return }
+        if lock {
+            EventLog.add(timedOut ? "No answer — locked" : "You answered YES — locked")
+            enterSoftLock(reason: timedOut ? "No answer, locked" : "You said lock", stranger: true)
+            textMe(to, message: timedOut ? "🔒 No answer, so I locked your Mac. Only your face opens it." : "🔒 Locked! Only your face opens it.", photo: nil)
+        } else {
+            strangerOKUntil = Date().addingTimeInterval(30 * 60)
+            EventLog.add("You answered NO — left unlocked")
+            Bridge.emit(["type": "allowed"])
+            textMe(to, message: "👍 OK, I'll leave it unlocked and won't ask again for 30 minutes.", photo: nil)
+        }
+    }
+
+    /// You came back while we were asking: never mind.
+    private func cancelAsk() {
+        guard asking else { return }
+        askTimer?.invalidate()
+        askTimer = nil
+        asking = false
+        EventLog.add("You're back — stopped asking")
+        if let to = options.textTo { textMe(to, message: "👋 Never mind, it's you again.", photo: nil) }
     }
 
     /// You picked "Use Mac password" on the Face ID lock screen.

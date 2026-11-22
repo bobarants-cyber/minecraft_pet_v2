@@ -293,6 +293,8 @@ host?.onFaceAway?.((ev) => {
   if (ev.type === 'theme') { faceTheme = ev.name; applyActivity(); character.emote('sparkle', 0.5); }
   else if (ev.type === 'watching' && ev.on) { character.trigger('curious', { then: 'idle' }, true); character.emote('exclaim', 0.5); chat.say('🛡️ Guarding your Mac with Face ID. If it’s not you, it locks.'); }
   else if (ev.type === 'watching') character.emote('sparkle', 0.4);
+  else if (ev.type === 'asking') { character.emote('question', 0.4); chat.say('📱 Someone else is at the Mac, so I texted you: “Lock computer?” Answer YES or NO.'); }
+  else if (ev.type === 'allowed') { character.emote('heart', 0.4); chat.say('👍 You said it’s OK. Hi, friend! 👋'); }
   else if (ev.type === 'stranger') { character.face.setExpression('angry'); character.emote('exclaim', 0.5); chat.say('🚨 Someone who isn’t you tried to use the Mac. FaceAway kept it locked' + (settings.faceAwayOpts?.textMe ? ' and texted you.' : '.')); }
   else if (ev.type === 'locked') { character.face.setExpression('sleepy'); character.trigger('sleep', {}, true); }
   else if (ev.type === 'unlocked') {
