@@ -50,25 +50,42 @@ const run = (cmd, args, timeout = 6000) =>
 
 /** The apps you have open, with their icons (cached per app). */
 const iconCache = new Map();
+// An app's icon as a small PNG, read straight from its .icns with macOS's `sips` (in its own process).
+// (Electron's app.getFileIcon crashed the whole app on macOS, so it isn't used.)
+async function appIcon(appPath) {
+  if (iconCache.has(appPath)) return iconCache.get(appPath);
+  iconCache.set(appPath, ''); // only try once per app
+  try {
+    if (!/\.app$/.test(appPath) || !fs.existsSync(appPath)) return '';
+    let name = await run('/usr/bin/plutil', ['-extract', 'CFBundleIconFile', 'raw', '-o', '-', path.join(appPath, 'Contents', 'Info.plist')], 3000);
+    if (!name) return '';
+    if (!/\.icns$/i.test(name)) name += '.icns';
+    const icns = path.join(appPath, 'Contents', 'Resources', name);
+    if (!fs.existsSync(icns)) return '';
+    const dir = path.join(app.getPath('userData'), 'app-icons');
+    fs.mkdirSync(dir, { recursive: true });
+    const out = path.join(dir, path.basename(appPath, '.app').replace(/[^\w-]/g, '_') + '.png');
+    if (!fs.existsSync(out)) await run('/usr/bin/sips', ['-s', 'format', 'png', '-Z', '64', icns, '--out', out], 8000);
+    if (!fs.existsSync(out)) return '';
+    const url = 'data:image/png;base64,' + fs.readFileSync(out).toString('base64');
+    iconCache.set(appPath, url);
+    return url;
+  } catch {
+    return '';
+  }
+}
+
 async function openApps() {
   if (process.platform !== 'darwin') return [];
-  const out = await run('osascript', ['-e', 'tell application "System Events" to get {name, POSIX path of application file} of (every application process whose background only is false)']);
-  if (!out) return [];
-  // "Finder, Safari, …, /System/…/Finder.app, /Applications/Safari.app, …"
-  const parts = out.split(', ');
-  const half = Math.floor(parts.length / 2);
-  const names = parts.slice(0, half);
-  const paths = parts.slice(half);
+  // one app per line: name<TAB>path (names can contain commas, so no comma lists)
+  const script = 'set out to ""\ntell application "System Events"\nrepeat with p in (every application process whose background only is false)\ntry\nset out to out & (name of p) & tab & (POSIX path of (application file of p)) & linefeed\nend try\nend repeat\nend tell\nreturn out';
+  const text = await run('osascript', ['-e', script]);
   const list = [];
-  for (let i = 0; i < names.length; i++) {
-    const p = paths[i];
-    if (!names[i] || /^(Electron|Bbokari|faceaway)$/i.test(names[i])) continue;
-    let icon = iconCache.get(p);
-    if (icon === undefined) {
-      icon = await app.getFileIcon(p, { size: 'large' }).then((img) => img.toDataURL()).catch(() => '');
-      iconCache.set(p, icon);
-    }
-    list.push({ name: names[i], path: p, icon });
+  for (const line of text.split('\n')) {
+    const [name, appPath] = line.split('\t');
+    if (!name || /^(Electron|Bbokari|faceaway)$/i.test(name)) continue;
+    list.push({ name, path: appPath ?? '', icon: appPath ? await appIcon(appPath.replace(/\/$/, '')) : '' });
+    if (list.length >= 14) break;
   }
   return list;
 }

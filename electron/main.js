@@ -779,6 +779,7 @@ function onFaceAwayEvent(ev) {
 /** Chat commands for FaceAway. Returns the reply, or null if it isn't one. */
 // ---------- 🏠 the home screen, its editor and the screen savers (homescreen.js, home/) ----------
 let homeScreen = null;
+let homeKey = 'Control+Alt+H';
 let weatherCache = null;
 function setupHomeScreen() {
   const DAYNAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -897,7 +898,7 @@ function snowChat(text) {
 function homeMenu() {
   const s = homeScreen?.saver ?? {};
   return [
-    { label: '🏠 Open home screen', accelerator: 'Control+Alt+H', click: () => homeScreen?.openFront() },
+    { label: '🏠 Open home screen', ...(homeKey ? { accelerator: homeKey } : {}), click: () => homeScreen?.openFront() },
     { label: '✏️ Edit home screen (widgets, wallpaper, glass)…', click: () => homeScreen?.edit() },
     { label: '🎨 Theme', submenu: Object.entries(THEMES).map(([name, t]) => ({ label: t.label, type: 'radio', checked: homeScreen?.theme === name, click: () => (homeScreen?.setTheme(name), buildTray()) })) },
     { label: 'Show it on my desktop', type: 'checkbox', checked: !!homeScreen?.on, click: (i) => (homeScreen?.setOn(i.checked), buildTray()) },
@@ -925,13 +926,13 @@ function homeChat(text) {
   }
   if (/^(open |show |go )?(my |the )?home( ?screen)?$|^go home$/.test(t)) {
     homeScreen.openFront();
-    return '🏠 Your home screen! Press ⌃⌥H or Esc to go back, double-click the background to edit.';
+    return `🏠 Your home screen! Press Esc to go back${homeKey ? ` (or ${homeKey.replace('Control+', '⌃').replace('Alt+', '⌥').replace('Shift+', '⇧')} any time)` : ''}, double-click the background to edit.`;
   }
   const th = t.match(/^(?:(?:set|change|switch|use)(?: the| my)?(?: home ?screen)? theme to |(?:use |put on )?(?:the )?)(clean|liquid glass|glass|hacker|midnight|sunset|aurora|ocean|winter(?: night)?)(?: theme| mode| home ?screen)?$/);
   if (th && (/theme|mode|home|glass|hacker|aurora/.test(t))) {
     const name = { 'liquid glass': 'glass', 'winter night': 'winter' }[th[1]] ?? th[1];
     homeScreen.setTheme(name);
-    return `🎨 ${THEMES[name].label} theme on your home screen! (⌃⌥H or Esc to go back)`;
+    return `🎨 ${THEMES[name].label} theme on your home screen! (Esc to go back)`;
   }
   const sv = /^(start |show )?(a |the )?screen ?savers?(?: (\w+))?$/.exec(t);
   if (sv) {
@@ -2873,7 +2874,9 @@ app.whenReady().then(() => {
     setTimeout(() => app.quit(), 300);
   });
   if (!globalShortcut.register('Control+Alt+Space', openHub)) console.log('Shortcut ⌃⌥Space is taken by another app.');
-  if (!globalShortcut.register('Control+Alt+H', () => homeScreen?.toggleFront())) console.log('Shortcut ⌃⌥H is taken by another app.');
+  // ⌃⌥H for the home screen, or ⌃⌥⇧H when another app already uses ⌃⌥H
+  homeKey = ['Control+Alt+H', 'Control+Alt+Shift+H', 'Control+Alt+Shift+J'].find((k) => globalShortcut.register(k, () => homeScreen?.toggleFront())) ?? null;
+  if (homeKey !== 'Control+Alt+H') console.log(`⌃⌥H is taken by another app; the home screen uses ${homeKey ?? 'the menu'} instead.`);
   // Tell you about the big update once.
   if (settings.seenUpdate !== 'hub-1') {
     win.webContents.once('did-finish-load', () =>
