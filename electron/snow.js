@@ -66,6 +66,7 @@ export function createSnow({ getSettings, applySettings, say }) {
     win = new BrowserWindow({
       ...d.bounds, frame: false, transparent: true, hasShadow: false, resizable: false, movable: false, focusable: false,
       skipTaskbar: true, alwaysOnTop: true, enableLargerThanScreen: true, backgroundColor: '#00000000', show: false,
+      acceptFirstMouse: true, // the very first click on the snow grabs it (instead of only activating the window)
       webPreferences: { preload: path.join(HERE, 'preload.cjs'), contextIsolation: true, backgroundThrottling: false },
     });
     win.setAlwaysOnTop(true, 'screen-saver');

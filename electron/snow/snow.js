@@ -164,10 +164,14 @@ function grabbable(x, y) {
     const p = piles.get(wins[i].id);
     if (!p || x < p.x || x > p.x + p.w) continue;
     const top = pileTop(p, x);
-    if (p.y - top > 4 && y >= top - 6 && y <= p.y + 2 && !covered(x, y, i)) return { pile: p };
-    if (x >= wins[i].x && x <= wins[i].x + wins[i].w && y >= wins[i].y && y <= wins[i].y + wins[i].h) return null; // on the window itself
+    if (p.y - top > 3 && y >= top - 10 && y <= p.y + 4 && !covered(x, y, i)) return { pile: p };
+    if (x >= wins[i].x && x <= wins[i].x + wins[i].w && y >= wins[i].y && y <= wins[i].y + wins[i].h) break; // on the window itself (but the bottom snow is in front)
   }
-  if (ground[Math.round(x / COL)] > 4 && y >= groundTop(x) - 6 && !insideAnyWindow(x, y)) return { ground: true };
+  // the snow along the bottom is drawn over everything (even full-screen apps), so it can always be grabbed
+  const gi = clamp(Math.round(x / COL), 0, ground.length - 1);
+  const dk = wins.find((w) => w.dock);
+  const onDock = dk && x >= dk.x && x <= dk.x + dk.w;
+  if (!onDock && Math.max(ground[gi], ground[Math.max(0, gi - 2)], ground[Math.min(ground.length - 1, gi + 2)]) > 2 && y >= groundTop(x) - 12) return { ground: true };
   return null;
 }
 function updateGrab() {
@@ -219,7 +223,7 @@ function landFlake(f, prevY) {
         addTo(p.h, Math.round((f.x - p.x) / COL), 0.8 + f.r * 0.45, pileCap(p));
         return true;
       }
-      if (f.y > w.y && f.y < w.y + w.h) return false; // falling in front of this window
+      if (f.y > w.y && f.y < w.y + w.h) break; // falling in front of this window: keeps going down to the bottom
     }
   }
   if (f.y >= groundTop(f.x)) {
