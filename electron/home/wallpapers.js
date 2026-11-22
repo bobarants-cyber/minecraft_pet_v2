@@ -1,6 +1,8 @@
 // Wallpapers for the home screen and the screen savers: soft gradient presets, moving ones, or your own photo.
 // Everything is drawn into a canvas that the Liquid Glass renderer uses as its background.
 
+import { winterLayout, pineTiers, cabinRoof } from './winterScene.js';
+
 const rand = (a, b) => a + Math.random() * (b - a);
 
 // [base color, ...blobs: [x, y, radius (fractions of the larger side), color]]
@@ -114,21 +116,25 @@ export function createWallpaper(spec, width, height, { animatedScale = 0.5 } = {
       };
       ridge(H * 0.62, H * 0.3, '#3a4678', true, 1.3);
       ridge(H * 0.75, H * 0.18, '#2c3763', true, 4.1);
-      s.fillStyle = '#e9eef9'; s.fillRect(0, H * 0.82, W, H); // snowy ground
-      const pine = (x, y, h) => {
+      s.fillStyle = '#e9eef9'; s.fillRect(0, H * 0.82, W, H); // snowy ground (the real snow piles on top of it)
+      // the trees and the cabin come from the shared layout, so the real snow can settle on them (snow/snow.js)
+      const lay = winterLayout(W / scale, H / scale);
+      s.save(); s.scale(scale, scale);
+      for (const t of lay.trees) {
         s.fillStyle = '#16283d';
-        for (let i = 0; i < 4; i++) { const w = h * (0.5 - i * 0.09), yy = y - i * h * 0.22; s.beginPath(); s.moveTo(x - w / 2, yy); s.lineTo(x, yy - h * 0.35); s.lineTo(x + w / 2, yy); s.fill(); s.fillStyle = 'rgba(240,245,255,0.9)'; s.fillRect(x - w / 2 + 2, yy - 2, w - 4, 2); s.fillStyle = '#16283d'; }
-      };
-      for (let i = 0; i < 14; i++) pine(rand(0, W), H * rand(0.8, 0.9), H * rand(0.12, 0.22));
+        for (const tier of pineTiers(t)) { s.beginPath(); s.moveTo(...tier.l); s.lineTo(...tier.a); s.lineTo(...tier.r); s.fill(); }
+        s.fillStyle = '#4a3020'; s.fillRect(t.x - t.h * 0.03, t.y, t.h * 0.06, t.h * 0.08);
+      }
       // a cabin with a warm window
-      const cx = W * 0.22, cy = H * 0.86, cw = W * 0.1;
+      const c = lay.cabin, cx = c.x, cy = c.y, cw = c.w, roof = cabinRoof(c);
       s.fillStyle = '#5a3a26'; s.fillRect(cx, cy - cw * 0.55, cw, cw * 0.55);
-      s.fillStyle = '#eef3ff'; s.beginPath(); s.moveTo(cx - cw * 0.12, cy - cw * 0.5); s.lineTo(cx + cw / 2, cy - cw * 0.95); s.lineTo(cx + cw * 1.12, cy - cw * 0.5); s.fill();
+      s.fillStyle = '#3a2618'; s.beginPath(); s.moveTo(...roof.l); s.lineTo(...roof.a); s.lineTo(...roof.r); s.fill();
       const win = s.createRadialGradient(cx + cw * 0.3, cy - cw * 0.28, 0, cx + cw * 0.3, cy - cw * 0.28, cw * 0.5);
       win.addColorStop(0, 'rgba(255,200,110,0.6)'); win.addColorStop(1, 'rgba(255,200,110,0)');
       s.fillStyle = win; s.fillRect(cx - cw, cy - cw * 1.2, cw * 3, cw * 1.5);
       s.fillStyle = '#ffc56b'; s.fillRect(cx + cw * 0.18, cy - cw * 0.4, cw * 0.24, cw * 0.18);
-      const flakes = Array.from({ length: 200 }, () => ({ x: Math.random(), y: Math.random(), r: rand(0.6, 2), sp: rand(0.02, 0.06), ph: rand(0, 6) }));
+      s.restore();
+      const flakes = Array.from({ length: 60 }, () => ({ x: Math.random(), y: Math.random(), r: rand(0.6, 2), sp: rand(0.02, 0.06), ph: rand(0, 6) }));
       wp.draw = (t) => {
         g.drawImage(scene, 0, 0);
         g.fillStyle = 'rgba(255,255,255,0.85)';

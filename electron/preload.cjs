@@ -87,5 +87,6 @@ contextBridge.exposeInMainWorld('snowHost', {
   onConfig: (fn) => ipcRenderer.on('snow:config', (_e, c) => fn(c)),
   onScreen: (fn) => ipcRenderer.on('snow:screen', (_e, s) => fn(s)),
   onDo: (fn) => ipcRenderer.on('snow:do', (_e, w) => fn(w)),
+  onDesk: (fn) => ipcRenderer.on('snow:desk', (_e, d) => fn(d)),
   grab: (on) => ipcRenderer.send('snow:grab', on),
 });

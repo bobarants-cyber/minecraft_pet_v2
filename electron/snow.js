@@ -16,6 +16,18 @@ export const SNOW_DEFAULTS = {
   saver: false, // battery saver: 30 fps
 };
 
+/** What's on the desktop that snow can land on: the Winter night scene and Bbokari's own widgets. */
+function deskInfo(settings, bounds) {
+  const home = settings.home ?? {};
+  const winter = (home.on && home.wallpaper?.value === 'winter') || (!home.on && home.desktopTheme === 'winter');
+  const W = bounds.width, H = bounds.height;
+  const widgets = home.on ? (home.widgets ?? []).map((w) => {
+    const ww = Math.min(w.w, W - 16), hh = Math.min(w.h, H - 16);
+    return { id: w.id, x: Math.max(8, Math.min(W - ww - 8, w.x * W)), y: Math.max(8, Math.min(H - hh - 8, w.y * H)), w: ww, h: hh };
+  }) : [];
+  return { scene: winter ? 'winter' : null, widgets, radius: home.glass?.radius ?? 28 };
+}
+
 export function createSnow({ getSettings, applySettings, say }) {
   let win = null;
   let helper = null;
@@ -54,7 +66,7 @@ export function createSnow({ getSettings, applySettings, say }) {
       try {
         const b = screen.getPrimaryDisplay().bounds;
         const data = JSON.parse(last);
-        win.webContents.send('snow:wins', { w: data.w.map(([id, x, y, w, h]) => [id, x - b.x, y - b.y, w, h]), f: data.f, d: data.d ? [data.d[0] - b.x, data.d[1] - b.y, data.d[2], data.d[3]] : null });
+        win.webContents.send('snow:wins', { w: data.w.map(([id, x, y, w, h]) => [id, x - b.x, y - b.y, w, h]), f: data.f, d: data.d ? [data.d[0] - b.x, data.d[1] - b.y, data.d[2], data.d[3]] : null, g: (data.g ?? []).map(([x, y, w, h]) => [x - b.x, y - b.y, w, h]) });
       } catch {}
     });
     child.on('exit', () => { if (helper === child) helper = null; });
@@ -79,7 +91,14 @@ export function createSnow({ getSettings, applySettings, say }) {
       // where the Dock and the screen's bottom are (the snow gathers there)
       win.webContents.send('snow:screen', { dockTop: d.workArea.y + d.workArea.height - d.bounds.y, height: d.bounds.height });
     });
-    win.on('closed', () => { win = null; stopHelper(); clearInterval(cursorTimer); cursorTimer = null; });
+    win.on('closed', () => { win = null; stopHelper(); clearInterval(cursorTimer); cursorTimer = null; clearInterval(deskTimer); });
+    // keep the snow told about the desktop (theme and widgets can change any time)
+    let lastDesk = '';
+    const deskTimer = setInterval(() => {
+      if (!win || win.isDestroyed()) return;
+      const info = JSON.stringify(deskInfo(getSettings(), d.bounds));
+      if (info !== lastDesk) { lastDesk = info; win.webContents.send('snow:desk', JSON.parse(info)); }
+    }, 1500);
     // the pointer, for snowmen that watch it, rolling snowballs and the shake-to-clear wind
     cursorTimer = setInterval(() => {
       if (!win || win.isDestroyed()) return;

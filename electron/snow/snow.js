@@ -1,5 +1,6 @@
 // ❄️ Bbokari's snow (all drawn here, no images): flakes, drifts on windows and along the bottom, snowmen, snowballs,
 // wind and a sleigh. Window rectangles come from the helper, front to back.
+import { winterSurfaces } from '../home/winterScene.js';
 const host = window.snowHost;
 const cv = document.getElementById('c');
 const g = cv.getContext('2d');
@@ -55,7 +56,7 @@ function covered(x, y, idx) { // is (x, y) behind a window in front of window id
   return false;
 }
 function insideAnyWindow(x, y) { for (const w of wins) if (x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h) return true; return false; }
-const pileTop = (p, x) => p.y - (p.h[clamp(Math.round((x - p.x) / COL), 0, p.h.length - 1)] || 0);
+const pileTop = (p, x) => (p.base ? p.base(x) : p.y) - (p.h[clamp(Math.round((x - p.x) / COL), 0, p.h.length - 1)] || 0);
 const winIndex = (id) => wins.findIndex((w) => w.id === id);
 
 function addTo(arr, i, amt, cap) {
@@ -72,6 +73,7 @@ function settle(arr, cap) { // snow slides down to its neighbours, so drifts sta
 const CORNER = 14; // macOS window corner radius (px)
 // drifts are lumpy (each window gets its own bumps) and taper off over the rounded corners
 const pileCap = (p) => (i) => {
+  if (p.capAt) return MAXH * p.capK * (p.lump?.[i] ?? 1) * p.capAt(i);
   const fromEdge = Math.min(i, p.h.length - 1 - i) * COL;
   const corner = clamp((fromEdge - CORNER * 0.4) / (CORNER * 1.6), 0, 1);
   return MAXH * corner * p.capK * (p.lump?.[i] ?? 1);
@@ -87,8 +89,55 @@ function burst(x, y, n, vx = 0, vy = -120, spread = 160) {
   for (let i = 0; i < n && parts.length < 1500; i++) parts.push({ x: x + rand(-4, 4), y: y + rand(-3, 3), vx: vx + rand(-spread, spread), vy: vy + rand(-spread, spread * 0.4), r: rand(1, 2.6), life: rand(0.8, 1.6) });
 }
 
+// ---------------- the desktop: things snow can land on behind your windows ----------------
+let desk = { scene: null, widgets: [], radius: 28 };
+let appleWidgets = [];
+const isDesk = (p) => p && String(p.id).startsWith('desk:');
+const deskPiles = () => [...piles.values()].filter(isDesk);
+
+/** A drift along a polyline (top edge of a roof, a tree tier, the ground). Steep parts hold less snow. */
+function lineSurface(id, pts) {
+  const x0 = pts[0][0], x1 = pts.at(-1)[0];
+  const base = (x) => {
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
+      if (x >= ax && x <= bx) return ay + ((x - ax) / Math.max(1e-6, bx - ax)) * (by - ay);
+    }
+    return x < x0 ? pts[0][1] : pts.at(-1)[1];
+  };
+  const slope = (x) => { const e = 2; return Math.abs(base(x + e) - base(x - e)) / (2 * e); };
+  return { id, x: x0, w: x1 - x0, base, capAt: (i) => clamp(1 - slope(x0 + i * COL) * 0.42, 0.3, 1) * clamp(Math.min(i, (x1 - x0) / COL - i) / 3, 0, 1) };
+}
+/** A drift on top of a rounded box (a widget). */
+function boxSurface(id, x, y, w, r) {
+  return {
+    id, x, w, base: (xx) => { const e = Math.min(xx - x, x + w - xx); if (e >= r) return y; const t = r - Math.max(0, e); return y + r - Math.sqrt(Math.max(0, r * r - t * t)); },
+    capAt: (i) => { const e = Math.min(i, w / COL - i) * COL; return clamp((e - r * 0.4) / (r * 1.6), 0, 1); }, corner: r, flat: true,
+  };
+}
+function rebuildDesk() {
+  const want = [];
+  if (desk.scene === 'winter') for (const sf of winterSurfaces(W, H)) want.push({ ...lineSurface('desk:scene:' + sf.id, sf.pts), flat: !!sf.flat });
+  for (const w of desk.widgets) want.push(boxSurface(`desk:widget:${w.id}`, w.x, w.y, w.w, desk.radius));
+  appleWidgets.forEach(([x, y, w], i) => want.push(boxSurface(`desk:apple:${i}:${x},${y}`, x, y, w, 22)));
+  const keep = new Set(want.map((s) => s.id));
+  for (const [id, p] of piles) if (isDesk(p) && !keep.has(id)) { // gone (widget moved or theme changed): its snow falls
+    for (let i = 0; i < p.h.length; i += 3) if (p.h[i] > 2) burst(p.x + i * COL, pileTop(p, p.x + i * COL), 1, 0, 0, 30);
+    for (const s of snowmen) if (s.on === id) s.knock(0, -60);
+    piles.delete(id);
+  }
+  for (const sf of want) {
+    const n = Math.max(2, Math.ceil(sf.w / COL));
+    const old = piles.get(sf.id);
+    if (old && old.h.length === n) { Object.assign(old, sf, { h: old.h, lump: old.lump }); continue; }
+    piles.set(sf.id, { ...sf, h: new Float32Array(n), lump: makeLumps(n), capK: rand(0.8, 1.05), shake: 0, desk: true });
+  }
+}
+host.onDesk?.((d) => { desk = d; rebuildDesk(); });
+
 // ---------------- windows from the helper ----------------
-host.onWins(({ w, f, d }) => {
+host.onWins(({ w, f, d, g: apple }) => {
+  if (JSON.stringify(apple ?? []) !== JSON.stringify(appleWidgets)) { appleWidgets = apple ?? []; rebuildDesk(); }
   const now = performance.now();
   const next = w.map(([id, x, y, ww, hh]) => ({ id, x, y, w: ww, h: hh }));
   // the Dock, while it's showing, is the frontmost thing snow can land on (when it hides, its snow falls off)
@@ -114,7 +163,7 @@ host.onWins(({ w, f, d }) => {
     if (n !== p.h.length) { const old = p.h; p.h = new Float32Array(n); for (let i = 0; i < n; i++) p.h[i] = old[Math.floor((i * old.length) / n)] || 0; p.lump = makeLumps(n); }
     p.x = win.x; p.y = win.y; p.w = win.w; p.t = now;
   }
-  for (const [id, p] of piles) if (!seen.has(id)) { // closed (or minimised): everything on top falls
+  for (const [id, p] of piles) if (!isDesk(p) && !seen.has(id)) { // closed (or minimised): everything on top falls
     for (let i = 0; i < p.h.length; i += 2) if (p.h[i] > 1) burst(p.x + i * COL, p.y - p.h[i] / 2, Math.ceil(p.h[i] / 6), 0, 0, 40);
     for (const s of snowmen) if (s.on === id) s.knock(rand(-60, 60), -100);
     piles.delete(id);
@@ -178,6 +227,14 @@ function grabbable(x, y) {
     if (p.y - top > 3 && y >= top - 10 && y <= p.y + 4 && !covered(x, y, i)) return { pile: p };
     if (x >= wins[i].x && x <= wins[i].x + wins[i].w && y >= wins[i].y && y <= wins[i].y + wins[i].h) break; // on the window itself (but the bottom snow is in front)
   }
+  // snow on the desktop (the scene, widgets) where no window covers it
+  if (cfg.mode === 'on' && !insideAnyWindow(x, y)) {
+    for (const p of piles.values()) {
+      if (!p.desk || x < p.x || x > p.x + p.w) continue;
+      const top = pileTop(p, x), base = p.base(x);
+      if (base - top > 3 && y >= top - 10 && y <= base + 4) return { pile: p };
+    }
+  }
   // the snow along the bottom is drawn over everything (even full-screen apps), so it can always be grabbed
   const gi = clamp(Math.round(x / COL), 0, ground.length - 1);
   const dk = wins.find((w) => w.dock);
@@ -236,6 +293,17 @@ function landFlake(f, prevY) {
         return true;
       }
       if (f.y > w.y && f.y < w.y + w.h) break; // falling in front of this window: keeps going down to the bottom
+    }
+  }
+  if (!insideAnyWindow(f.x, f.y)) {
+    for (const p of piles.values()) {
+      if (!p.desk || f.x < p.x || f.x > p.x + p.w) continue;
+      const top = pileTop(p, f.x);
+      if (prevY < top && f.y >= top) {
+        const c = Math.round((f.x - p.x) / COL), amt = 0.7 + f.r * 0.4, cap = pileCap(p);
+        addTo(p.h, c, amt * 0.6, cap); addTo(p.h, c - 1, amt * 0.2, cap); addTo(p.h, c + 1, amt * 0.2, cap);
+        return true;
+      }
     }
   }
   if (f.y >= groundTop(f.x)) {
@@ -321,6 +389,17 @@ function stepBall(b, dt) {
       const top = pileTop(p, b.x);
       if (b.y + b.r * 0.8 >= top && b.y - b.vy * dt + b.r * 0.8 < top + 4) {
         if (b.vy > 900 || b.thrown && Math.abs(b.vx) > 700) { splat(b.x, top, 8 + b.r); b.dead = true; return; }
+        b.rest = true; b.on = p; b.vx = b.vy = 0; b.y = top - b.r * 0.8;
+        return;
+      }
+    }
+  }
+  if (b.vy > 0 && !insideAnyWindow(b.x, b.y)) {
+    for (const p of piles.values()) {
+      if (!p.desk || b.x < p.x || b.x > p.x + p.w) continue;
+      const top = pileTop(p, b.x);
+      if (b.y + b.r * 0.8 >= top && b.y - b.vy * dt + b.r * 0.8 < top + 4) {
+        if (b.vy > 900 || (b.thrown && Math.abs(b.vx) > 700)) { splat(b.x, top, 8 + b.r); b.dead = true; return; }
         b.rest = true; b.on = p; b.vx = b.vy = 0; b.y = top - b.r * 0.8;
         return;
       }
@@ -485,6 +564,13 @@ function maybeSnowman(now) {
       if (h > 9 && !covered(p.x + rx, p.y - 80, i) && !snowmen.some((s) => s.on === p.id && Math.abs(s.rx - rx) < 60)) options.push([p.id, rx]);
     }
   }
+  for (const p of deskPiles()) {
+    if (!p.flat || p.w < 160) continue;
+    for (let tries = 0; tries < 4; tries++) {
+      const rx = rand(40, p.w - 40), h = p.h[Math.round(rx / COL)] ?? 0;
+      if (h > 8 && !insideAnyWindow(p.x + rx, pileTop(p, p.x + rx) - 70) && !snowmen.some((s) => s.on === p.id && Math.abs(s.rx - rx) < 60)) options.push([p.id, rx]);
+    }
+  }
   if (!options.length) {
     if (ground.reduce((a, b) => a + b, 0) / ground.length > 6 && snowmen.filter((s) => !s.on).length < 2) snowmen.push(new Snowman(null, rand(80, W - 80)));
     return;
@@ -582,20 +668,24 @@ function drawSleigh(dt) {
 
 // ---------------- drawing drifts ----------------
 const SHOW = 2.6; // thinner than this isn't drawn (no white lines on bare windows)
-function drawDrift(x0, y0, arr, shake = 0, corner = 0) {
+function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null) {
   const n = arr.length;
   const jx = shake ? Math.sin(performance.now() / 18) * 3 * shake : 0;
   const width = (n - 1) * COL;
   // where the window's top edge is at x (it curves down over the rounded corners)
   const base = (dx) => {
+    if (baseFn) return baseFn(x0 + dx);
     if (!corner) return y0;
     const e = Math.min(dx, width - dx);
     if (e >= corner) return y0;
     const t = corner - Math.max(0, e);
     return y0 + corner - Math.sqrt(Math.max(0, corner * corner - t * t));
   };
-  const gr = g.createLinearGradient(0, y0 - MAXH, 0, y0);
-  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.75, '#f3f7fd'); gr.addColorStop(1, '#dbe5f3');
+  const shade = (yb) => {
+    const gr = g.createLinearGradient(0, yb - MAXH, 0, yb);
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.75, '#f3f7fd'); gr.addColorStop(1, '#dbe5f3');
+    return gr;
+  };
   let i = 0;
   while (i < n) {
     while (i < n && arr[i] < SHOW) i++;
@@ -617,7 +707,7 @@ function drawDrift(x0, y0, arr, shake = 0, corner = 0) {
     // back along the window's edge
     for (let k = end; k >= start; k -= 2) g.lineTo(x0 + k * COL + jx, base(k * COL) + 0.5);
     g.closePath();
-    g.fillStyle = gr;
+    g.fillStyle = shade(Math.max(base(start * COL), base(end * COL)));
     g.shadowColor = 'rgba(40,60,100,0.22)'; g.shadowBlur = 5; g.shadowOffsetY = 1;
     g.fill();
     g.shadowColor = 'transparent';
@@ -659,6 +749,14 @@ function frame(now) {
   balls = balls.filter((b) => !b.dead);
   stepWind(dt);
 
+  // the desktop layer (scene, widgets): drifts, snowmen and snowballs there, hidden behind every window
+  const deskList = deskPiles();
+  if (deskList.length) {
+    for (const p of deskList) drawDrift(p.x, null, p.h, p.shake, p.corner ?? 0, p.base);
+    for (const s of snowmen) if (isDesk({ id: s.on ?? '' }) && !s.fall) s.draw(g);
+    for (const b of balls) if (b.rest && (b.on?.desk || b.on?.on?.desk)) drawBall(b);
+    for (const w of wins) g.clearRect(w.x, w.y, w.w, w.h);
+  }
   // ground along the bottom (behind everything)
   drawDrift(0, groundBase(), ground);
   { const dk = wins.find((w) => w.dock); if (dk) g.clearRect(dk.x, dk.y, dk.w, H - dk.y); }
