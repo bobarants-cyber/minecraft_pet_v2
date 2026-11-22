@@ -69,7 +69,18 @@ function settle(arr, cap) { // snow slides down to its neighbours, so drifts sta
   }
   for (let i = 0; i < arr.length; i++) arr[i] = Math.min(arr[i], cap(i));
 }
-const pileCap = (p) => (i) => MAXH * Math.min(1, (i + 1) / 5, (p.h.length - i) / 5) * p.capK;
+const CORNER = 14; // macOS window corner radius (px)
+// drifts are lumpy (each window gets its own bumps) and taper off over the rounded corners
+const pileCap = (p) => (i) => {
+  const fromEdge = Math.min(i, p.h.length - 1 - i) * COL;
+  const corner = clamp((fromEdge - CORNER * 0.4) / (CORNER * 1.6), 0, 1);
+  return MAXH * corner * p.capK * (p.lump?.[i] ?? 1);
+};
+function makeLumps(n) { // smooth random bumps
+  const out = new Float32Array(n), ph = [rand(0, 6), rand(0, 6), rand(0, 6)];
+  for (let i = 0; i < n; i++) out[i] = 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(i * 0.09 + ph[0])) * (0.6 + 0.4 * Math.sin(i * 0.23 + ph[1])) + 0.12 * Math.sin(i * 0.5 + ph[2]);
+  return out;
+}
 const groundCap = () => 22;
 
 function burst(x, y, n, vx = 0, vy = -120, spread = 160) {
@@ -91,7 +102,7 @@ host.onWins(({ w, f, d }) => {
     seen.add(win.id);
     let p = piles.get(win.id);
     const n = Math.max(2, Math.ceil(win.w / COL));
-    if (!p) { p = { id: win.id, x: win.x, y: win.y, w: win.w, h: new Float32Array(n), t: now, shake: 0, capK: rand(0.7, 1.05) }; piles.set(win.id, p); continue; }
+    if (!p) { p = { id: win.id, x: win.x, y: win.y, w: win.w, h: new Float32Array(n), lump: makeLumps(n), t: now, shake: 0, capK: rand(0.75, 1.05), dock: !!win.dock }; piles.set(win.id, p); continue; }
     const dt = Math.max(0.008, (now - p.t) / 1000);
     const vx = (win.x - p.x) / dt, vy = (win.y - p.y) / dt;
     const speed = Math.hypot(vx, vy);
@@ -100,7 +111,7 @@ host.onWins(({ w, f, d }) => {
       p.h.fill(0);
       for (const s of snowmen) if (s.on === p.id) s.knock(vx * 0.35, vy * 0.35 - 300);
     }
-    if (n !== p.h.length) { const old = p.h; p.h = new Float32Array(n); for (let i = 0; i < n; i++) p.h[i] = old[Math.floor((i * old.length) / n)] || 0; }
+    if (n !== p.h.length) { const old = p.h; p.h = new Float32Array(n); for (let i = 0; i < n; i++) p.h[i] = old[Math.floor((i * old.length) / n)] || 0; p.lump = makeLumps(n); }
     p.x = win.x; p.y = win.y; p.w = win.w; p.t = now;
   }
   for (const [id, p] of piles) if (!seen.has(id)) { // closed (or minimised): everything on top falls
@@ -220,7 +231,8 @@ function landFlake(f, prevY) {
       if (!p) continue;
       const top = pileTop(p, f.x);
       if (prevY < top && f.y >= top && !covered(f.x, top, i)) {
-        addTo(p.h, Math.round((f.x - p.x) / COL), 0.8 + f.r * 0.45, pileCap(p));
+        const c = Math.round((f.x - p.x) / COL), amt = 0.8 + f.r * 0.45;
+        addTo(p.h, c, amt * 0.6, pileCap(p)); addTo(p.h, c - 1, amt * 0.2, pileCap(p)); addTo(p.h, c + 1, amt * 0.2, pileCap(p));
         return true;
       }
       if (f.y > w.y && f.y < w.y + w.h) break; // falling in front of this window: keeps going down to the bottom
@@ -494,6 +506,13 @@ function stepWind(dt) {
   wind.x += 2200 * dt;
   for (const f of flakes) if (f.x < wind.x && f.x > wind.x - 500) { f.blown = true; }
   for (const p of parts) if (p.x < wind.x) p.vx += 4000 * dt;
+  for (const p of piles.values()) { // the wind front strips the snow off windows as it passes
+    const from = Math.floor((wind.x - 2200 * dt - p.x) / COL), to = Math.floor((wind.x - p.x) / COL);
+    for (let i = Math.max(0, from); i <= Math.min(p.h.length - 1, to); i++) if (p.h[i] > 0) {
+      if (p.h[i] > 2 && i % 2 === 0) burst(p.x + i * COL, p.y - p.h[i] / 2, Math.ceil(p.h[i] / 6), 1600, -120, 90);
+      p.h[i] = 0;
+    }
+  }
   if (wind.x > W + 600) wind = null;
 }
 function drawWind() {
@@ -562,29 +581,41 @@ function drawSleigh(dt) {
 }
 
 // ---------------- drawing drifts ----------------
-function drawDrift(x0, y0, arr, shake = 0) {
-  // only where there's snow: each run of snowy columns is its own soft mound (nothing at all on a bare window)
+const SHOW = 2.6; // thinner than this isn't drawn (no white lines on bare windows)
+function drawDrift(x0, y0, arr, shake = 0, corner = 0) {
   const n = arr.length;
   const jx = shake ? Math.sin(performance.now() / 18) * 3 * shake : 0;
+  const width = (n - 1) * COL;
+  // where the window's top edge is at x (it curves down over the rounded corners)
+  const base = (dx) => {
+    if (!corner) return y0;
+    const e = Math.min(dx, width - dx);
+    if (e >= corner) return y0;
+    const t = corner - Math.max(0, e);
+    return y0 + corner - Math.sqrt(Math.max(0, corner * corner - t * t));
+  };
   const gr = g.createLinearGradient(0, y0 - MAXH, 0, y0);
   gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.75, '#f3f7fd'); gr.addColorStop(1, '#dbe5f3');
   let i = 0;
   while (i < n) {
-    while (i < n && arr[i] < 0.8) i++;
+    while (i < n && arr[i] < SHOW) i++;
     if (i >= n) break;
     const start = i;
-    while (i < n && arr[i] >= 0.8) i++;
+    while (i < n && arr[i] >= SHOW) i++;
     const end = i - 1;
-    if (end - start < 1) continue;
+    if (end - start < 2) continue;
     g.beginPath();
-    let px = x0 + start * COL + jx, py = y0;
-    g.moveTo(px - 2, y0);
+    let px = x0 + start * COL + jx, py = base(start * COL);
+    g.moveTo(px, py);
     for (let k = start; k <= end; k++) {
-      const x = x0 + k * COL + jx, y = y0 - arr[k];
+      const dx = k * COL, x = x0 + dx + jx;
+      const y = base(dx) - (arr[k] - SHOW * 0.7);
       g.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2);
       px = x; py = y;
     }
-    g.quadraticCurveTo(px, py, px + 3, y0);
+    g.quadraticCurveTo(px, py, px + 2, base(end * COL));
+    // back along the window's edge
+    for (let k = end; k >= start; k -= 2) g.lineTo(x0 + k * COL + jx, base(k * COL) + 0.5);
     g.closePath();
     g.fillStyle = gr;
     g.shadowColor = 'rgba(40,60,100,0.22)'; g.shadowBlur = 5; g.shadowOffsetY = 1;
@@ -636,7 +667,7 @@ function frame(now) {
     for (let i = wins.length - 1; i >= 0; i--) {
       const w = wins[i];
       const p = piles.get(w.id);
-      if (p) drawDrift(p.x, p.y, p.h, p.shake);
+      if (p) drawDrift(p.x, p.y, p.h, p.shake, w.dock ? 0 : CORNER);
       for (const s of snowmen) if (s.on === w.id) s.draw(g);
       for (const b of balls) if (b.rest && b.on && (b.on.id === w.id || b.on.on?.id === w.id)) drawBall(b);
       // windows in front hide what's behind them
