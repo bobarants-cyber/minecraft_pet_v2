@@ -223,8 +223,9 @@ function liveCabin(wp, g, W, H, spec) {
   const img = new Image();
   const m = coverMap(W, H);
   const P = (x, y) => [m.ox + x * m.s, m.oy + y * m.s];
+  let forest = null;
   wp.ready = new Promise((resolve) => {
-    img.onload = resolve;
+    img.onload = () => { forest = forestWind(img, Math.min(2, m.s)); resolve(); };
     img.onerror = () => { paintGradient(g, W, H, GRADIENTS.midnight); wp.draw = () => {}; resolve(); };
     const src = spec.src || '';
     img.src = src.startsWith('/') ? 'file://' + encodeURI(src) : src;
@@ -260,17 +261,20 @@ function liveCabin(wp, g, W, H, spec) {
     g.globalAlpha = 1;
     g.drawImage(img, m.ox, m.oy, PHOTO_W * m.s, PHOTO_H * m.s);
 
-    // 🌲 trees in the wind: thin horizontal strips shift sideways, most at the top, smoothly varying
-    g.save();
-    forestClip();
-    const step = 3;
-    for (let y = 0; y < HORIZON; y += step) {
-      const k = Math.pow(1 - y / HORIZON, 1.6); // treetops move, trunks at the bottom don't
-      const dx = (wind * 3.2 + Math.sin(now * 1.7 + y * 0.045) * 0.9 * wind + Math.sin(now * 3.1 + y * 0.13) * 0.35) * k;
-      if (Math.abs(dx) < 0.05) continue;
-      g.drawImage(img, 0, y, PHOTO_W, step + 1, m.ox + dx * m.s, m.oy + y * m.s, PHOTO_W * m.s, (step + 1) * m.s);
+    // 🌲 trees in the wind: the photo is bent smoothly on the graphics chip (each tree on its own rhythm, tips more
+    // than trunks, snowy branches bobbing, gusts rolling across); the cabin never moves
+    const bent = forest?.render(now, wind);
+    if (bent) g.drawImage(bent, m.ox, m.oy, PHOTO_W * m.s, PHOTO_H * m.s);
+    else { // no WebGL: the simple version (strips shift sideways)
+      g.save();
+      forestClip();
+      for (let y = 0; y < HORIZON; y += 3) {
+        const k = Math.pow(1 - y / HORIZON, 1.6);
+        const dx = (wind * 2.4 + Math.sin(now * 1.7 + y * 0.045) * 0.7 * wind) * k;
+        if (Math.abs(dx) >= 0.05) g.drawImage(img, 0, y, PHOTO_W, 4, m.ox + dx * m.s, m.oy + y * m.s, PHOTO_W * m.s, 4 * m.s);
+      }
+      g.restore();
     }
-    g.restore();
 
     // ❄️ now and then a clump of snow drops off a branch (more in gusts)
     if (Math.random() < dt * (0.25 + wind * 0.5)) {
@@ -351,4 +355,86 @@ function liveCabin(wp, g, W, H, spec) {
     g.globalCompositeOperation = 'source-over';
   };
   return wp;
+}
+
+
+/**
+ * The forest moving in the wind, on the graphics chip: the photo is drawn with each pixel nudged by a wind field.
+ * A mask says how much each spot may move: zero on the cabin and the ground, growing towards the treetops, and more on
+ * bright snowy branches than on dark trunks. Each tree (column) gets its own phase, so neighbours sway out of step;
+ * gusts travel across from left to right; branch tips bob a little. Returns a canvas (or null without WebGL).
+ */
+function forestWind(img, scale) {
+  const c = document.createElement('canvas');
+  c.width = Math.round(PHOTO_W * scale); c.height = Math.round(PHOTO_H * scale);
+  const gl = c.getContext('webgl', { premultipliedAlpha: false, preserveDrawingBuffer: true });
+  if (!gl) return null;
+  // the movement mask (photo-sized): forest above the horizon, minus the cabin; snowy branches move more
+  const mk = document.createElement('canvas'); mk.width = PHOTO_W; mk.height = PHOTO_H;
+  const mx = mk.getContext('2d');
+  mx.drawImage(img, 0, 0, PHOTO_W, PHOTO_H);
+  const src = mx.getImageData(0, 0, PHOTO_W, PHOTO_H).data;
+  const out = mx.createImageData(PHOTO_W, PHOTO_H);
+  for (let y = 0; y < PHOTO_H; y++) {
+    const up = y < HORIZON ? Math.pow(1 - y / HORIZON, 1.15) : 0; // tops move, the bottom of the trunks doesn't
+    for (let x = 0; x < PHOTO_W; x++) {
+      const i = (y * PHOTO_W + x) * 4;
+      const L = (src[i] + src[i + 1] + src[i + 2]) / 765;
+      const v = up * (0.35 + 0.65 * Math.min(1, L * 2.2)); // snowy branches more, dark trunks less
+      out.data[i] = Math.round(v * 255); out.data[i + 3] = 255;
+    }
+  }
+  mx.putImageData(out, 0, 0);
+  // the cabin stays perfectly still (with a soft edge so nothing tears)
+  mx.globalCompositeOperation = 'source-over';
+  mx.filter = 'blur(6px)';
+  mx.fillStyle = '#000';
+  mx.beginPath(); CABIN.forEach(([x, y], k) => (k ? mx.lineTo(x, y) : mx.moveTo(x, y))); mx.closePath(); mx.fill();
+  mx.filter = 'none';
+  const blurred = document.createElement('canvas'); blurred.width = PHOTO_W; blurred.height = PHOTO_H;
+  const bx = blurred.getContext('2d'); bx.filter = 'blur(3px)'; bx.drawImage(mk, 0, 0); // smooth, so the bend is smooth
+
+  const vs = 'attribute vec2 p; varying vec2 uv; void main(){ uv = vec2((p.x+1.0)*0.5, (1.0-p.y)*0.5); gl_Position = vec4(p,0.0,1.0); }';
+  const fs = `precision mediump float;
+    varying vec2 uv; uniform sampler2D photo; uniform sampler2D mask; uniform float t; uniform float wind;
+    void main() {
+      vec2 px = uv * vec2(${PHOTO_W}.0, ${PHOTO_H}.0);
+      float m = texture2D(mask, uv).r;
+      // each tree its own phase (slow noise across x), a gust front rolling left to right, small fast flutter
+      float phase = sin(px.x * 0.011) * 2.3 + sin(px.x * 0.029 + 1.7) * 1.4 + sin(px.x * 0.071 + 4.1) * 0.6;
+      float gustFront = 0.5 + 0.5 * sin(t * 0.35 - px.x * 0.004);
+      float sway = wind * (0.55 + 0.45 * sin(t * 1.05 + phase)) * (0.7 + 0.6 * gustFront);
+      float flutter = 0.28 * sin(t * 2.6 + phase * 1.9 + px.y * 0.035) + 0.12 * sin(t * 4.3 + px.x * 0.09 + px.y * 0.05);
+      float dx = (sway * 3.4 + flutter) * m;
+      float dy = (0.35 * sin(t * 2.2 + phase * 2.7 + px.x * 0.05) * wind + 0.15 * flutter) * m * m; // branch tips bob
+      vec2 off = vec2(-dx, -dy) / vec2(${PHOTO_W}.0, ${PHOTO_H}.0);
+      gl_FragColor = vec4(texture2D(photo, uv + off).rgb, 1.0);
+    }`;
+  const sh = (type, code) => { const o = gl.createShader(type); gl.shaderSource(o, code); gl.compileShader(o); return o; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+  gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const tex = (unit, source) => {
+    const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source); } catch { return false; }
+    return true;
+  };
+  if (!tex(0, img) || !tex(1, blurred)) return null;
+  gl.uniform1i(gl.getUniformLocation(prog, 'photo'), 0);
+  gl.uniform1i(gl.getUniformLocation(prog, 'mask'), 1);
+  const uT = gl.getUniformLocation(prog, 't'), uW = gl.getUniformLocation(prog, 'wind');
+  gl.viewport(0, 0, c.width, c.height);
+  return {
+    render(t, wind) {
+      gl.uniform1f(uT, t % 10000); gl.uniform1f(uW, wind);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      return c;
+    },
+  };
 }

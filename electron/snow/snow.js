@@ -253,11 +253,52 @@ const pal = () => (desk.scene === 'cabin' ? NIGHT : DAY);
 let cover = coverMap(1, 1);
 const FIELD = { id: 'field', field: true }; // the photo's snowy ground: snowballs rest wherever they're put
 let trails = []; // packed-snow tracks left by rolling snowballs on the ground
-const grain = (() => { // packed-snow texture for snowballs and snowmen
+const grain = (() => { // fine grain (drifts)
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const x = c.getContext('2d');
   for (let i = 0; i < 520; i++) { x.fillStyle = Math.random() < 0.5 ? `rgba(70,90,130,${Math.random() * 0.35})` : `rgba(255,255,255,${Math.random() * 0.5})`; x.fillRect(Math.random() * 64, Math.random() * 64, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5); }
   return x.createPattern(c, 'repeat');
+})();
+/**
+ * Packed snow, as a grey texture (128 = no change) used with 'soft-light': lumps at several sizes (value noise),
+ * little pits where clumps were pressed together, and a few sparkling ice crystals. Wrapped on every snowball.
+ */
+let SNOW_MUL = null;
+const SNOW_TEX = (() => {
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
+  const x = c.getContext('2d'), img = x.createImageData(N, N);
+  const octave = (cell) => { // smooth value noise
+    const n = Math.ceil(N / cell) + 2, grid = Array.from({ length: n * n }, () => Math.random());
+    return (px, py) => {
+      const gx = px / cell, gy = py / cell, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+      const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy), at = (a, b) => grid[(b % n) * n + (a % n)];
+      return at(x0, y0) * (1 - sx) * (1 - sy) + at(x0 + 1, y0) * sx * (1 - sy) + at(x0, y0 + 1) * (1 - sx) * sy + at(x0 + 1, y0 + 1) * sx * sy;
+    };
+  };
+  const o = [octave(48), octave(20), octave(9), octave(4), octave(2)], w = [0.34, 0.27, 0.2, 0.12, 0.07];
+  for (let py = 0; py < N; py++) for (let px = 0; px < N; px++) {
+    let v = 0; for (let k = 0; k < 5; k++) v += o[k](px, py) * w[k];
+    let lumpy = (v - 0.5) * 2.3; // -1..1
+    if (lumpy < -0.42) lumpy -= 0.35; // pits between clumps
+    const g = Math.max(0, Math.min(255, 128 + lumpy * 95));
+    const i = (py * N + px) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = g; img.data[i + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  // a 'multiply' version (white = no change, darker = shadow): reads on white snow and on blue night snow alike
+  const m = document.createElement('canvas'); m.width = m.height = N;
+  const mx = m.getContext('2d'), mimg = mx.createImageData(N, N);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = img.data[i] / 255; // 0 pit … 0.5 flat … 1 lump top
+    const g = 255 * Math.min(1, 0.6 + 0.48 * v); // pits ~0.6, flats ~0.84, lump tops 1.0
+    mimg.data[i] = mimg.data[i + 1] = mimg.data[i + 2] = g; mimg.data[i + 3] = 255;
+  }
+  mx.putImageData(mimg, 0, 0);
+  SNOW_MUL = m;
+  for (let i = 0; i < 260; i++) { // ice crystals catching the light
+    const px = Math.random() * N, py = Math.random() * N, r = Math.random() < 0.85 ? 0.6 : 1.2;
+    x.fillStyle = `rgba(255,255,255,${0.5 + Math.random() * 0.5})`; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+  }
+  return c;
 })();
 let appleWidgets = [];
 const isDesk = (p) => p && String(p.id).startsWith('desk:');
@@ -1272,8 +1313,8 @@ function snowSphere(gc, x, y, r, seed = 1, aoFrom = 0, P = pal()) {
   if (r <= 0.5) return;
   gc.save();
   gc.beginPath();
-  for (let i = 0; i <= 20; i++) {
-    const a = (i / 20) * Math.PI * 2, rr = r * (1 + 0.035 * Math.sin(a * 3 + seed) + 0.02 * Math.sin(a * 7 + seed * 2));
+  for (let i = 0; i <= 28; i++) {
+    const a = (i / 28) * Math.PI * 2, rr = r * (1 + 0.04 * Math.sin(a * 3 + seed) + 0.025 * Math.sin(a * 7 + seed * 2) + 0.018 * Math.sin(a * 13 + seed * 3)); // packed by hand: lumpy
     i ? gc.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : gc.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
   }
   gc.closePath();
@@ -1281,7 +1322,27 @@ function snowSphere(gc, x, y, r, seed = 1, aoFrom = 0, P = pal()) {
   gr.addColorStop(0, P.hi); gr.addColorStop(0.45, P.mid); gr.addColorStop(0.82, P.shade); gr.addColorStop(1, P.deep);
   gc.fillStyle = gr; gc.fill();
   gc.clip();
-  gc.globalAlpha = desk.scene === 'cabin' ? 0.22 : 0.4; gc.fillStyle = grain; gc.fillRect(x - r, y - r, r * 2, r * 2);
+  // the packed-snow surface: lumps, pits and sparkles, sized to the ball (a different patch for each ball)
+  const tile = Math.min(256, Math.max(48, r * 3.2)), sxo = (seed * 37) % (256 - tile), syo = (seed * 53) % (256 - tile);
+  gc.globalCompositeOperation = 'multiply'; gc.globalAlpha = 1; // shadows between the clumps and in the pits
+  gc.drawImage(SNOW_MUL, sxo, syo, tile, tile, x - r * 1.05, y - r * 1.05, r * 2.1, r * 2.1);
+  gc.globalAlpha = 0.55; // finer packed grains
+  gc.drawImage(SNOW_MUL, (sxo + 64) % (256 - tile), (syo + 96) % (256 - tile), tile * 0.45, tile * 0.45, x - r * 1.05, y - r * 1.05, r * 2.1, r * 2.1);
+  gc.globalCompositeOperation = 'soft-light'; gc.globalAlpha = 0.6; // lump tops catch a little light
+  gc.drawImage(SNOW_TEX, sxo, syo, tile, tile, x - r * 1.05, y - r * 1.05, r * 2.1, r * 2.1);
+  gc.globalCompositeOperation = 'source-over';
+  // ice crystals glinting (more on the lit side)
+  const rnd = (k) => { const v = Math.sin(seed * 91.7 + k * 12.9898) * 43758.5453; return v - Math.floor(v); };
+  gc.fillStyle = 'rgba(255,255,255,0.85)';
+  for (let k = 0, n = Math.round(r * 0.9); k < n; k++) {
+    const a = rnd(k) * Math.PI * 2, d = Math.sqrt(rnd(k + 50)) * r * 0.92, gx = x + Math.cos(a) * d, gy = y + Math.sin(a) * d;
+    if ((gx - x) * -0.6 + (gy - y) * -0.8 < -r * 0.2 && rnd(k + 99) < 0.6) continue; // fewer on the shadow side
+    gc.globalAlpha = 0.35 + rnd(k + 7) * 0.6; gc.fillRect(gx, gy, 0.9, 0.9);
+  }
+  // shade the texture with the ball's roundness again (so the lumps sit on a sphere, not a flat disc)
+  const rim = gc.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.3, x, y, r * 1.05);
+  rim.addColorStop(0, 'rgba(255,255,255,0)'); rim.addColorStop(0.75, 'rgba(10,20,45,0.05)'); rim.addColorStop(1, 'rgba(10,20,45,0.32)');
+  gc.globalAlpha = 1; gc.fillStyle = rim; gc.fillRect(x - r, y - r, r * 2, r * 2);
   if (aoFrom > 0) { // the ball sitting on top shades this one
     const ao = gc.createRadialGradient(x, y - r, 0, x, y - r, aoFrom * 1.25);
     ao.addColorStop(0, 'rgba(30,45,80,0.55)'); ao.addColorStop(1, 'rgba(30,45,80,0)');
