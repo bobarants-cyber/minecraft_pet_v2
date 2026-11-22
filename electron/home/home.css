@@ -5,7 +5,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
 body { transition: opacity .35s ease, transform .45s cubic-bezier(.2,.9,.25,1.15); }
 body.entering { opacity: 0; transform: scale(1.06); }
 body.leaving { opacity: 0; transform: scale(1.04); transition-duration: .25s; }
-#glass { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+#wall, #wall canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+#glass { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; pointer-events: auto; }
 body.css-glass #glass { background-size: cover; }
 #widgets { position: fixed; inset: 0; }
 

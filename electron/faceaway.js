@@ -111,23 +111,32 @@ export function runFaceAway(args, { input = null, onLine = () => {} } = {}) {
 }
 
 let appProc = null;
-/** Starts FaceAway in the menu bar (unless it's already running). */
+const PID_FILE = path.join(FACEAWAY_DIR, 'app.pid');
+const LOG_FILE = path.join(FACEAWAY_DIR, 'faceaway.log');
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+/** A FaceAway that's still running from before (it keeps going if Bbokari crashes or restarts). */
+function survivorPid() {
+  try { const pid = Number(fs.readFileSync(PID_FILE, 'utf8')); return pid > 0 && alive(pid) ? pid : null; } catch { return null; }
+}
+const lastLogLines = () => { try { return fs.readFileSync(LOG_FILE, 'utf8').trim().split('\n').filter((l) => !l.startsWith('---')).slice(-2).join(' '); } catch { return ''; } };
+
+/** Starts FaceAway in the menu bar (unless it's already running). It runs on its own, writing to its log file, so
+ *  it isn't taken down if Bbokari crashes. */
 export function startFaceAwayApp(args = [], onEarlyExit = () => {}) {
   if (appProc && appProc.exitCode === null) return { ok: true, already: true };
+  if (survivorPid()) return { ok: true, already: true };
   if (!fs.existsSync(FACEAWAY_BIN)) return { ok: false, text: 'FaceAway isn’t built yet.' };
   const started = Date.now();
-  let out = '';
-  const p = spawn(FACEAWAY_BIN, ['--app', ...args], { cwd: FACEAWAY_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
-  let log = null;
-  try { log = fs.createWriteStream(path.join(FACEAWAY_DIR, 'faceaway.log'), { flags: 'a' }); log.write(`\n--- started ${new Date().toLocaleString()} ---\n`); } catch {}
-  const keep = (d) => { out = (out + d).slice(-2000); log?.write(d); };
-  p.stdout.on('data', keep);
-  p.stderr.on('data', keep);
-  // if it stops right away, say why (e.g. "Choose a password for the panic screen first")
-  // if it stops without being asked to, say why (e.g. "Choose a password for the panic screen first")
-  p.on('close', (code, signal) => {
-    log?.end(`--- stopped (code ${code}${signal ? ', ' + signal : ''}) ---\n`);
-    if (!p.killedByUs) onEarlyExit(out.trim().split('\n').slice(-2).join(' '), Date.now() - started);
+  let fd;
+  try { fd = fs.openSync(LOG_FILE, 'a'); fs.writeSync(fd, `\n--- started ${new Date().toLocaleString()} ---\n`); } catch { fd = 'ignore'; }
+  const p = spawn(FACEAWAY_BIN, ['--app', ...args], { cwd: FACEAWAY_DIR, stdio: ['ignore', fd, fd], detached: true });
+  if (typeof fd === 'number') fs.closeSync(fd);
+  p.unref();
+  try { fs.writeFileSync(PID_FILE, String(p.pid)); } catch {}
+  p.on('exit', (code, signal) => {
+    try { fs.appendFileSync(LOG_FILE, `--- stopped (code ${code}${signal ? ', ' + signal : ''}) ---\n`); } catch {}
+    try { if (Number(fs.readFileSync(PID_FILE, 'utf8')) === p.pid) fs.unlinkSync(PID_FILE); } catch {}
+    if (!p.killedByUs) onEarlyExit(lastLogLines(), Date.now() - started);
   });
   appProc = p;
   appProc.on('error', () => (appProc = null));
@@ -135,6 +144,8 @@ export function startFaceAwayApp(args = [], onEarlyExit = () => {}) {
 }
 export function stopFaceAwayApp() {
   if (appProc && appProc.exitCode === null) { appProc.killedByUs = true; appProc.kill(); }
+  else { const pid = survivorPid(); if (pid) try { process.kill(pid); } catch {} }
   appProc = null;
+  try { fs.unlinkSync(PID_FILE); } catch {}
 }
-export const faceAwayRunning = () => !!appProc && appProc.exitCode === null;
+export const faceAwayRunning = () => (!!appProc && appProc.exitCode === null) || !!survivorPid();

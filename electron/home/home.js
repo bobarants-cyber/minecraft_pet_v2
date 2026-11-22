@@ -18,12 +18,13 @@ let wallpaper = null;
 const mounted = new Map(); // widget id → { el, inst }
 const canvas = $('#glass');
 // ?css=1 (after a graphics crash) uses simple CSS glass instead of the WebGL Liquid Glass
-let glass = q.get('css') ? null : createLiquidGlass(canvas);
+let glass = q.get('css') ? null : createLiquidGlass(canvas, { transparent: true });
+const wallBox = document.getElementById('wall');
+const glassBg = document.createElement('canvas'); // a small copy of the wallpaper for the glass to bend (it's blurred anyway)
 if (!glass) document.body.classList.add('css-glass');
 canvas.addEventListener('glass-lost', () => { // the graphics chip reset: switch to CSS glass, keep going
   glass = null;
   document.body.classList.add('css-glass');
-  if (wallpaper) canvas.style.backgroundImage = `url(${wallpaper.canvas.toDataURL('image/jpeg', 0.9)})`;
 });
 
 // Glass looks you can pick in one click (values from Liquid Glass Studio's sliders).
@@ -69,11 +70,33 @@ const saveWidgets = () => save({ widgets: config.widgets });
 
 // ---------- wallpaper ----------
 async function loadWallpaper() {
-  wallpaper = createWallpaper(config.wallpaper, innerWidth, innerHeight);
+  // the wallpaper is its own sharp layer at the screen's real resolution (moving ones at 1x, to stay smooth)
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const animated = config.wallpaper?.type === 'animated';
+  const k = animated ? 1 : dpr;
+  wallpaper = createWallpaper(config.wallpaper, innerWidth * k, innerHeight * k, { animatedScale: 1 });
   await wallpaper.ready;
-  if (glass) glass.setBackground(wallpaper.canvas);
-  else canvas.style.backgroundImage = `url(${wallpaper.canvas.toDataURL('image/jpeg', 0.9)})`;
+  wallBox.replaceChildren(wallpaper.canvas);
+  feedGlass();
   dirty = true;
+  if (MODE === 'desk' && config.theme && config.theme !== lastExported) exportDesktopPicture();
+}
+/** The glass gets a small copy of the wallpaper (cheap to upload every frame). */
+function feedGlass() {
+  if (!glass || !wallpaper) return;
+  const s = Math.min(1, Math.sqrt(500_000 / (wallpaper.canvas.width * wallpaper.canvas.height)));
+  glassBg.width = Math.max(2, Math.round(wallpaper.canvas.width * s));
+  glassBg.height = Math.max(2, Math.round(wallpaper.canvas.height * s));
+  glassBg.getContext('2d').drawImage(wallpaper.canvas, 0, 0, glassBg.width, glassBg.height);
+  glass.setBackground(glassBg);
+}
+/** After a theme change, the same picture becomes your real Mac wallpaper too (desktop layer only, once per theme). */
+let lastExported = null;
+function exportDesktopPicture() {
+  lastExported = config.theme;
+  setTimeout(() => {
+    try { host.action('desktopPicture', { theme: config.theme, data: wallpaper.canvas.toDataURL('image/jpeg', 0.93) }); } catch {}
+  }, 300);
 }
 
 // ---------- widgets ----------
@@ -186,12 +209,12 @@ function frame(t) {
   if (!dirty && !moving && !editing) return;
   if (t - last < (moving && !editing ? 40 : 16)) return; // ~25 fps for moving wallpapers, smooth while editing
   last = t;
-  if (moving) { wallpaper.draw(t / 1000); glass?.setBackground(wallpaper.canvas); }
+  if (moving) { wallpaper.draw(t / 1000); feedGlass(); }
   if (glass) {
     glass.setParams(glassParams());
     glass.setShapes(shapes());
     glass.render();
-  } else if (moving) canvas.style.backgroundImage = `url(${wallpaper.canvas.toDataURL('image/jpeg', 0.7)})`;
+  }
   document.documentElement.style.setProperty('--r', glassParams().radius + 'px');
   dirty = false;
 }

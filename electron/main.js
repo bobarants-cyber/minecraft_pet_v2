@@ -839,7 +839,15 @@ function setupHomeScreen() {
             return send('say', { text: '🥰 Hehe, that tickles!' });
           }
           case 'focusDone': return send('say', { text: '🍅 Focus time is up! Take a little break.' });
-          case 'theme': return send('faceaway', { type: 'theme', name: THEMES[arg]?.pet ?? null }); // the pet's matching scene
+          case 'theme': {
+            send('faceaway', { type: 'theme', name: THEMES[arg]?.pet ?? null }); // the pet's matching scene
+            if (!homeScreen.on) homeScreen.setOn(true); // themes live on the real desktop
+            // Winter night brings the real snow (piling on your windows); other themes put it away again
+            if (arg === 'winter' && snow && snow.config.mode === 'off') { snow.set({ mode: 'on' }); applySettings({ home: { ...settings.home, snowByTheme: true } }); }
+            else if (arg !== 'winter' && settings.home?.snowByTheme) { snow?.set({ mode: 'off' }); applySettings({ home: { ...settings.home, snowByTheme: false } }); }
+            return buildTray();
+          }
+          case 'desktopPicture': return setDesktopPicture(arg);
           case 'deskOn': homeScreen.setOn(!!arg); return buildTray();
           default: return null;
         }
@@ -895,6 +903,34 @@ function snowChat(text) {
   return null;
 }
 
+// ---------- the theme as your real Mac wallpaper ----------
+const runOsa = (script) => new Promise((resolve) => execFile('osascript', ['-e', script], { timeout: 8000 }, (err, out) => resolve(err ? null : String(out).trim())));
+async function setDesktopPicture({ theme, data } = {}) {
+  if (process.platform !== 'darwin' || !theme || !/^data:image\/jpeg;base64,/.test(data ?? '')) return;
+  if (settings.home?.desktopTheme === theme) return; // already set for this theme
+  const dir = path.join(app.getPath('userData'), 'wallpapers');
+  fs.mkdirSync(dir, { recursive: true });
+  // remember your own wallpaper once, to give it back later
+  if (!settings.home?.originalWallpaper) {
+    const mine = await runOsa('tell application "System Events" to get picture of desktop 1');
+    if (mine && !mine.startsWith(dir)) applySettings({ home: { ...settings.home, originalWallpaper: mine } });
+  }
+  for (const f of fs.readdirSync(dir)) if (f.startsWith('theme-')) try { fs.unlinkSync(path.join(dir, f)); } catch {}
+  const file = path.join(dir, `theme-${theme}-${Date.now()}.jpg`); // a new name each time (macOS caches by name)
+  fs.writeFileSync(file, Buffer.from(data.split(',')[1], 'base64'));
+  const ok = await runOsa(`tell application "System Events" to tell every desktop to set picture to POSIX file ${JSON.stringify(file)}`);
+  if (ok !== null) applySettings({ home: { ...settings.home, desktopTheme: theme } });
+}
+async function restoreWallpaper() {
+  const mine = settings.home?.originalWallpaper;
+  if (mine && fs.existsSync(mine)) await runOsa(`tell application "System Events" to tell every desktop to set picture to POSIX file ${JSON.stringify(mine)}`);
+  homeScreen?.setOn(false);
+  if (settings.home?.snowByTheme) snow?.set({ mode: 'off' });
+  applySettings({ home: { ...settings.home, desktopTheme: null, theme: null, snowByTheme: false } });
+  send('say', { text: mine ? '🖼 Your own wallpaper is back.' : '🖼 Home screen off. (I didn’t have your old wallpaper saved, so pick it again in System Settings → Wallpaper.)' });
+  buildTray();
+}
+
 function homeMenu() {
   const s = homeScreen?.saver ?? {};
   return [
@@ -902,6 +938,7 @@ function homeMenu() {
     { label: '✏️ Edit home screen (widgets, wallpaper, glass)…', click: () => homeScreen?.edit() },
     { label: '🎨 Theme', submenu: Object.entries(THEMES).map(([name, t]) => ({ label: t.label, type: 'radio', checked: homeScreen?.theme === name, click: () => (homeScreen?.setTheme(name), buildTray()) })) },
     { label: 'Show it on my desktop', type: 'checkbox', checked: !!homeScreen?.on, click: (i) => (homeScreen?.setOn(i.checked), buildTray()) },
+    { label: '↩️ Back to my own wallpaper', enabled: !!(settings.home?.theme || homeScreen?.on), click: () => restoreWallpaper() },
     { type: 'separator' },
     { label: '🌌 Start a screen saver', submenu: SAVERS.map(([kind, label]) => ({ label, click: () => homeScreen?.startSaver(kind) })) },
     { label: 'Screen saver when I’m away', type: 'checkbox', checked: s.on !== false, click: (i) => (homeScreen?.setSaver({ on: i.checked }), buildTray()) },
@@ -932,7 +969,7 @@ function homeChat(text) {
   if (th && (/theme|mode|home|glass|hacker|aurora/.test(t))) {
     const name = { 'liquid glass': 'glass', 'winter night': 'winter' }[th[1]] ?? th[1];
     homeScreen.setTheme(name);
-    return `🎨 ${THEMES[name].label} theme on your home screen! (Esc to go back)`;
+    return `🎨 ${THEMES[name].label} is on your desktop now${name === 'winter' ? ', and it’s snowing ❄️' : ''}! (Menu → 🏠 Home screen → ↩️ Back to my own wallpaper to undo.)`;
   }
   const sv = /^(start |show )?(a |the )?screen ?savers?(?: (\w+))?$/.exec(t);
   if (sv) {

@@ -39,8 +39,8 @@ function paintGradient(g, w, h, spec) {
 }
 
 /** A wallpaper: { canvas, animated, draw(t), ready }. spec = { type: 'gradient' | 'animated' | 'photo', value }. */
-export function createWallpaper(spec, width, height) {
-  const scale = spec?.type === 'animated' ? 0.5 : 1; // moving ones are drawn smaller (the glass blurs anyway)
+export function createWallpaper(spec, width, height, { animatedScale = 0.5 } = {}) {
+  const scale = spec?.type === 'animated' ? animatedScale : 1; // moving ones can be drawn smaller
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(2, Math.round(width * scale));
   canvas.height = Math.max(2, Math.round(height * scale));

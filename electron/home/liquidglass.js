@@ -80,6 +80,7 @@ uniform float u_bgTextureRatio;
 uniform float u_shadowExpand;
 uniform float u_shadowFactor;
 uniform vec2 u_shadowPosition;
+uniform float u_bakeShadow;
 out vec4 fragColor;
 ${SDF}
 vec2 getCoverUV(vec2 uv, float canvasAspect, float textureAspect) {
@@ -98,7 +99,7 @@ void main() {
   vec3 bgColor = texture(u_bgTexture, vec2(uv.x, 1.0 - uv.y)).rgb;
   float merged = mainSDF(gl_FragCoord.xy - u_shadowPosition * u_dpr);
   float shadow = exp(-1.0 / u_shadowExpand * abs(merged) * u_resolution1x.y) * 0.6 * u_shadowFactor;
-  fragColor = vec4(bgColor - vec3(shadow), 1.0);
+  fragColor = vec4(bgColor - vec3(shadow) * u_bakeShadow, 1.0);
 }`;
 
 const blurPass = (dir) => `#version 300 es
@@ -149,6 +150,10 @@ uniform float u_glareFactor;
 uniform float u_glareHardness;
 uniform float u_glareAngle;
 uniform int u_blurEdge;
+uniform int u_transparent;
+uniform float u_shadowExpand;
+uniform float u_shadowFactor;
+uniform vec2 u_shadowPosition;
 out vec4 fragColor;
 ${SDF}
 float safeAsin(float x) { return asin(clamp(x, -1.0, 1.0)); }
@@ -347,7 +352,14 @@ void main() {
   } else {
     outColor = texture(u_bg, v_uv);
   }
-  outColor = mix(outColor, texture(u_bg, v_uv), smoothstep(-0.001, 0.001, merged));
+  vec4 outside = texture(u_bg, v_uv);
+  if (u_transparent == 1) { // only the glass is drawn here; the sharp wallpaper is a layer underneath
+    float sm = mainSDF(gl_FragCoord.xy - u_shadowPosition * u_dpr);
+    float shadow = exp(-1.0 / u_shadowExpand * abs(sm) * u_resolution1x.y) * 0.6 * u_shadowFactor;
+    outside = vec4(0.0, 0.0, 0.0, clamp(shadow, 0.0, 0.6));
+    if (merged >= 0.005) outColor = outside;
+  }
+  outColor = mix(outColor, outside, smoothstep(-0.001, 0.001, merged));
   fragColor = outColor;
 }`;
 
@@ -371,8 +383,8 @@ function gaussianKernel(radius) {
  *   setParams({...GLASS_DEFAULTS})
  *   render()
  */
-export function createLiquidGlass(canvas) {
-  const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false });
+export function createLiquidGlass(canvas, { transparent = false } = {}) {
+  const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false, alpha: true });
   if (!gl) return null;
   let lost = false;
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; canvas.dispatchEvent(new Event('glass-lost')); });
@@ -492,6 +504,7 @@ export function createLiquidGlass(canvas) {
       gl.uniform1f(pr.u('u_shadowExpand'), P.shadowExpand);
       gl.uniform1f(pr.u('u_shadowFactor'), P.shadowFactor / 100);
       gl.uniform2fv(pr.u('u_shadowPosition'), [P.shadowX, P.shadowY]);
+      gl.uniform1f(pr.u('u_bakeShadow'), transparent ? 0 : 1);
       setShapeUniforms(pr, dpr, H);
       bindTex(pr, 'u_bgTexture', bgTex, 0);
       draw(pr, targets[0], W, H);
@@ -532,8 +545,14 @@ export function createLiquidGlass(canvas) {
       gl.uniform1f(pr.u('u_glareFactor'), P.glareFactor / 100);
       gl.uniform1f(pr.u('u_glareAngle'), (P.glareAngle * Math.PI) / 180);
       gl.uniform1i(pr.u('u_blurEdge'), P.blurEdge ? 1 : 0);
+      gl.uniform1i(pr.u('u_transparent'), transparent ? 1 : 0);
+      gl.uniform1f(pr.u('u_shadowExpand'), P.shadowExpand);
+      gl.uniform1f(pr.u('u_shadowFactor'), P.shadowFactor / 100);
+      gl.uniform2fv(pr.u('u_shadowPosition'), [P.shadowX, P.shadowY]);
       bindTex(pr, 'u_bg', targets[0].tex, 0);
       bindTex(pr, 'u_blurredBg', targets[2].tex, 1);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       draw(pr, null, W, H);
     },
   };

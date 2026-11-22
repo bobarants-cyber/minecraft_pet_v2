@@ -240,12 +240,13 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
     get saver() { return home().saver; },
     get theme() { return home().theme ?? null; },
     /** Picks a theme (wallpaper + glass + text) and shows the home screen. */
-    setTheme(name, { open = true } = {}) {
+    setTheme(name) {
       const t = THEMES[name];
       if (!t) return false;
       save({ theme: name, wallpaper: t.wallpaper, glass: { ...t.glass }, textDark: t.textDark });
       data.action?.('theme', name);
-      if (open) openFront();
+      // the theme goes on your real desktop (behind your windows), not in a window on top
+      if (!home().on) { save({ on: true }); showDesk(); }
       return true;
     },
   };
