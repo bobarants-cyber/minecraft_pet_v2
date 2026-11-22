@@ -107,3 +107,12 @@ body.editing .x, body.editing .rs { display: block; }
 .toggle { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin: 8px 0; }
 .big-btn { width: 100%; margin-top: 8px; background: rgba(255,255,255,.2); border-radius: 12px; padding: 9px; font-weight: 600; font-size: 13px; }
 #hint { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,.8); text-shadow: 0 1px 3px rgba(0,0,0,.5); transition: opacity 1s; }
+
+/* themes */
+.card.theme { padding: 6px 6px 8px; }
+.card.theme i { display: block; width: 100%; aspect-ratio: 1.6; border-radius: 10px; background-size: cover; margin-bottom: 4px; }
+.card.theme.on { outline: 2px solid #fff; }
+body.mono, body.mono input, body.mono textarea { font-family: "SF Mono", Menlo, monospace; }
+body[data-theme="hacker"] { --fg: #8dffb0; --fg2: rgba(141,255,176,.7); --chip: rgba(0,255,110,.14); --shadow: 0 0 6px rgba(0,255,110,.45); }
+body[data-theme="hacker"] .cal span.today { background: #20e060; color: #00140a; }
+body[data-theme="hacker"] .cal-title { color: #20e060; text-shadow: 0 0 6px rgba(0,255,110,.5); }

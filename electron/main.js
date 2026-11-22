@@ -40,7 +40,9 @@ import * as computer from './computer.js';
 import * as fun from './fun.js';
 import { parsePose, soundsLikePose, clampJoints, POSES } from '../src/skater/poses.js';
 import * as tickets from './tickets.js';
-import { createHomeScreen, SAVERS } from './homescreen.js';
+import { createHomeScreen, SAVERS, THEMES } from './homescreen.js';
+// If the graphics process ever crashes (heavy WebGL), let Chromium restart it instead of quitting the whole app.
+app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 import { createSnow } from './snow.js';
 import { weatherData } from './skills.js';
 import http from 'node:http';
@@ -780,6 +782,8 @@ let homeScreen = null;
 let weatherCache = null;
 function setupHomeScreen() {
   const DAYNAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  // the pet matches the home screen's theme from the start
+  setTimeout(() => { const th = settings.home?.theme; if (th && THEMES[th]?.pet) send('faceaway', { type: 'theme', name: THEMES[th].pet }); }, 5000);
   homeScreen = createHomeScreen({
     getSettings: () => settings,
     applySettings: (patch) => applySettings(patch),
@@ -834,6 +838,7 @@ function setupHomeScreen() {
             return send('say', { text: '🥰 Hehe, that tickles!' });
           }
           case 'focusDone': return send('say', { text: '🍅 Focus time is up! Take a little break.' });
+          case 'theme': return send('faceaway', { type: 'theme', name: THEMES[arg]?.pet ?? null }); // the pet's matching scene
           case 'deskOn': homeScreen.setOn(!!arg); return buildTray();
           default: return null;
         }
@@ -882,6 +887,7 @@ function homeMenu() {
   return [
     { label: '🏠 Open home screen', accelerator: 'Control+Alt+H', click: () => homeScreen?.openFront() },
     { label: '✏️ Edit home screen (widgets, wallpaper, glass)…', click: () => homeScreen?.edit() },
+    { label: '🎨 Theme', submenu: Object.entries(THEMES).map(([name, t]) => ({ label: t.label, type: 'radio', checked: homeScreen?.theme === name, click: () => (homeScreen?.setTheme(name), buildTray()) })) },
     { label: 'Show it on my desktop', type: 'checkbox', checked: !!homeScreen?.on, click: (i) => (homeScreen?.setOn(i.checked), buildTray()) },
     { type: 'separator' },
     { label: '🌌 Start a screen saver', submenu: SAVERS.map(([kind, label]) => ({ label, click: () => homeScreen?.startSaver(kind) })) },
@@ -909,6 +915,12 @@ function homeChat(text) {
     homeScreen.openFront();
     return '🏠 Your home screen! Press ⌃⌥H or Esc to go back, double-click the background to edit.';
   }
+  const th = t.match(/^(?:(?:set|change|switch|use)(?: the| my)?(?: home ?screen)? theme to |(?:use |put on )?(?:the )?)(clean|liquid glass|glass|hacker|midnight|sunset|aurora|ocean|winter(?: night)?)(?: theme| mode| home ?screen)?$/);
+  if (th && (/theme|mode|home|glass|hacker|aurora/.test(t))) {
+    const name = { 'liquid glass': 'glass', 'winter night': 'winter' }[th[1]] ?? th[1];
+    homeScreen.setTheme(name);
+    return `🎨 ${THEMES[name].label} theme on your home screen! (⌃⌥H or Esc to go back)`;
+  }
   const sv = /^(start |show )?(a |the )?screen ?savers?(?: (\w+))?$/.exec(t);
   if (sv) {
     const kinds = SAVERS.map(([k]) => k);
@@ -927,11 +939,8 @@ function faceAwayChat(text) {
   if (/^(lock|lock (my )?(mac|computer|screen)|face ?id lock)$/.test(t)) { faceAway.command('lock'); return `🔒 Locked with Face ID.${not}`; }
   const w = t.match(/^(?:turn )?(?:watch(?:ing)?|guard(?: mode)?) (on|off)$|^(?:turn )?(on|off) (?:watch(?:ing)?|guard(?: mode)?)$/);
   if (w) { const on = (w[1] ?? w[2]) === 'on'; faceAway.command('watch', { on }); return on ? `👀 Watching is on. I’ll keep an eye out too!${not}` : `Watching off.${not}`; }
-  const th = t.match(/^(?:(?:set|change|switch)(?: the)? theme to |)(clean|midnight|sunset|hacker|liquid glass|glass)(?: theme| mode)?$/);
-  if (th) { const name = th[1] === 'liquid glass' ? 'glass' : th[1]; faceAway.command('theme', { name }); return `✨ Theme: ${th[1]}.${not}`; }
   const d = t.match(/^(?:use |set |change (?:the )?decoy to |)(school|update|black)(?: decoy| screen)?$/);
   if (d && /decoy|screen|^use|^set|^change/.test(t)) { faceAway.command('decoy', { name: d[1] }); return `🎭 Decoy screen: ${d[1]}.${not}`; }
-  if (/^(show |open )?(my )?home ?screen$/.test(t)) { faceAway.command('home'); return `🏠 Home screen.${not}`; }
   const add = t.match(/^(?:add|learn|save) (?:a |my )?face(?: (?:of|for|as))? ?(.*)$/);
   if (add) { faceAwayAddFace(text.slice(text.length - add[1].length).trim() || null); return add[1] ? '📸 Getting the camera ready…' : '👤 Type their name in the little window.'; }
   if (/^(set|change) (my |the )?(panic )?password$/.test(t)) { faceAwayPassword(); return '🔑 Type it in the little window (it stays private).'; }
@@ -941,8 +950,6 @@ function faceAwayChat(text) {
   return null;
 }
 function faceAwayMenu() {
-  const t = faceAwayState.theme;
-  const theme = (name, label) => ({ label, type: 'radio', checked: t === name, click: () => faceAway?.command('theme', { name }) });
   const built = fs.existsSync(FACEAWAY_BIN);
   if (!built) return [{ label: '🔨 Set up FaceAway', click: faceAwayBuild }];
   const on = faceAwayRunning();
@@ -952,8 +959,6 @@ function faceAwayMenu() {
     { label: '👀 Hide my screen when I look away', type: 'checkbox', checked: faceAwayState.watching, enabled: on, click: (i) => faceAway?.command('watch', { on: i.checked }) },
     { label: '🔒 Lock (Face ID unlock)', enabled: on, click: () => faceAway?.command('lock') },
     { label: '🚨 Panic', enabled: on, click: () => faceAway?.command('panic') },
-    { label: '🏠 Home screen', enabled: on, click: () => faceAway?.command('home') },
-    { label: '✨ Theme', submenu: ['clean', 'midnight', 'sunset', 'hacker', 'glass'].map((n) => ({ label: { clean: 'Clean', midnight: 'Midnight', sunset: 'Sunset', hacker: '💻 Hacker', glass: '🫧 Liquid Glass' }[n], type: 'radio', checked: t === n, click: () => (faceAway?.command('theme', { name: n }), applySettings({ faceAwayOpts: { ...faOpts(), theme: n } })) })) },
     { label: '👤 Add a face…', click: () => faceAwayAddFace() },
     { type: 'separator' },
     { label: 'More', submenu: [

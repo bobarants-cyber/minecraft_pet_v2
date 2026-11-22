@@ -15,7 +15,7 @@ export const GRADIENTS = {
   forest: ['#0f2a1d', [0.2, 0.7, 0.8, '#2d6a4f'], [0.8, 0.3, 0.7, '#95d5b2'], [0.6, 0.9, 0.5, '#d8f3dc']],
   mono: ['#d9d9de', [0.2, 0.2, 0.7, '#ffffff'], [0.8, 0.8, 0.8, '#9a9aa6']],
 };
-export const ANIMATED = { winter: '❄️ Winter night', aurora: '🌌 Aurora', lava: '🌋 Lava', stars: '⭐ Stars', waves: '🌊 Waves' };
+export const ANIMATED = { matrix: '💻 Hacker', winter: '❄️ Winter night', aurora: '🌌 Aurora', lava: '🌋 Lava', stars: '⭐ Stars', waves: '🌊 Waves' };
 
 function paintGradient(g, w, h, spec) {
   const [base, ...blobs] = spec;
@@ -66,6 +66,30 @@ export function createWallpaper(spec, width, height) {
   if (spec?.type === 'animated') {
     wp.animated = true;
     const kind = spec.value;
+    if (kind === 'matrix') {
+      // green code rain over a dark desk glow
+      const size = 14, glyphs = '01<>{}[]/=+*#$%&@ABCDEFabcdef';
+      let cols = [], lastT = 0;
+      g.fillStyle = '#000805'; g.fillRect(0, 0, W, H);
+      wp.draw = (t) => {
+        const n = Math.ceil(W / size);
+        if (cols.length !== n) cols = Array.from({ length: n }, () => rand(-40, H / size));
+        const steps = Math.min(4, Math.floor((t - lastT) * 18));
+        if (steps <= 0) return;
+        lastT = t;
+        for (let s = 0; s < steps; s++) {
+          g.fillStyle = 'rgba(0,8,5,0.12)'; g.fillRect(0, 0, W, H);
+          g.font = `${size}px monospace`;
+          for (let i = 0; i < n; i++) {
+            g.fillStyle = Math.random() < 0.04 ? '#d8ffe0' : '#20e060';
+            g.fillText(glyphs[(Math.random() * glyphs.length) | 0], i * size, cols[i] * size);
+            cols[i] = cols[i] * size > H && Math.random() > 0.97 ? 0 : cols[i] + 1;
+          }
+        }
+      };
+      wp.draw(1);
+      return wp;
+    }
     if (kind === 'winter') {
       // a snowy night: moon, mountains, pines, a warm little window, and snow falling
       const scene = document.createElement('canvas');

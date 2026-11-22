@@ -9,7 +9,10 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, powerMonitor, screen, shell } from 'electron';
 
+import { THEMES } from './home/themes.js';
+
 const HERE = path.dirname(new URL(import.meta.url).pathname);
+export { THEMES };
 const PAGE = path.join(HERE, 'home', 'home.html');
 const SAVER = path.join(HERE, 'home', 'saver.html');
 
@@ -83,6 +86,16 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
   const bounds = () => screen.getPrimaryDisplay().bounds;
   const prefs = { preload: path.join(HERE, 'preload.cjs'), contextIsolation: true, backgroundThrottling: true };
 
+  // If a home screen page crashes (e.g. the graphics chip resets), reload it with simple CSS glass instead.
+  let cssOnly = false;
+  function guard(w, mode) {
+    w.webContents.on('render-process-gone', (_e, d) => {
+      console.log(`Home screen (${mode}) crashed: ${d.reason}. Reloading with simple glass.`);
+      cssOnly = true;
+      if (!w.isDestroyed()) w.loadFile(PAGE, { query: { mode, css: '1' } });
+    });
+  }
+
   function showDesk() {
     if (desk && !desk.isDestroyed()) return desk.showInactive();
     const b = bounds();
@@ -91,9 +104,10 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
       skipTaskbar: true, focusable: false, enableLargerThanScreen: true, backgroundColor: '#1d2440', show: false, webPreferences: prefs,
     });
     desk.setVisibleOnAllWorkspaces(true);
-    desk.loadFile(PAGE, { query: { mode: 'desk' } });
+    desk.loadFile(PAGE, { query: { mode: 'desk', ...(cssOnly ? { css: '1' } : {}) } });
     desk.once('ready-to-show', () => desk.showInactive());
     desk.on('closed', () => (desk = null));
+    guard(desk, 'desk');
   }
   function hideDesk() {
     if (desk && !desk.isDestroyed()) desk.close();
@@ -114,9 +128,10 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
     });
     front.setAlwaysOnTop(true, 'floating');
     front.setVisibleOnAllWorkspaces(true);
-    front.loadFile(PAGE, { query: { mode: 'front', edit: edit ? '1' : '' } });
+    front.loadFile(PAGE, { query: { mode: 'front', edit: edit ? '1' : '', ...(cssOnly ? { css: '1' } : {}) } });
     front.once('ready-to-show', () => { front.show(); front.focus(); });
     front.on('closed', () => (front = null));
+    guard(front, 'front');
   }
   const closeFront = () => { if (front && !front.isDestroyed()) front.webContents.send('home:leave'); };
   const toggleFront = () => (front && !front.isDestroyed() ? closeFront() : openFront());
@@ -206,5 +221,15 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
     setOn(on) { save({ on }); on ? showDesk() : hideDesk(); },
     setSaver(patch) { save({ saver: { ...home().saver, ...patch } }); },
     get saver() { return home().saver; },
+    get theme() { return home().theme ?? null; },
+    /** Picks a theme (wallpaper + glass + text) and shows the home screen. */
+    setTheme(name, { open = true } = {}) {
+      const t = THEMES[name];
+      if (!t) return false;
+      save({ theme: name, wallpaper: t.wallpaper, glass: { ...t.glass }, textDark: t.textDark });
+      data.action?.('theme', name);
+      if (open) openFront();
+      return true;
+    },
   };
 }

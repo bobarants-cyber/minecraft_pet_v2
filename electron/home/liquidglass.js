@@ -15,6 +15,7 @@ export const GLASS_DEFAULTS = {
 
 const MAX_SHAPES = 24;
 const MAX_BLUR = 64;
+const MAX_PIXELS = 700_000;
 
 const VERTEX = `#version 300 es
 in vec4 a_position;
@@ -373,6 +374,8 @@ function gaussianKernel(radius) {
 export function createLiquidGlass(canvas) {
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false });
   if (!gl) return null;
+  let lost = false;
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; canvas.dispatchEvent(new Event('glass-lost')); });
   const compile = (type, src) => {
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
@@ -468,9 +471,13 @@ export function createLiquidGlass(canvas) {
     setShapes(list) { shapes = list; },
     setParams(p) { params = { ...GLASS_DEFAULTS, ...p, tint: { ...GLASS_DEFAULTS.tint, ...(p?.tint ?? {}) } }; },
     render() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const W = Math.max(1, Math.round(canvas.clientWidth * dpr));
-      const H = Math.max(1, Math.round(canvas.clientHeight * dpr));
+      if (lost) return;
+      // Drawn at a capped resolution (about 0.7 million pixels): full Retina size is far too much work for the
+      // graphics chip (it gets reset and the window dies), and the glass is blurry anyway. Text stays sharp (it's HTML).
+      const cssW = canvas.clientWidth || 1, cssH = canvas.clientHeight || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(MAX_PIXELS / (cssW * cssH)));
+      const W = Math.max(1, Math.round(cssW * dpr));
+      const H = Math.max(1, Math.round(cssH * dpr));
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       targets.forEach((t) => sizeTarget(t, W, H));
       const res = [W, H];
@@ -490,7 +497,7 @@ export function createLiquidGlass(canvas) {
       draw(pr, targets[0], W, H);
 
       // 2) blur it (horizontal, then vertical)
-      const radius = Math.max(1, Math.min(MAX_BLUR, Math.round(P.blurRadius)));
+      const radius = Math.max(1, Math.min(MAX_BLUR, Math.round(P.blurRadius * dpr))); // the slider is in screen points
       const weights = new Float32Array(MAX_BLUR + 1);
       weights.set(gaussianKernel(radius));
       for (const [key, from, to] of [['h', 0, 1], ['v', 1, 2]]) {

@@ -3,6 +3,7 @@ import { createLiquidGlass, GLASS_DEFAULTS } from './liquidglass.js';
 import { createWallpaper, GRADIENTS, ANIMATED } from './wallpapers.js';
 import { WIDGETS } from './widgets.js';
 import { SAVER_LIST } from './savers.js';
+import { THEMES } from './themes.js';
 
 const host = window.homeHost;
 const q = new URLSearchParams(location.search);
@@ -16,8 +17,14 @@ let dirty = true;
 let wallpaper = null;
 const mounted = new Map(); // widget id → { el, inst }
 const canvas = $('#glass');
-const glass = createLiquidGlass(canvas);
+// ?css=1 (after a graphics crash) uses simple CSS glass instead of the WebGL Liquid Glass
+let glass = q.get('css') ? null : createLiquidGlass(canvas);
 if (!glass) document.body.classList.add('css-glass');
+canvas.addEventListener('glass-lost', () => { // the graphics chip reset: switch to CSS glass, keep going
+  glass = null;
+  document.body.classList.add('css-glass');
+  if (wallpaper) canvas.style.backgroundImage = `url(${wallpaper.canvas.toDataURL('image/jpeg', 0.9)})`;
+});
 
 // Glass looks you can pick in one click (values from Liquid Glass Studio's sliders).
 const PRESETS = {
@@ -232,7 +239,35 @@ const toggle = (label, on, onChange) => {
   return row;
 };
 
+function applyLook(c) {
+  document.body.classList.toggle('dark', !!c.textDark);
+  document.body.classList.toggle('mono', THEMES[c.theme]?.font === 'mono');
+  document.body.dataset.theme = c.theme ?? '';
+}
+async function applyTheme(name, panel) {
+  const t = THEMES[name];
+  if (!t) return;
+  save({ theme: name, wallpaper: t.wallpaper, glass: { ...t.glass }, textDark: t.textDark }, true);
+  applyLook(config);
+  await loadWallpaper();
+  host.action('theme', name); // the pet matches it
+  if (panel) PANELS.themes(panel);
+}
+
 const PANELS = {
+  themes(p) {
+    p.innerHTML = '<h3>Themes</h3><div class="cards themes"></div><p class="muted" style="font-size:11px;color:rgba(255,255,255,.65);margin-top:12px">A theme sets the wallpaper, the glass and the text. Change any of them after in 🖼 Wallpaper and 💧 Glass.</p>';
+    const box = p.querySelector('.themes');
+    for (const [name, t] of Object.entries(THEMES)) {
+      const b = document.createElement('button');
+      b.className = 'card theme' + (config.theme === name ? ' on' : '');
+      const prev = createWallpaper(t.wallpaper, 160, 100);
+      if (prev.animated) prev.draw(3);
+      b.innerHTML = `<i style="background-image:url(${prev.canvas.toDataURL()})"></i>${esc(t.label)}`;
+      b.onclick = () => applyTheme(name, p);
+      box.append(b);
+    }
+  },
   add(p) {
     p.innerHTML = '<h3>Add a widget</h3><div class="cards"></div>';
     const cards = p.querySelector('.cards');
@@ -364,7 +399,7 @@ host.onConfig((c) => {
   const wallChanged = JSON.stringify(c.wallpaper) !== JSON.stringify(config.wallpaper);
   const widgetsChanged = JSON.stringify(c.widgets) !== JSON.stringify(config.widgets);
   config = c;
-  document.body.classList.toggle('dark', !!c.textDark);
+  applyLook(c);
   if (wallChanged) loadWallpaper();
   if (widgetsChanged && !editing) mountAll();
   dirty = true;
@@ -376,7 +411,7 @@ host.onLeave(leave);
   const r = await host.get();
   config = r.config;
   petName = r.name;
-  document.body.classList.toggle('dark', !!config.textDark);
+  applyLook(config);
   if (MODE === 'front') { document.body.classList.add('entering'); $('#hint').hidden = false; setTimeout(() => ($('#hint').style.opacity = 0), 4000); }
   await loadWallpaper();
   mountAll();
