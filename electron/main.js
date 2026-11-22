@@ -446,8 +446,8 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
     ...(settings.cursorMode ? [{ label: '   Hide the normal arrow (only Bbokari)', type: 'checkbox', checked: settings.cursorHideArrow, click: (i) => (applySettings({ cursorHideArrow: i.checked }), showRealArrow(), setTimeout(hideRealArrow, 700)) }] : []),
-    { label: `❄️ Let it snow${snow?.config.mode !== 'off' && snow ? ' (on)' : ''}`, submenu: snowMenu() },
-    { label: '🏠 Home screen', submenu: homeMenu() },
+    { label: `❄️ Let it snow${snow?.config.mode !== 'off' && snow ? ' (on)' : ''}`, submenu: afterMenuCloses(snowMenu()) },
+    { label: '🏠 Home screen', submenu: afterMenuCloses(homeMenu()) },
     { label: '🛡️ FaceAway', submenu: faceAwayMenu() },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
@@ -845,6 +845,18 @@ function setupHomeScreen() {
       },
     },
   });
+}
+
+/**
+ * Runs menu clicks a moment after the menu has closed. Rebuilding the menu bar menu (buildTray) or opening big windows
+ * while macOS is still closing the menu can crash Electron ("quit unexpectedly").
+ */
+function afterMenuCloses(items) {
+  return items.map((it) => ({
+    ...it,
+    ...(it.click ? { click: (item, ...rest) => { const checked = item?.checked; setTimeout(() => it.click({ checked }, ...rest), 120); } } : {}),
+    ...(it.submenu ? { submenu: afterMenuCloses(it.submenu) } : {}),
+  }));
 }
 
 // ---------- ❄️ snow on your desktop (snow.js, snow/) ----------
