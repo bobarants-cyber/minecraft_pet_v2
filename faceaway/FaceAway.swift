@@ -3623,7 +3623,7 @@ final class Controller {
 
     // "test" by text: photo + who is at the Mac
     private var snapshotAt: Date?
-    func snapshot() {
+    func takeStatusPhoto() {
         guard snapshotAt == nil else { return }
         let warm = cameraOn
         snapshotAt = Date().addingTimeInterval(warm ? 0.3 : 1.5)   // a cold camera needs a moment for the light
@@ -4166,7 +4166,7 @@ case .app:
             case "lock": c.lockNowFromMenu()
             case "decoy": if let name = cmd["name"] as? String { c.setDecoy(name) }
             case "testAsk": c.testAsk()
-            case "snapshot": c.snapshot()
+            case "snapshot": c.takeStatusPhoto()
             case "answer": c.answerFromBridge(lock: cmd["lock"] as? Bool ?? true)
             default: break
             }
