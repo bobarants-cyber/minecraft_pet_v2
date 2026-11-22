@@ -432,6 +432,8 @@ function detectShake() {
 
 /** What's under the pointer that can be grabbed: a loose snowball, or a drift's surface. */
 function grabbable(x, y) {
+  // Nothing grabs unless ⌥ Option is held (or you're already holding a snowball): clicks always reach your apps/icons
+  if (!optionDown && !held) return null;
   for (const b of balls) if (b.rest && Math.hypot(b.x - x, b.y - y) < b.r + 6) return { ball: b };
   if (!cfg.fx.piles || cfg.mode !== 'on') return null;
   for (let i = 0; i < wins.length; i++) {

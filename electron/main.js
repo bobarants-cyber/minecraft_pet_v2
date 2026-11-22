@@ -891,7 +891,7 @@ function snowMenu() {
     fx('plow', 'Snowplow comes by now and then'),
     { label: 'Battery saver (30 fps)', type: 'checkbox', checked: !!c.saver, click: (i) => snow.set({ saver: i.checked }) },
     { type: 'separator' },
-    { label: 'Tip: drag along snow to roll a snowball (hold ⌥ for snow in the wallpaper picture). Stack 3 for a snowman!', enabled: false },
+    { label: 'Tip: hold ⌥ Option and drag along snow to roll a snowball. Stack 3 for a snowman!', enabled: false },
   ];
 }
 /** Chat: "let it snow", "stop the snow", "blizzard", "send the sleigh", "snow only on the desktop". */
@@ -899,7 +899,7 @@ function snowChat(text) {
   const t = text.toLowerCase().replace(/[!.?]+$/, '').trim();
   if (!snow) return null;
   if (/^(stop|no more|turn off|end)( the)? snow(ing|fall)?$|^snow off$/.test(t)) { snow.set({ mode: 'off' }); return '☀️ The snow stopped. Say “let it snow” any time!'; }
-  if (/^(let it snow|make it snow|snow|start (the )?snow(ing)?|snow on|it'?s snowing)$/.test(t)) { snow.set({ mode: 'on' }); return '❄️ Let it snow! Drag along the snow to roll a snowball and throw it, stack three for a snowman, and shake the mouse to blow it all away.'; }
+  if (/^(let it snow|make it snow|snow|start (the )?snow(ing)?|snow on|it'?s snowing)$/.test(t)) { snow.set({ mode: 'on' }); return '❄️ Let it snow! Hold ⌥ Option and drag along the snow to roll a snowball and throw it, stack three for a snowman, and shake the mouse to blow it all away.'; }
   if (/snow.*(only|just).*desktop|desktop.*only.*snow/.test(t)) { snow.set({ mode: 'desktop' }); return '❄️ Snow only on the desktop now (behind your windows).'; }
   if (/^(start a |a )?blizzard$/.test(t)) { snow.blizzard(); return '🌨 Blizzard!'; }
   if (/^(send|call)( the| a)? (sleigh|santa|reindeer)$/.test(t)) { snow.sleigh(); return '🛷 Here comes the sleigh!'; }
