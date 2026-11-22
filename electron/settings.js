@@ -20,7 +20,8 @@ export const CAPTION_LANGUAGES = {
 
 export const DEFAULTS = {
   faceAwayAuto: true, // start FaceAway (Face ID lock / panic screen) together with the pet
-  faceAwayOpts: {}, // FaceAway's options (what you'd type in Terminal), set from the pet's menu
+  faceAwayOpts: {},
+  home: {}, // 🏠 the home screen: wallpaper, widgets, glass, screen saver (see homescreen.js) // FaceAway's options (what you'd type in Terminal), set from the pet's menu
   mob: 'bee',
   petSize: SIZES.medium,
   autoWalk: true,

@@ -40,6 +40,8 @@ import * as computer from './computer.js';
 import * as fun from './fun.js';
 import { parsePose, soundsLikePose, clampJoints, POSES } from '../src/skater/poses.js';
 import * as tickets from './tickets.js';
+import { createHomeScreen, SAVERS } from './homescreen.js';
+import { weatherData } from './skills.js';
 import http from 'node:http';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -441,6 +443,7 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
     ...(settings.cursorMode ? [{ label: '   Hide the normal arrow (only Bbokari)', type: 'checkbox', checked: settings.cursorHideArrow, click: (i) => (applySettings({ cursorHideArrow: i.checked }), showRealArrow(), setTimeout(hideRealArrow, 700)) }] : []),
+    { label: '🏠 Home screen', submenu: homeMenu() },
     { label: '🛡️ FaceAway', submenu: faceAwayMenu() },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
     { label: '🔍 Check my writing now', click: () => checkWritingNow() },
@@ -770,6 +773,115 @@ function onFaceAwayEvent(ev) {
   buildTray();
 }
 /** Chat commands for FaceAway. Returns the reply, or null if it isn't one. */
+// ---------- 🏠 the home screen, its editor and the screen savers (homescreen.js, home/) ----------
+let homeScreen = null;
+let weatherCache = null;
+function setupHomeScreen() {
+  const DAYNAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  homeScreen = createHomeScreen({
+    getSettings: () => settings,
+    applySettings: (patch) => applySettings(patch),
+    data: {
+      petName: () => personaFor(settings.mob).name,
+      // the next classes this week (today's that haven't ended, then the next days)
+      classes: () => {
+        const now = new Date();
+        const out = [];
+        for (let d = 0; d < 7 && out.length < 6; d++) {
+          const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d, 12);
+          for (const c of classes?.today(day) ?? []) {
+            if (c.endAt <= now) continue;
+            out.push({ name: c.name, start: c.start, end: c.end, link: c.link, startAt: c.startAt.toISOString(), endAt: c.endAt.toISOString(), day: d === 0 ? null : d === 1 ? 'Tomorrow' : DAYNAMES[day.getDay()] });
+          }
+        }
+        return out.sort((a, b) => a.startAt.localeCompare(b.startAt));
+      },
+      classDays: () => [...new Set((classes?.list() ?? []).flatMap((c) => c.days))],
+      todos: () => skills?.todos.list() ?? [],
+      weather: async () => {
+        if (!settings.homeCity) return { needCity: true };
+        if (weatherCache && weatherCache.city === settings.homeCity && Date.now() - weatherCache.at < 15 * 60_000) return weatherCache.data;
+        const data = await weatherData(settings.homeCity);
+        weatherCache = { city: settings.homeCity, at: Date.now(), data };
+        return data;
+      },
+      music: async () => {
+        const out = await new Promise((resolve) => execFile('osascript', ['-e', 'if application id "com.spotify.client" is running then\ntell application "Spotify" to return (name of current track) & "\t" & (artist of current track) & "\t" & (player state as string)\nelse if application id "com.apple.Music" is running then\ntell application "Music" to return (name of current track) & "\t" & (artist of current track) & "\t" & (player state as string)\nend if\nreturn ""'], { timeout: 5000 }, (err, o) => resolve(err ? '' : String(o).trim())));
+        const [song, artist, state] = out.split('\t');
+        return song ? { song, artist, playing: state === 'playing' } : null;
+      },
+      action: async (kind, arg) => {
+        switch (kind) {
+          case 'todoDone': return arg >= 0 && tickTodo(arg);
+          case 'todoAdd': return skills?.todos.handle(`add ${String(arg).slice(0, 200)} to my list`);
+          case 'setCity': weatherCache = null; return applySettings({ homeCity: String(arg).slice(0, 80) });
+          case 'music': {
+            const a = ['play', 'pause', 'next', 'previous'].includes(arg) ? arg : 'play';
+            const r = await spotify.control({ action: a }).catch(() => null);
+            if (r === null) { // not Spotify: Apple Music
+              const cmd = { play: 'play', pause: 'pause', next: 'next track', previous: 'previous track' }[a];
+              execFile('osascript', ['-e', `if application id "com.apple.Music" is running then tell application "Music" to ${cmd}`], () => {});
+            }
+            return null;
+          }
+          case 'pet': {
+            if (settings.hidden) applySettings({ hidden: false });
+            if (arg === 'dance') return command('trigger', { name: 'dance' });
+            if (arg === 'feed') { send('effect', { effect: 'tada' }); return send('say', { text: '😋 Yum, thank you!' }); }
+            send('effect', { effect: 'sparkle' });
+            return send('say', { text: '🥰 Hehe, that tickles!' });
+          }
+          case 'focusDone': return send('say', { text: '🍅 Focus time is up! Take a little break.' });
+          case 'deskOn': homeScreen.setOn(!!arg); return buildTray();
+          default: return null;
+        }
+      },
+    },
+  });
+}
+
+function homeMenu() {
+  const s = homeScreen?.saver ?? {};
+  return [
+    { label: '🏠 Open home screen', accelerator: 'Control+Alt+H', click: () => homeScreen?.openFront() },
+    { label: '✏️ Edit home screen (widgets, wallpaper, glass)…', click: () => homeScreen?.edit() },
+    { label: 'Show it on my desktop', type: 'checkbox', checked: !!homeScreen?.on, click: (i) => (homeScreen?.setOn(i.checked), buildTray()) },
+    { type: 'separator' },
+    { label: '🌌 Start a screen saver', submenu: SAVERS.map(([kind, label]) => ({ label, click: () => homeScreen?.startSaver(kind) })) },
+    { label: 'Screen saver when I’m away', type: 'checkbox', checked: s.on !== false, click: (i) => (homeScreen?.setSaver({ on: i.checked }), buildTray()) },
+    {
+      label: `   Start after: ${s.after ?? 5} min`,
+      submenu: [1, 2, 5, 10, 15, 30].map((m) => ({ label: `${m} min`, type: 'radio', checked: (s.after ?? 5) === m, click: () => (homeScreen?.setSaver({ after: m }), buildTray()) })),
+    },
+    {
+      label: '   Which one',
+      submenu: SAVERS.map(([kind, label]) => ({ label, type: 'radio', checked: (s.kind ?? 'bubbles') === kind, click: () => (homeScreen?.setSaver({ kind }), buildTray()) })),
+    },
+  ];
+}
+
+/** Chat: "home", "home screen", "edit my home screen", "screen saver", "screensaver lava", "wallpaper". */
+function homeChat(text) {
+  const t = text.toLowerCase().replace(/[!.?]+$/, '').trim();
+  if (!homeScreen) return null;
+  if (/^(edit|customi[sz]e|change|decorate)( my| the)? (home ?screen|widgets?|wallpaper)$|^(change|new) (my )?wallpaper$|^add (a )?widgets?$/.test(t)) {
+    homeScreen.edit();
+    return '✏️ Here’s your home screen! Drag widgets around, ＋ to add more, 🖼 for the wallpaper (or your own photo) and 💧 to tune the Liquid Glass.';
+  }
+  if (/^(open |show |go )?(my |the )?home( ?screen)?$|^go home$/.test(t)) {
+    homeScreen.openFront();
+    return '🏠 Your home screen! Press ⌃⌥H or Esc to go back, double-click the background to edit.';
+  }
+  const sv = /^(start |show )?(a |the )?screen ?savers?(?: (\w+))?$/.exec(t);
+  if (sv) {
+    const kinds = SAVERS.map(([k]) => k);
+    const pick = kinds.find((k) => sv[3] && (k.startsWith(sv[3]) || sv[3].startsWith(k))) ?? homeScreen.saver.kind;
+    homeScreen.startSaver(pick);
+    return `🌌 ${SAVERS.find(([k]) => k === pick)?.[1] ?? 'Screen saver'}! Move the mouse to stop it.`;
+  }
+  return null;
+}
+
 function faceAwayChat(text) {
   const t = text.toLowerCase().replace(/[.!?]+$/, '');
   if (!faceAway) return null;
@@ -872,6 +984,8 @@ ipcMain.handle('assistant:ask', async (_e, { text = '', history = [], mob = sett
   const math = recipeMath(text);
   if (math) return { ok: true, kind: 'skill', text: math };
   // FaceAway by chat: "panic", "lock my mac", "watch on", "hacker theme", "school decoy", "home screen"
+  const home = homeChat(String(text).trim());
+  if (home) return { ok: true, kind: 'skill', text: home };
   const fa = faceAwayChat(String(text).trim());
   if (fa) return { ok: true, kind: 'skill', text: fa };
   // Your school project: "check my math project", "my math project is: …", "make me a template for this project, I'm doing bibimbap".
@@ -1388,6 +1502,9 @@ ipcMain.handle('hub:run', (_e, id) => {
   if (f.prefill) return command('chat', { prefill: f.prefill });
   const OUTFITS = ['none', 'party', 'crown', 'beanie', 'bow', 'flower', 'sunglasses'];
   const runs = {
+    home: () => homeScreen?.openFront(),
+    homeEdit: () => homeScreen?.edit(),
+    saver: () => homeScreen?.startSaver(),
     chat: () => command('chat'),
     check: () => checkWritingNow(),
     notes: () => (notes ? send('say', { text: `I’m already taking notes (${notes.title}) 📝` }) : (startNotes({ title: 'Notes' }), send('say', { text: 'Okay! I’m listening and taking notes 📝 Say “stop notes” when you’re done.' }))),
@@ -2673,6 +2790,7 @@ app.whenReady().then(() => {
     stopFocus: () => stopFocus(true),
     focusLeft: () => (focus ? focus.endAt - Date.now() : null),
   });
+  setupHomeScreen();
   buildTray();
   setInterval(checkClasses, 15_000);
   setInterval(checkWriting, 6000);
@@ -2697,6 +2815,7 @@ app.whenReady().then(() => {
     setTimeout(() => app.quit(), 300);
   });
   if (!globalShortcut.register('Control+Alt+Space', openHub)) console.log('Shortcut ⌃⌥Space is taken by another app.');
+  if (!globalShortcut.register('Control+Alt+H', () => homeScreen?.toggleFront())) console.log('Shortcut ⌃⌥H is taken by another app.');
   // Tell you about the big update once.
   if (settings.seenUpdate !== 'hub-1') {
     win.webContents.once('did-finish-load', () =>

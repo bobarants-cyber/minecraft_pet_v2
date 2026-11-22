@@ -253,6 +253,17 @@ const WEATHER_CODES = [
   [[95, 96, 99], 'stormy', '⛈', 'rain'],
 ];
 
+/** The weather as data, for the home screen's widget: { place, temp, words, icon, hi, lo }. */
+export async function weatherData(city, { fetchFn = fetch } = {}) {
+  const geo = await (await fetchFn(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(city)}`, { signal: AbortSignal.timeout(8000) })).json();
+  const place = geo.results?.[0];
+  if (!place) return { needCity: true };
+  const q = `latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`;
+  const w = await (await fetchFn(`https://api.open-meteo.com/v1/forecast?${q}`, { signal: AbortSignal.timeout(8000) })).json();
+  const [, words, icon] = WEATHER_CODES.find(([codes]) => codes.includes(w.current?.weather_code)) ?? [[], 'nice', '🌈'];
+  return { place: place.name, temp: Math.round(w.current?.temperature_2m), words: words[0].toUpperCase() + words.slice(1), icon, hi: Math.round(w.daily?.temperature_2m_max?.[0]), lo: Math.round(w.daily?.temperature_2m_min?.[0]) };
+}
+
 export async function weather(city, { fetchFn = fetch } = {}) {
   const geo = await (await fetchFn(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(city)}`, { signal: AbortSignal.timeout(8000) })).json();
   const place = geo.results?.[0];

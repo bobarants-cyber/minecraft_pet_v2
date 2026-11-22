@@ -66,3 +66,16 @@ contextBridge.exposeInMainWorld('mobHost', {
   onQuiz: (fn) => ipcRenderer.on('quiz', (_e, q) => fn(q)),
   quizDone: (score) => ipcRenderer.send('quiz:done', score),
 });
+
+// 🏠 the home screen, its editor and the screen savers
+contextBridge.exposeInMainWorld('homeHost', {
+  get: () => ipcRenderer.invoke('home:get'),
+  save: (patch) => ipcRenderer.invoke('home:save', patch),
+  data: (kind) => ipcRenderer.invoke('home:data', kind),
+  action: (kind, arg) => ipcRenderer.invoke('home:action', { kind, arg }),
+  pickPhotos: (opts) => ipcRenderer.invoke('home:pickPhotos', opts),
+  onConfig: (fn) => ipcRenderer.on('home:config', (_e, c) => fn(c)),
+  onEdit: (fn) => ipcRenderer.on('home:edit', (_e, on) => fn(on)),
+  onLeave: (fn) => ipcRenderer.on('home:leave', () => fn()),
+  stopSaver: () => ipcRenderer.send('saver:stop'),
+});
