@@ -72,9 +72,10 @@ const saveWidgets = () => save({ widgets: config.widgets });
 async function loadWallpaper() {
   // the wallpaper is its own sharp layer at the screen's real resolution (moving ones at 1x, to stay smooth)
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  const animated = config.wallpaper?.type === 'animated' || config.wallpaper?.type === 'live';
-  const k = animated ? 1 : dpr;
+  const animated = config.wallpaper?.type === 'animated';
+  const k = animated ? 1 : dpr; // the live photo is drawn at the screen's full sharpness too
   wallpaper = createWallpaper(config.wallpaper, innerWidth * k, innerHeight * k, { animatedScale: 1 });
+  wallpaper.cssScale = k;
   await wallpaper.ready;
   wallBox.replaceChildren(wallpaper.canvas);
   feedGlass();
@@ -430,6 +431,7 @@ host.onConfig((c) => {
 });
 host.onEdit((on) => setEditing(on));
 host.onLeave(leave);
+host.onCursor?.((p) => wallpaper?.pointer?.(p.x * (wallpaper.cssScale ?? 1), p.y * (wallpaper.cssScale ?? 1)));
 
 (async () => {
   const r = await host.get();

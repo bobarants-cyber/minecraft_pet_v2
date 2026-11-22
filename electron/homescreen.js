@@ -105,6 +105,8 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
 
   /** The photo for a photo theme (e.g. the Snowy cabin): asks you to pick it the first time, then keeps a copy. */
   async function themePhoto(key) {
+    const builtIn = path.join(HERE, 'home', 'assets', `snowy-${key}.jpg`); // the photo ships with Bbokari
+    if (fs.existsSync(builtIn)) return builtIn;
     const keep = path.join(app.getPath('userData'), 'home-photos', `theme-${key}.jpg`);
     if (fs.existsSync(keep)) return keep;
     // already saved from the chat into Downloads (or the Desktop)? use it without asking
@@ -247,6 +249,14 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
     return out;
   });
   ipcMain.on('saver:stop', stopSaver);
+
+  // the pointer, for the live wallpaper (trees part where you move the cursor through them)
+  setInterval(() => {
+    const wp = home().wallpaper;
+    if (wp?.type !== 'live') return;
+    const p = screen.getCursorScreenPoint(), b = bounds();
+    for (const w of [desk, front]) if (w && !w.isDestroyed()) w.webContents.send('home:cursor', { x: p.x - b.x, y: p.y - b.y });
+  }, 33);
 
   if (home().on) app.whenReady().then(showDesk);
 

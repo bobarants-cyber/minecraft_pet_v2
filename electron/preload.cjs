@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('homeHost', {
   onConfig: (fn) => ipcRenderer.on('home:config', (_e, c) => fn(c)),
   onEdit: (fn) => ipcRenderer.on('home:edit', (_e, on) => fn(on)),
   onLeave: (fn) => ipcRenderer.on('home:leave', () => fn()),
+  onCursor: (fn) => ipcRenderer.on('home:cursor', (_e, p) => fn(p)),
   stopSaver: () => ipcRenderer.send('saver:stop'),
 });
 

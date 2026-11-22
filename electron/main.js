@@ -891,7 +891,7 @@ function snowMenu() {
     fx('plow', 'Snowplow comes by now and then'),
     { label: 'Battery saver (30 fps)', type: 'checkbox', checked: !!c.saver, click: (i) => snow.set({ saver: i.checked }) },
     { type: 'separator' },
-    { label: 'Tip: drag along the snow to roll a snowball, throw it at a window. Stack 3 for a snowman!', enabled: false },
+    { label: 'Tip: drag along snow to roll a snowball (hold ⌥ for snow in the wallpaper picture). Stack 3 for a snowman!', enabled: false },
   ];
 }
 /** Chat: "let it snow", "stop the snow", "blizzard", "send the sleigh", "snow only on the desktop". */

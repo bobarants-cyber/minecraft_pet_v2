@@ -67,7 +67,7 @@ export function createSnow({ getSettings, applySettings, say }) {
       try {
         const b = screen.getPrimaryDisplay().bounds;
         const data = JSON.parse(last);
-        win.webContents.send('snow:wins', { w: data.w.map(([id, x, y, w, h]) => [id, x - b.x, y - b.y, w, h]), f: data.f, d: data.d ? [data.d[0] - b.x, data.d[1] - b.y, data.d[2], data.d[3]] : null, g: (data.g ?? []).map(([x, y, w, h]) => [x - b.x, y - b.y, w, h]) });
+        win.webContents.send('snow:wins', { w: data.w.map(([id, x, y, w, h]) => [id, x - b.x, y - b.y, w, h]), f: data.f, d: data.d ? [data.d[0] - b.x, data.d[1] - b.y, data.d[2], data.d[3]] : null, g: (data.g ?? []).map(([x, y, w, h]) => [x - b.x, y - b.y, w, h]), m: data.m ?? 0 });
       } catch {}
     });
     child.on('exit', () => { if (helper === child) helper = null; });

@@ -55,7 +55,8 @@ func tick() {
         if parts.count >= 24 { break }
     }
     let front = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-    let line = "{\"w\":[\(parts.joined(separator: ","))],\"f\":\(front),\"d\":\(dock),\"g\":[\(widgets.joined(separator: ","))]}"
+    let opt = NSEvent.modifierFlags.contains(.option) ? 1 : 0   // ⌥ held: snow in the wallpaper picture can be grabbed
+    let line = "{\"w\":[\(parts.joined(separator: ","))],\"f\":\(front),\"d\":\(dock),\"g\":[\(widgets.joined(separator: ","))],\"m\":\(opt)}"
     if line != lastLine {   // only when something changed
         lastLine = line
         print(line)

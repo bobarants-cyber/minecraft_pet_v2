@@ -225,7 +225,7 @@ function liveCabin(wp, g, W, H, spec) {
   const P = (x, y) => [m.ox + x * m.s, m.oy + y * m.s];
   let forest = null;
   wp.ready = new Promise((resolve) => {
-    img.onload = () => { forest = forestWind(img, Math.min(2, m.s)); resolve(); };
+    img.onload = () => { forest = forestWind(img, Math.min(3, m.s)); resolve(); };
     img.onerror = () => { paintGradient(g, W, H, GRADIENTS.midnight); wp.draw = () => {}; resolve(); };
     const src = spec.src || '';
     img.src = src.startsWith('/') ? 'file://' + encodeURI(src) : src;
@@ -252,6 +252,25 @@ function liveCabin(wp, g, W, H, spec) {
     g.clip('evenodd');
   };
 
+  // ✋ the pointer brushing through the trees: each move leaves a "touch" that pushes the branches the way you moved,
+  // then they spring back (a few touches at once, each fading over ~2 s)
+  const touches = [];
+  let lastP = null;
+  wp.pointer = (X, Y) => {
+    const now = Date.now() / 1000;
+    const [px, py] = m.inv(X, Y);
+    if (lastP) {
+      const dt = Math.max(0.016, now - lastP.t), vx = (px - lastP.x) / dt, vy = (py - lastP.y) / dt;
+      const speed = Math.hypot(vx, vy);
+      if (speed > 25 && py < HORIZON && py > 0 && px > 0 && px < PHOTO_W) {
+        const recent = touches[touches.length - 1];
+        if (recent && now - recent.t0 < 0.12 && Math.hypot(recent.x - px, recent.y - py) < 40) Object.assign(recent, { x: px, y: py, vx, vy, t0: now });
+        else { touches.push({ x: px, y: py, vx, vy, t0: now }); if (touches.length > 8) touches.shift(); }
+      }
+    }
+    lastP = { x: px, y: py, t: now };
+  };
+
   wp.draw = (t) => {
     if (!img.complete || !img.naturalWidth) return;
     const dt = Math.min(0.1, Math.max(0, t - last)); last = t;
@@ -263,7 +282,7 @@ function liveCabin(wp, g, W, H, spec) {
 
     // 🌲 trees in the wind: the photo is bent smoothly on the graphics chip (each tree on its own rhythm, tips more
     // than trunks, snowy branches bobbing, gusts rolling across); the cabin never moves
-    const bent = forest?.render(now, wind);
+    const bent = forest?.render(now, wind, touches);
     if (bent) g.drawImage(bent, m.ox, m.oy, PHOTO_W * m.s, PHOTO_H * m.s);
     else { // no WebGL: the simple version (strips shift sideways)
       g.save();
@@ -271,7 +290,8 @@ function liveCabin(wp, g, W, H, spec) {
       for (let y = 0; y < HORIZON; y += 3) {
         const k = Math.pow(1 - y / HORIZON, 1.6);
         const dx = (wind * 2.4 + Math.sin(now * 1.7 + y * 0.045) * 0.7 * wind) * k;
-        if (Math.abs(dx) >= 0.05) g.drawImage(img, 0, y, PHOTO_W, 4, m.ox + dx * m.s, m.oy + y * m.s, PHOTO_W * m.s, 4 * m.s);
+        const k2 = img.naturalWidth / PHOTO_W;
+        if (Math.abs(dx) >= 0.05) g.drawImage(img, 0, y * k2, img.naturalWidth, 4 * k2, m.ox + dx * m.s, m.oy + y * m.s, PHOTO_W * m.s, 4 * m.s);
       }
       g.restore();
     }
@@ -397,6 +417,7 @@ function forestWind(img, scale) {
   const vs = 'attribute vec2 p; varying vec2 uv; void main(){ uv = vec2((p.x+1.0)*0.5, (1.0-p.y)*0.5); gl_Position = vec4(p,0.0,1.0); }';
   const fs = `precision mediump float;
     varying vec2 uv; uniform sampler2D photo; uniform sampler2D mask; uniform float t; uniform float wind;
+    uniform vec4 touch[8]; uniform float tage[8];
     void main() {
       vec2 px = uv * vec2(${PHOTO_W}.0, ${PHOTO_H}.0);
       float m = texture2D(mask, uv).r;
@@ -407,6 +428,19 @@ function forestWind(img, scale) {
       float flutter = 0.28 * sin(t * 2.6 + phase * 1.9 + px.y * 0.035) + 0.12 * sin(t * 4.3 + px.x * 0.09 + px.y * 0.05);
       float dx = (sway * 3.4 + flutter) * m;
       float dy = (0.35 * sin(t * 2.2 + phase * 2.7 + px.x * 0.05) * wind + 0.15 * flutter) * m * m; // branch tips bob
+      // branches pushed by the pointer: along the way it moved, falling off with distance, springing back over time
+      vec2 push = vec2(0.0);
+      for (int k = 0; k < 8; k++) {
+        float age = tage[k];
+        if (age < 0.0 || age > 2.5) continue;
+        vec2 d = px - touch[k].xy;
+        float w = exp(-dot(d, d) / (2.0 * 75.0 * 75.0));
+        vec2 v = touch[k].zw;
+        float sp = min(length(v), 900.0) / 900.0;
+        vec2 dir = length(v) > 0.001 ? normalize(v) : vec2(0.0);
+        push += dir * sp * 10.0 * w * exp(-age * 2.0) * cos(age * 6.5);
+      }
+      dx += push.x * m * 1.4; dy += push.y * m * 0.8;
       vec2 off = vec2(-dx, -dy) / vec2(${PHOTO_W}.0, ${PHOTO_H}.0);
       gl_FragColor = vec4(texture2D(photo, uv + off).rgb, 1.0);
     }`;
@@ -429,10 +463,15 @@ function forestWind(img, scale) {
   gl.uniform1i(gl.getUniformLocation(prog, 'photo'), 0);
   gl.uniform1i(gl.getUniformLocation(prog, 'mask'), 1);
   const uT = gl.getUniformLocation(prog, 't'), uW = gl.getUniformLocation(prog, 'wind');
+  const uTouch = gl.getUniformLocation(prog, 'touch'), uAge = gl.getUniformLocation(prog, 'tage');
+  const tv = new Float32Array(32), ta = new Float32Array(8);
   gl.viewport(0, 0, c.width, c.height);
   return {
-    render(t, wind) {
+    render(t, wind, touches = []) {
       gl.uniform1f(uT, t % 10000); gl.uniform1f(uW, wind);
+      ta.fill(-1);
+      touches.forEach((tc, k) => { tv.set([tc.x, tc.y, tc.vx, tc.vy], k * 4); ta[k] = t - tc.t0; });
+      gl.uniform4fv(uTouch, tv); gl.uniform1fv(uAge, ta);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       return c;
     },

@@ -347,7 +347,9 @@ function rebuildDesk() {
 host.onDesk?.((d) => { const newPhoto = d.photo && d.photo !== desk.photo; desk = d; rebuildDesk(); if (newPhoto) loadPhoto(d.photo); });
 
 // ---------------- windows from the helper ----------------
-host.onWins(({ w, f, d, g: apple }) => {
+let optionDown = false; // ⌥ held: snow in the wallpaper picture can be grabbed (otherwise clicks go to your desktop)
+host.onWins(({ w, f, d, g: apple, m: opt }) => {
+  if (optionDown !== !!opt) { optionDown = !!opt; updateGrab(); }
   if (JSON.stringify(apple ?? []) !== JSON.stringify(appleWidgets)) { appleWidgets = apple ?? []; rebuildDesk(); }
   const now = performance.now();
   const next = w.map(([id, x, y, ww, hh]) => ({ id, x, y, w: ww, h: hh }));
@@ -439,16 +441,17 @@ function grabbable(x, y) {
     if (p.y - top > 3 && y >= top - 10 && y <= p.y + 4 && !covered(x, y, i)) return { pile: p };
     if (x >= wins[i].x && x <= wins[i].x + wins[i].w && y >= wins[i].y && y <= wins[i].y + wins[i].h) break; // on the window itself (but the bottom snow is in front)
   }
-  // snow on the desktop (the scene, widgets) where no window covers it
+  // snow on the desktop (the scene, widgets) where no window covers it; the picture's snow only while ⌥ is held
   if (cfg.mode === 'on' && !insideAnyWindow(x, y)) {
     for (const p of piles.values()) {
       if (!p.desk || x < p.x || x > p.x + p.w) continue;
+      if ((p.photoSurface || String(p.id).startsWith('desk:scene:')) && !optionDown && !held) continue;
       const top = pileTop(p, x), base = p.base(x);
       if (base - top > 3 && y >= top - 10 && y <= base + 4) return { pile: p };
     }
   }
   // the cabin photo's snowy ground: snow everywhere
-  if (desk.scene === 'cabin' && cfg.mode === 'on' && !insideAnyWindow(x, y)) {
+  if (desk.scene === 'cabin' && cfg.mode === 'on' && (optionDown || held) && !insideAnyWindow(x, y)) {
     const [px, py] = cover.inv(x, y);
     if (onSnowyGround(px, py)) return { field: true, ground: false, onGround: true };
     if (photoSnowAt(x, y)) return { field: true }; // the roof, railings, branches… anywhere with snow in the photo
