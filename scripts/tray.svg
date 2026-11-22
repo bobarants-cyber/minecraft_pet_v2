@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+  <!-- menu bar icon (template): the eye, with Bbokari's round face (two eyes and his tuft) as the iris, and wings -->
+  <defs>
+    <mask id="m">
+      <rect width="44" height="44" fill="#fff"/>
+      <circle cx="18.6" cy="25" r="1.7" fill="#000"/><circle cx="25.4" cy="25" r="1.7" fill="#000"/>
+      <path d="M20 28.2 Q22 27.2 24 28.2 Q23 29.9 22 30 Q21 29.9 20 28.2Z" fill="#000"/>
+    </mask>
+  </defs>
+  <g fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 26 C 10 14, 34 14, 41 26 C 34 38, 10 38, 3 26 Z" stroke-width="3"/>
+    <path d="M17 13 C 12 5, 5 8, 8 12.5 C 10 15, 15 15, 17 14" stroke-width="2.4"/>
+    <path d="M27 13 C 32 5, 39 8, 36 12.5 C 34 15, 29 15, 27 14" stroke-width="2.4"/>
+  </g>
+  <g mask="url(#m)">
+    <circle cx="22" cy="26" r="7.6" fill="#000"/>
+    <path d="M21 18.8 C 19.5 16.2, 22.5 14.6, 24 16.4 C 23 16, 22 17, 23 18.6 Z" fill="#000"/>
+  </g>
+</svg>
