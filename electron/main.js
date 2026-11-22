@@ -749,6 +749,7 @@ function faArgs() {
   // text, away → Face ID lock. Bbokari's menu bar icon runs it (no second eye in the menu bar).
   const a = ['--guard', '--no-status-item'];
   if (o.guard !== false) a.push('--watch');
+  if (o.lockAfter === undefined) a.push('--lock-after', '120'); // looking at your phone or notes for a bit doesn't lock it
   if (o.textMe) a.push('--text-via-bridge'); // Bbokari sends the texts and reads your Y / N
   if (o.textMe && o.askFirst !== false) a.push('--ask-first', '--ask-timeout', String(o.askTimeout ?? 120));
   for (const [k, flag] of FA_FLAGS) if (o[k]) a.push(flag);
@@ -1114,14 +1115,14 @@ function faceAwayChat(text) {
   if (/^(update|upgrade)( (yourself|bbokari|face ?away|everything|the app))?$|^check for updates?$/.test(t)) { runUpdate(); return '⬇️ Checking for updates…'; }
   return null;
 }
-const AWAY_TIMES = [[0, 'Never'], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute'], [300, '5 minutes']];
+const AWAY_TIMES = [[0, 'Never'], [30, '30 seconds'], [60, '1 minute'], [120, '2 minutes'], [300, '5 minutes'], [600, '10 minutes']];
 function faceAwayMenu() {
   const built = fs.existsSync(FACEAWAY_BIN);
   if (!built) return [{ label: '🔨 Set up FaceAway', click: faceAwayBuild }];
   const on = faceAwayRunning();
   const o = faOpts();
   const guarding = on && faceAwayState.watching;
-  const away = Number(o.lockAfter ?? 30);
+  const away = Number(o.lockAfter ?? 120);
   return [
     { label: !on ? '🔴 FaceAway is off' : guarding ? '🟢 Guarding your Mac (Face ID)' : '⚪ FaceAway is ready (not guarding)', enabled: false },
     ...(on ? [] : [{ label: '▶️ Turn FaceAway on', click: () => (faStart(), setTimeout(buildTray, 600)) }]),

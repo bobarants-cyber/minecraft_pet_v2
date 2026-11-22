@@ -3284,7 +3284,8 @@ final class Controller {
         let quality = faceQualities(pixels, top)
         let seen: [Seen] = top.indices.map { i in
             // Too blurry, tilted or lowered to judge fairly: skip it rather than call it a stranger.
-            guard quality[i] >= Float(options.minQuality), fullyInFrame(top[i]),
+            // On the lock screen a slightly less clear look is enough: only your saved faces can open it anyway.
+            guard quality[i] >= Float(softLocked ? min(options.minQuality, 0.18) : options.minQuality), fullyInFrame(top[i]),
                   let print = featurePrint(of: pixels, box: top[i]),
                   let match = identify(print, among: people, tolerance: Float(options.tolerance) * (softLocked ? 1.12 : 1))
             else { return Seen(match: nil, sure: false) }
