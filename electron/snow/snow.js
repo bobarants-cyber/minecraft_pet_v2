@@ -344,15 +344,27 @@ function rebuildDesk() {
     piles.set(sf.id, { ...sf, h: new Float32Array(n), lump: makeLumps(n), capK: rand(0.8, 1.05), shake: 0, desk: true });
   }
 }
-host.onDesk?.((d) => { const newPhoto = d.photo && d.photo !== desk.photo; desk = d; rebuildDesk(); if (newPhoto) loadPhoto(d.photo); });
+host.onDesk?.((d) => { const newPhoto = d.photo && d.photo !== desk.photo; if (d.scene !== desk.scene) console.error(`info: desktop scene = ${d.scene ?? 'none'}, photo = ${d.photo ? 'yes' : 'no'}`); desk = d; rebuildDesk(); if (newPhoto) loadPhoto(d.photo); });
 
 // ---------------- windows from the helper ----------------
+const ignoredBig = new Set();
 let optionDown = false; // ⌥ held: snow in the wallpaper picture can be grabbed (otherwise clicks go to your desktop)
 host.onWins(({ w, f, d, g: apple, m: opt }) => {
   if (optionDown !== !!opt) { optionDown = !!opt; updateGrab(); }
   if (JSON.stringify(apple ?? []) !== JSON.stringify(appleWidgets)) { appleWidgets = apple ?? []; rebuildDesk(); }
   const now = performance.now();
-  const next = w.map(([id, x, y, ww, hh]) => ({ id, x, y, w: ww, h: hh }));
+  // An invisible full-screen window from a background app (some menu-bar apps keep one) would hide all the desktop
+  // snow and stop the floor from being grabbed: a window covering (almost) the whole screen only counts if it belongs to
+  // the app you're using right now.
+  const next = [];
+  for (const [id, x, y, ww, hh, pid, owner] of w) {
+    const huge = ww * hh > W * H * 0.85;
+    if (huge && pid && f && pid !== f) {
+      if (!ignoredBig.has(owner)) { ignoredBig.add(owner); console.error(`info: ignoring a full-screen background window from "${owner}"`); }
+      continue;
+    }
+    next.push({ id, x, y, w: ww, h: hh });
+  }
   // the Dock, while it's showing, is the frontmost thing snow can land on (when it hides, its snow falls off)
   if (d) {
     let [x, y, ww, hh] = d;

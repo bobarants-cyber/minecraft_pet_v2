@@ -51,7 +51,8 @@ func tick() {
               let r = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { continue }
         let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
         if alpha < 0.1 || r.width < 80 || r.height < 40 { continue }
-        parts.append("[\(id),\(Int(r.origin.x)),\(Int(r.origin.y)),\(Int(r.width)),\(Int(r.height))]")
+        let owner = ((w[kCGWindowOwnerName as String] as? String) ?? "?").replacingOccurrences(of: "\"", with: "")
+        parts.append("[\(id),\(Int(r.origin.x)),\(Int(r.origin.y)),\(Int(r.width)),\(Int(r.height)),\(pid),\"\(owner)\"]")
         if parts.count >= 24 { break }
     }
     let front = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
