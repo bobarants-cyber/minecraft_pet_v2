@@ -107,6 +107,14 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
   async function themePhoto(key) {
     const keep = path.join(app.getPath('userData'), 'home-photos', `theme-${key}.jpg`);
     if (fs.existsSync(keep)) return keep;
+    // already saved from the chat into Downloads (or the Desktop)? use it without asking
+    const home = app.getPath('home');
+    const found = [path.join(app.getPath('downloads'), `snowy-${key}.jpg`), path.join(home, 'Desktop', `snowy-${key}.jpg`), path.join(app.getPath('downloads'), `snowy-${key} (1).jpg`)].find((f) => fs.existsSync(f));
+    if (found) {
+      fs.mkdirSync(path.dirname(keep), { recursive: true });
+      fs.writeFileSync(keep, nativeImage.createFromPath(found).toJPEG(95));
+      return keep;
+    }
     const r = await dialog.showOpenDialog({
       title: 'Choose the snowy cabin photo (snowy-cabin.jpg)', message: 'Pick the snowy cabin photo Claude sent you (snowy-cabin.jpg).',
       properties: ['openFile'], filters: [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
