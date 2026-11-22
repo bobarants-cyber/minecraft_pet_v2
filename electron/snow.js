@@ -89,7 +89,7 @@ export function createSnow({ getSettings, applySettings, say }) {
     // problems go to a log (send it to Claude): ~/Library/Application Support/<app>/snow.log
     const log = (line) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'snow.log'), `${new Date().toLocaleString()}  ${line}\n`); } catch {} };
     log('snow started');
-    win.webContents.on('console-message', (e, lvl, msg) => { const level = e?.level ?? lvl, message = e?.message ?? msg; if (level === 'error' || level === 3) log(message); });
+    win.webContents.on('console-message', (e) => { if (e.level === 'error' || e.level === 3) log(e.message); });
     win.webContents.on('render-process-gone', (_e, d) => { // crashed: start it again
       log('snow crashed: ' + d.reason);
       const w = win; win = null; try { w?.destroy(); } catch {}
