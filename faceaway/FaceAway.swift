@@ -784,7 +784,8 @@ enum Replies {
 
     /// A YES (true) or NO (false) from `to` in the messages after row `after`, and the newest row seen.
     static func answer(from to: String, after: Int) -> (answer: Bool?, last: Int) {
-        let r = sqlite("SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),'') FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID WHERE m.ROWID > \(after) ORDER BY m.ROWID;")
+        // the chat's own id too: texting your own number, your replies can show up with no sender
+        let r = sqlite("SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),''), IFNULL(c.chat_identifier,'') FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID LEFT JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = j.chat_id WHERE m.ROWID > \(after) ORDER BY m.ROWID;")
         guard r.ok else { return (nil, after) }
         var last = after
         var result: Bool?
@@ -792,11 +793,12 @@ enum Replies {
             let f = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
             guard f.count >= 4, let id = Int(f[0]) else { continue }
             last = max(last, id)
-            guard samePerson(f[1], to) else { continue }
+            let chatID = f.count >= 5 ? f[4] : ""
+            guard samePerson(f[1], to) || (!chatID.isEmpty && samePerson(chatID, to)) else { continue }
             var t = f[2]
             if t.isEmpty { t = text(fromHexBody: f[3]) ?? "" }
             let word = t.lowercased().components(separatedBy: CharacterSet.letters.inverted).first(where: { !$0.isEmpty }) ?? ""
-            if ["yes", "y", "yeah", "yep", "yup", "lock", "si", "sí", "ok", "okay"].contains(word) { result = true }
+            if ["yes", "y", "yeah", "yep", "yup", "lock", "si", "sí"].contains(word) { result = true }
             if ["no", "n", "nope", "nah", "dont", "don"].contains(word) { result = false }
         }
         return (result, last)
@@ -3493,7 +3495,7 @@ final class Controller {
         asking = true
         askStarted = Date()
         askRow = Replies.lastRow() ?? -1
-        var msg = "🚨 FaceAway: someone who isn't you is at your Mac (\(clock.string(from: Date()))). Lock computer? Reply YES or NO."
+        var msg = "🚨 FaceAway: someone who isn't you is at your Mac (\(clock.string(from: Date()))). Lock computer? Reply Y or N."
         if options.askTimeout > 0 { msg += " If you don't answer in \(formatDuration(Int(options.askTimeout))), I'll lock it." }
         textMe(to, message: msg, photo: photo)
         say("Asked you by text whether to lock.", .alert)

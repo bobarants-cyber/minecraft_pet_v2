@@ -1114,8 +1114,9 @@ function faceAwayMenu() {
       const v = await askForm('Text me if it’s not me', [{ label: 'Your phone number or Apple ID email (iMessage). Leave empty to turn off.' }]);
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
+    { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => testText(o.textMe) },
     { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
-      { label: 'Text me “Lock computer?” and I answer YES or NO', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
+      { label: 'Text me “Lock computer?” and I answer Y or N', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
       { label: 'Lock right away (and text me)', type: 'radio', checked: o.askFirst === false, click: () => faSet({ askFirst: false }) },
       { type: 'separator' },
       { label: 'If I don’t answer:', enabled: false },
@@ -1148,6 +1149,17 @@ function faceAwayMenu() {
       { label: 'Start FaceAway with Bbokari', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
     ] },
   ];
+}
+/** Sends a test iMessage to your phone through the Messages app (the same way FaceAway does). */
+function testText(to) {
+  const q = (x) => '"' + String(x).replace(/["\\]/g, '\\$&') + '"';
+  const script = `tell application "Messages"
+    set svc to 1st account whose service type = iMessage
+    send ${q('🐝 Bbokari test: this is how FaceAway will ask “Lock computer?” You can answer Y or N.')} to participant ${q(to)} of svc
+  end tell`;
+  execFile('osascript', ['-e', script], (err, _o, e) => send('say', err
+    ? { text: `I couldn’t send it: ${String(e || err.message).split('\n')[0].slice(0, 160)}. Is Messages signed in with your Apple ID? (The first time, macOS asks if Bbokari may control Messages: click OK.)`, error: true }
+    : { text: `📱 Sent! Check your iPhone for the test text.` }));
 }
 /** Reading your YES / NO replies needs Full Disk Access (Messages keeps them in a protected file). */
 function fullDiskHelp() {
