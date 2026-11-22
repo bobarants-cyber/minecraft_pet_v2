@@ -110,7 +110,7 @@ function loadPhoto(src) {
     const c = document.createElement('canvas'); c.width = 1280; c.height = 720;
     const x = c.getContext('2d'); x.drawImage(img, 0, 0, 1280, 720);
     photoPx = x.getImageData(0, 0, 1280, 720).data;
-    surfacePals.clear();
+    surfacePals.clear(); surfaceTex.clear();
     const l = document.createElement('canvas'); l.width = LW; l.height = LH;
     const lx = l.getContext('2d'); lx.filter = 'blur(2px)'; lx.drawImage(img, 0, 0, LW, LH);
     lightPx = lx.getImageData(0, 0, LW, LH).data;
@@ -155,6 +155,55 @@ function surfacePal(sf) {
   }
   surfacePals.set(sf.id, pal);
   return pal;
+}
+/**
+ * A picture of the real snow under a surface, colour-picked pixel by pixel: for every screen column along the surface
+ * we walk straight down from its edge through the photo and copy each pixel (if a column runs out of snow, e.g. into
+ * the roof's green trim, it keeps its last snow colour). Row 0 is the snow right at the edge. New drifts are painted
+ * from this, depth for depth, so they continue the real snow's own gradients.
+ */
+const surfaceTex = new Map();
+const isSnowPx = (r, g2, b) => { const L = (r + g2 + b) / 3; return (b > r + 8 && L > 30) || L > 110; };
+function surfaceTexture(p) {
+  if (!photoPx || !p.photoSurface) return null;
+  const key = p.id + ':' + Math.round(p.w) + ':' + Math.round(cover.s * 1000);
+  if (surfaceTex.has(key)) return surfaceTex.get(key);
+  const w = Math.max(2, Math.ceil(p.w)), h = Math.ceil(MAXH + 4);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d'), img = cx.createImageData(w, h);
+  for (let x = 0; x < w; x++) {
+    const sx = p.x + x;
+    const [px, pyBase] = cover.inv(sx, p.base(sx));
+    // find where the real snow starts at this column (just at or under the edge line)
+    let start = pyBase;
+    for (let k = -3; k <= 6; k++) { const yy = Math.round(pyBase + k), xx = Math.round(px), j = (yy * 1280 + xx) * 4; if (yy >= 0 && yy < 720 && xx >= 0 && xx < 1280 && isSnowPx(photoPx[j], photoPx[j + 1], photoPx[j + 2])) { start = yy; break; } }
+    let lastC = null;
+    for (let y = 0; y < h; y++) {
+      const yy = Math.round(start + y / cover.s);
+      let col = null;
+      if (yy >= 0 && yy < 720) {
+        // a tiny 3-px horizontal average so single noisy pixels don't streak
+        const sum = [0, 0, 0]; let nOk = 0;
+        for (const dx of [-1, 0, 1]) {
+          const xx = Math.round(px + dx); if (xx < 0 || xx >= 1280) continue;
+          const j = (yy * 1280 + xx) * 4;
+          if (isSnowPx(photoPx[j], photoPx[j + 1], photoPx[j + 2])) { sum[0] += photoPx[j]; sum[1] += photoPx[j + 1]; sum[2] += photoPx[j + 2]; nOk++; }
+        }
+        if (nOk) col = sum.map((v) => v / nOk);
+      }
+      if (col) lastC = col; else col = lastC;
+      if (!col) continue;
+      const o = (y * w + x) * 4;
+      img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+    }
+    // columns that never met snow borrow from their neighbour (filled below)
+  }
+  // fill empty columns from the nearest filled one
+  for (let x = 1; x < w; x++) for (let y = 0; y < h; y++) { const o = (y * w + x) * 4; if (!img.data[o + 3]) { const q = (y * w + x - 1) * 4; img.data.set(img.data.subarray(q, q + 4), o); } }
+  for (let x = w - 2; x >= 0; x--) for (let y = 0; y < h; y++) { const o = (y * w + x) * 4; if (!img.data[o + 3]) { const q = (y * w + x + 1) * 4; img.data.set(img.data.subarray(q, q + 4), o); } }
+  cx.putImageData(img, 0, 0);
+  surfaceTex.set(key, c);
+  return c;
 }
 /** Is there snow in the photo at this screen point? (bluish snow, or snow lit warm by the lamps) */
 function photoSnowAt(x, y) {
@@ -1055,7 +1104,7 @@ function drawPlow() {
 
 // ---------------- drawing drifts ----------------
 const SHOW = 2.6; // thinner than this isn't drawn (no white lines on bare windows)
-function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null, ownPal = null) {
+function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null, ownPal = null, tex = null) {
   const n = arr.length;
   const jx = shake ? Math.sin(performance.now() / 18) * 3 * shake : 0;
   const width = (n - 1) * COL;
@@ -1097,6 +1146,21 @@ function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null, ownPal = n
     for (let k = end; k >= start; k -= 2) g.lineTo(x0 + k * COL + jx, base(k * COL) + 0.5);
     g.closePath();
     P = ownPal ?? (baseFn && desk.scene === 'cabin' ? palAt(x0 + ((start + end) / 2) * COL, base(((start + end) / 2) * COL)) : P0); // the surface's own snow colours
+    if (tex) {
+      // painted from the photo's real snow, pixel for pixel: each column's top shows the snow at the real edge,
+      // and deeper down the snow from further down (so it carries on the photo's own gradients)
+      g.save();
+      g.shadowColor = P.shadow; g.shadowBlur = 5; g.shadowOffsetY = 1;
+      g.fillStyle = P.mid; g.fill(); // (just for the soft shadow under it)
+      g.shadowColor = 'transparent';
+      g.clip();
+      for (let k = start; k <= end; k++) {
+        const dx = k * COL, top = base(dx) - (arr[k] - SHOW * 0.7) - 2, depth = Math.max(1, base(dx) - top + 2);
+        g.drawImage(tex, Math.min(tex.width - COL, Math.max(0, dx)), 0, COL, Math.min(tex.height, depth), x0 + dx + jx - 0.5, top, COL + 1, depth);
+      }
+      g.restore();
+      continue;
+    }
     g.fillStyle = shade(Math.max(base(start * COL), base(end * COL)));
     g.shadowColor = P.shadow; g.shadowBlur = 5; g.shadowOffsetY = 1;
     g.fill();
@@ -1145,7 +1209,7 @@ function frame(now) {
   const onDeskLayer = (b) => b.rest && (b.on?.desk || b.on?.on?.desk || b.on?.field || b.on?.on?.field || b.on?.on?.on?.field);
   if (deskList.length || desk.scene) {
     drawTrails(now);
-    for (const p of deskList) drawDrift(p.x, null, p.h, p.shake, p.corner ?? 0, p.base, p.photoSurface ? surfacePal(p.photoSurface) : null);
+    for (const p of deskList) drawDrift(p.x, null, p.h, p.shake, p.corner ?? 0, p.base, p.photoSurface ? surfacePal(p.photoSurface) : null, p.photoSurface ? surfaceTexture(p) : null);
     // snowmen and snowballs standing on the desktop, back to front (further up the screen = further away)
     const things = [...snowmen.filter((s) => (s.on === 'field' || isDesk({ id: s.on ?? '' })) && !s.fall).map((s) => [s.base()?.y ?? 0, () => s.draw(g)]),
       ...balls.filter(onDeskLayer).map((b) => [b.y + b.r, () => drawBall(b)])].sort((a, b) => a[0] - b[0]);
