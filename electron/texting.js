@@ -8,6 +8,7 @@ const DB = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 const YES = new Set(['y', 'yes', 'yeah', 'yep', 'yup', 'si', 'sí', 's', 'lock', 'bloquear', 'bloquea']);
 const NO = new Set(['n', 'no', 'nope', 'nah', 'dont', 'don']);
 const LOCK = new Set(['lock', 'bloquear', 'bloquea']);
+const STATUS = new Set(['test', 'who', 'quien', 'quién', 'status', 'check', 'photo', 'foto']);
 
 const q = (x) => '"' + String(x).replace(/["\\]/g, '\\$&') + '"';
 
@@ -76,10 +77,11 @@ export async function lastRow(db = DB) {
 }
 
 /**
- * Watches for your replies. onAnswer(lock) while a question is waiting; onLock() when you text "lock" any time.
+ * Watches for your replies. onAnswer(lock) while a question is waiting; onLock() when you text "lock" any time;
+ * onStatus() when you text "test" / "who" (a photo of who's at the Mac).
  * onNoAccess() once if Messages can't be read (Full Disk Access).
  */
-export function createTexting({ getTo, onAnswer, onLock, onNoAccess, db = DB, every = 4000 }) {
+export function createTexting({ getTo, onAnswer, onLock, onStatus, onNoAccess, db = DB, every = 4000 }) {
   let row = null, waiting = null, told = false, busy = false;
   const tick = async () => {
     const to = getTo();
@@ -93,6 +95,7 @@ export function createTexting({ getTo, onAnswer, onLock, onNoAccess, db = DB, ev
       for (const w of r.words) {
         if (waiting && (YES.has(w) || NO.has(w))) { const wt = waiting; waiting = null; onAnswer?.(YES.has(w), wt); continue; }
         if (LOCK.has(w)) onLock?.();
+        else if (STATUS.has(w)) onStatus?.();
       }
       if (waiting && Date.now() > waiting.until) waiting = null;
     } finally { busy = false; }

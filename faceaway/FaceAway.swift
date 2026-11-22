@@ -3201,7 +3201,7 @@ final class Controller {
 
     /// The camera runs only while watching, or while the Face ID lock is waiting for a face.
     func updateCamera() {
-        let want = watching || softLocked
+        let want = watching || softLocked || snapshotAt != nil
         guard want != cameraOn, let w = watcher else { return }
         cameraOn = want
         if want {
@@ -3259,6 +3259,24 @@ final class Controller {
         let now = Date()
         let faces = staticFaces.filter(allFaces, now: now)   // drop pictures on the wall
         let watchingNow = watching   // read once per frame
+        // You texted "test": a photo of whoever is at the Mac (or nobody), and who it is.
+        if let at = snapshotAt, now >= at {
+            snapshotAt = nil
+            let photo = jpeg(pixels)
+            var who = "Nobody"
+            if let face = faces.first {
+                if let print = featurePrint(of: pixels, box: face),
+                   let m = identify(print, among: people, tolerance: Float(options.tolerance)) {
+                    who = m.name.map { "\($0) (\(m.percent)% sure)" } ?? "Someone I don't know"
+                } else {
+                    who = "Someone (I can't see their face clearly)"
+                }
+                if faces.count > 1 { who += " and \(faces.count - 1) more" }
+            } else if bodyPresent(pixels) {
+                who = "Someone, but I can't see their face"
+            }
+            DispatchQueue.main.async { self.finishSnapshot(photo, who: who) }
+        }
         // No face: check whether you're still sitting there (looking down or away).
         if faces.isEmpty && !options.strict {
             if now.timeIntervalSince(lastBodyCheck) >= 0.1 {
@@ -3600,6 +3618,39 @@ final class Controller {
     func answerFromBridge(lock: Bool) {
         guard asking else { return }
         finishAsk(lock: lock, timedOut: false)
+    }
+
+    // "test" by text: photo + who is at the Mac
+    private var snapshotAt: Date?
+    func snapshot() {
+        guard snapshotAt == nil else { return }
+        let warm = cameraOn
+        snapshotAt = Date().addingTimeInterval(warm ? 0.3 : 1.5)   // a cold camera needs a moment for the light
+        updateCamera()
+        // no frame in 8 s (camera busy or broken): say so instead of nothing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self = self, self.snapshotAt != nil else { return }
+            self.snapshotAt = nil
+            self.updateCamera()
+            Bridge.emit(["type": "status", "who": "I couldn't get a picture from the camera", "locked": self.softLocked || self.screenLocked])
+        }
+    }
+    private func finishSnapshot(_ photo: Data?, who: String) {
+        var path: String?
+        if let photo = photo {
+            let folder = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("FaceAway Snapshots", isDirectory: true)
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+            let url = folder.appendingPathComponent("Snapshot \(f.string(from: Date())).jpg")
+            if (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil,
+               (try? photo.write(to: url)) != nil { path = url.path }
+        }
+        var ev: [String: Any] = ["type": "status", "who": who, "locked": softLocked || screenLocked]
+        if let path = path { ev["photo"] = path }
+        Bridge.emit(ev)
+        EventLog.add("Snapshot: \(who)")
+        updateCamera()   // back off if it was only on for the photo
     }
 
     /// Bbokari's "Try it" button: ask by text as if a stranger had sat down.
@@ -4114,6 +4165,7 @@ case .app:
             case "lock": c.lockNowFromMenu()
             case "decoy": if let name = cmd["name"] as? String { c.setDecoy(name) }
             case "testAsk": c.testAsk()
+            case "snapshot": c.snapshot()
             case "answer": c.answerFromBridge(lock: cmd["lock"] as? Bool ?? true)
             default: break
             }

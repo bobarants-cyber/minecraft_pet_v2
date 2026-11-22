@@ -695,6 +695,10 @@ function startFaceAway() {
       } else faceAway?.command('answer', { lock });
     },
     onLock: () => { faceAway?.command('lock'); sendText(faOpts().textMe, '🔒 Locked. Only your face opens it.'); },
+    onStatus: () => {
+      if (!faceAwayRunning()) return sendText(faOpts().textMe, '🛡️ FaceAway is off right now, so I can’t take a photo.');
+      faceAway?.command('snapshot');
+    },
     onNoAccess: () => send('say', { text: '📱 I can’t read your replies yet: Bbokari (Electron) needs Full Disk Access. 🛡️ FaceAway → 🤔 When it’s not me → 🔓 Let FaceAway read my replies.', error: true }),
   });
   if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) {
@@ -879,6 +883,10 @@ function onFaceAwayEvent(ev) {
   }
   if (ev.type === 'watching') faceAwayState.watching = !!ev.on;
   if (ev.type === 'text' && faOpts().textMe) sendText(faOpts().textMe, ev.message, ev.photo).then((r) => !r.ok && send('say', { text: `📱 FaceAway couldn’t text you: ${r.text}`, error: true }));
+  if (ev.type === 'status' && faOpts().textMe) {
+    const when = new Date().toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    sendText(faOpts().textMe, `📸 ${when}: ${ev.who} at your Mac. It’s ${ev.locked ? 'locked 🔒' : 'unlocked 🔓'}.${ev.photo ? '' : ' (no photo)'}`, ev.photo ?? null);
+  }
   if (ev.type === 'asking') texting?.expect({ test: false }, (Number(faOpts().askTimeout ?? 120) || 600) + 60);
   if (ev.type === 'needFullDisk' && !faceAwayState.toldFullDisk) { faceAwayState.toldFullDisk = true; send('say', { text: '📱 I texted you “Lock computer?”, but I can’t read your answer yet. 🛡️ FaceAway → 🤔 When it’s not me → 🔓 Let FaceAway read my replies shows how (one time).', error: true }); }
   if (ev.type === 'theme') faceAwayState.theme = ev.name ?? null;
@@ -1136,6 +1144,7 @@ function faceAwayMenu() {
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
     { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); testText(n); } },
+    ...(o.textMe ? [{ label: '💡 From your iPhone, text “test” for a photo of who’s here, or “lock” to lock', enabled: false }] : []),
     { label: '🧪 Try it: pretend a stranger is here', enabled: on && !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); sendText(n, '🚨 FaceAway (test): someone who isn’t you is at your Mac. Lock computer? Reply Y or N.').then((r) => r.ok ? texting?.expect({ test: true }, 600) : send('say', { text: `📱 Couldn’t text you: ${r.text}`, error: true })); send('say', { text: '📱 I texted you “Lock computer?” like a stranger was here. Answer Y and your Mac locks (look at the camera to open it), or N. You can also text “lock” any time.' }); } },
     { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
       { label: 'Text me “Lock computer?” and I answer Y or N', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
