@@ -28,7 +28,8 @@ import * as presenton from './presenton.js';
 import { recipePhotos, testKey as testPixabayKey } from './photos.js';
 import { fillTemplate } from './fillTemplate.js';
 import * as inbox from './inbox.js';
-import { FaceAwayBridge, buildFaceAway, runFaceAway, startFaceAwayApp, stopFaceAwayApp, faceAwayRunning, FACEAWAY_BIN } from './faceaway.js';
+import { FaceAwayBridge, buildFaceAway, runFaceAway, startFaceAwayApp, stopFaceAwayApp, faceAwayRunning, faceAwayStale, FACEAWAY_BIN } from './faceaway.js';
+import * as updater from './updater.js';
 import { Memory } from './memory.js';
 import { Diary } from './diary.js';
 import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
@@ -416,12 +417,39 @@ function applySettings(patch) {
   buildTray();
 }
 
+// ---------- ⬇️ Updates: Bbokari and FaceAway come from the same GitHub folder ----------
+let updatesWaiting = 0;
+let updating = false;
+const updateLabel = () => (updating ? '⬇️ Updating…' : updatesWaiting ? `⬇️ Update Bbokari & FaceAway (${updatesWaiting} new!)` : '⬇️ Check for updates');
+async function checkUpdates(quiet = true) {
+  const n = await updater.check();
+  if (n === null) { if (!quiet) send('say', { text: 'I couldn’t reach GitHub to check for updates. Are you online?', error: true }); return; }
+  const fresh = n > 0 && n !== updatesWaiting;
+  updatesWaiting = n;
+  buildTray();
+  if (fresh && quiet) send('say', { text: `⬇️ There’s an update for Bbokari and FaceAway! Click ⬇️ Update in my menu (the bee in the menu bar) when you’re ready.` });
+  if (!quiet && !n) send('say', { text: 'You’re up to date ✅' });
+  return n;
+}
+async function runUpdate() {
+  if (updating) return;
+  if (!updatesWaiting && !(await checkUpdates(false))) return;
+  updating = true; buildTray();
+  const r = await updater.apply((step) => send('say', { text: step }));
+  updating = false; updatesWaiting = 0; buildTray();
+  if (!r.ok) return send('say', { text: `The update didn’t work: ${r.text}`, error: true });
+  if (!r.changed) return send('say', { text: r.text });
+  send('say', { text: `✅ Updated! What’s new:\n${r.text}\n\nRestarting…` });
+  // FaceAway is rebuilt by the new Bbokari when it starts (its code is newer than the program)
+  setTimeout(() => { stopFaceAwayApp(); app.relaunch(); app.exit(0); }, 3500);
+}
+
 function buildTray() {
   if (!tray) {
     const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
     icon.setTemplateImage(true);
     tray = new Tray(icon);
-    tray.setToolTip('Minecraft Mob');
+    tray.setToolTip('Bbokari + FaceAway');
   }
   const asleep = ASLEEP.has(beeState);
   const radio = (label, key, value) => ({ label, type: 'radio', checked: settings[key] === value, click: () => applySettings({ [key]: value }) });
@@ -447,114 +475,137 @@ function buildTray() {
     { label: settings.hidden ? `🙉 Show ${personaFor(settings.mob).name}` : `🙈 Hide ${personaFor(settings.mob).name} (keeps working)`, accelerator: 'Control+Alt+P', click: () => applySettings({ hidden: !settings.hidden }) },
     { label: settings.cursorMode ? '🖱 Stop being my cursor' : '🖱 Be my cursor', click: () => setCursorMode(!settings.cursorMode) },
     ...(settings.cursorMode ? [{ label: '   Hide the normal arrow (only Bbokari)', type: 'checkbox', checked: settings.cursorHideArrow, click: (i) => (applySettings({ cursorHideArrow: i.checked }), showRealArrow(), setTimeout(hideRealArrow, 700)) }] : []),
-    { label: `❄️ Let it snow${snow?.config.mode !== 'off' && snow ? ' (on)' : ''}`, submenu: afterMenuCloses(snowMenu()) },
-    { label: '🏠 Home screen', submenu: afterMenuCloses(homeMenu()) },
-    { label: '🛡️ FaceAway', submenu: faceAwayMenu() },
     { label: `Chat with ${personaFor(settings.mob).name}…`, click: () => command('chat') },
-    { label: '🔍 Check my writing now', click: () => checkWritingNow() },
-    { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
-    { label: '🎨 Canva', submenu: canvaMenu() },
-    { label: `📱 Phone link${settings.phoneLink ? ' (on)' : ''}`, submenu: phoneMenu() },
-    { label: '🖼 Presentation maker', submenu: presentationMenu() },
-    { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
+    { type: 'separator' },
+    { label: '🛡️ FaceAway', submenu: faceAwayMenu() },
+    { label: '🏠 Home screen', submenu: afterMenuCloses(homeMenu()) },
+    { label: `❄️ Let it snow${snow?.config.mode !== 'off' && snow ? ' (on)' : ''}`, submenu: afterMenuCloses(snowMenu()) },
+    { type: 'separator' },
     {
-      label: '🎮 Games',
-      enabled: !asleep,
+      label: '📚 School & work',
       submenu: [
-        ...[
-          ['pingpong', '🏓 Ping pong'],
-          ['tictactoe', '⭕ Tic-tac-toe'],
-          ['rps', '✊ Rock paper scissors'],
-          ['cups', '🥤 Cups'],
-          ['bubbles', '🫧 Bubbles'],
-        ].map(([name, label]) => ({ label, click: () => command('game', { name }) })),
-        { type: 'separator' },
-        { label: 'Stop the game', click: () => command('game', { name: 'stop' }) },
+            {
+              label: '📅 Classes',
+              submenu: [
+                ...(classes?.today().length
+                  ? classes.today().map((c) => ({ label: `${clock(c.startAt)}  ${c.name}${c.link ? '' : '  (no link)'}`, enabled: !!c.link, click: () => openClass(c, { now: true }) }))
+                  : [{ label: 'No classes today', enabled: false }]),
+                { type: 'separator' },
+                { label: 'My classes…', click: () => command('classes') },
+              ],
+            },
+            {
+              label: notes ? `📝 Taking notes: ${notes.title}` : writingNotes ? '📝 Writing your notes…' : '📝 Notes',
+              submenu: [
+                notes
+                  ? { label: 'Stop and write my notes', click: () => stopNotes() }
+                  : { label: 'Take notes now', enabled: !writingNotes, click: () => startNotes({ title: 'Notes' }) },
+                { label: 'Take notes automatically in class', type: 'checkbox', checked: settings.autoNotes, click: (i) => applySettings({ autoNotes: i.checked }) },
+                { type: 'separator' },
+                { label: 'Open my notes folder', click: () => (fs.mkdirSync(NOTES_DIR, { recursive: true }), shell.openPath(NOTES_DIR)) },
+              ],
+            },
+            {
+              label: focus ? `🍅 Focus: ${Math.max(0, Math.ceil((focus.endAt - Date.now()) / 60_000))} min left` : '🍅 Focus timer',
+              submenu: focus
+                ? [{ label: 'Stop focus timer', click: () => stopFocus(false) }]
+                : [15, 25, 50].map((m) => ({ label: `${m} minutes`, click: () => (startFocus(m), send('say', { text: `🍅 Focus time! ${m} minutes. Let’s go! 💪` })) })),
+            },
+            {
+              label: `✅ To-do list${skills?.todos.list().length ? ` (${skills.todos.list().length})` : ''}`,
+              submenu: skills?.todos.list().length
+                ? [
+                    ...skills.todos.list().map((x, i) => ({ label: `☐  ${x.text}`, toolTip: 'Click to tick it off', click: () => tickTodo(i) })),
+                    { type: 'separator' },
+                    { label: 'Add with “add … to my list” in the chat', enabled: false },
+                  ]
+                : [{ label: 'Empty! Say “add … to my list” in the chat', enabled: false }],
+            },
+            { label: `Reminders & timers${pending.length ? ` (${pending.length})` : ''}`, submenu: reminderItems },
+            { label: `📬 Inbox${unhandledInbox().length ? ` (${unhandledInbox().length} new)` : ''}`, submenu: inboxMenu() },
+            { label: '🔍 Check my writing now', click: () => checkWritingNow() },
+            {
+              label: '✏️ Highlighted text',
+              submenu: [
+                { label: 'Highlight text in any app, then:', enabled: false },
+                ...Object.entries(REWRITE_MODES).map(([mode, m]) => ({ label: m.label, accelerator: REWRITE_KEYS[mode], click: () => rewriteSelection(mode) })),
+              ],
+            },
+            {
+              label: '🎙 Live captions',
+              submenu: [
+                { label: 'Show captions', type: 'checkbox', checked: settings.captionsOn, click: (i) => applySettings({ captionsOn: i.checked }) },
+                { type: 'separator' },
+                { label: '🎤 My microphone', type: 'checkbox', checked: settings.captionsMic, click: (i) => applySettings({ captionsMic: i.checked }) },
+                { label: '💻 Computer sound (needs BlackHole)', type: 'checkbox', checked: settings.captionsComputer, click: (i) => applySettings({ captionsComputer: i.checked }) },
+                { label: '🔊 Switch to Multi-Output Device automatically', type: 'checkbox', checked: settings.autoSwitchAudio, click: (i) => applySettings({ autoSwitchAudio: i.checked }) },
+                { type: 'separator' },
+                {
+                  label: 'Translate into',
+                  submenu: Object.entries(CAPTION_LANGUAGES).map(([key, label]) => radio(label, 'captionsLang', key)),
+                },
+              ],
+            },
       ],
     },
     {
-      label: '📅 Classes',
+      label: '🎨 Make things',
       submenu: [
-        ...(classes?.today().length
-          ? classes.today().map((c) => ({ label: `${clock(c.startAt)}  ${c.name}${c.link ? '' : '  (no link)'}`, enabled: !!c.link, click: () => openClass(c, { now: true }) }))
-          : [{ label: 'No classes today', enabled: false }]),
-        { type: 'separator' },
-        { label: 'My classes…', click: () => command('classes') },
+            { label: '🎨 Canva', submenu: canvaMenu() },
+            { label: '🖼 Presentation maker', submenu: presentationMenu() },
       ],
     },
     {
-      label: `🗣 Hey ${personaFor(settings.mob).name}`,
+      label: '🎮 Play',
       submenu: [
-        { label: `Listen for “Hey ${personaFor(settings.mob).name}” (microphone only)`, type: 'checkbox', checked: settings.voiceOn, click: (i) => applySettings({ voiceOn: i.checked }) },
-        { label: 'Speak answers out loud', type: 'checkbox', checked: settings.voiceSpeak, click: (i) => applySettings({ voiceSpeak: i.checked }) },
+            {
+              label: '🎮 Games',
+              enabled: !asleep,
+              submenu: [
+                ...[
+                  ['pingpong', '🏓 Ping pong'],
+                  ['tictactoe', '⭕ Tic-tac-toe'],
+                  ['rps', '✊ Rock paper scissors'],
+                  ['cups', '🥤 Cups'],
+                  ['bubbles', '🫧 Bubbles'],
+                ].map(([name, label]) => ({ label, click: () => command('game', { name }) })),
+                { type: 'separator' },
+                { label: 'Stop the game', click: () => command('game', { name: 'stop' }) },
+              ],
+            },
+            {
+              label: '🐥 Do something',
+              submenu: [
+                { label: asleep ? 'Wake up' : 'Go to sleep', click: () => command('trigger', { name: asleep ? 'wake' : 'sleepy' }) },
+                { label: 'Dance', click: () => command('trigger', { name: 'dance' }), enabled: !asleep },
+                { label: 'Wave', click: () => command('trigger', { name: 'wave' }), enabled: !asleep },
+              ],
+            },
       ],
     },
     {
-      label: notes ? `📝 Taking notes: ${notes.title}` : writingNotes ? '📝 Writing your notes…' : '📝 Notes',
+      label: '🧰 Tools',
       submenu: [
-        notes
-          ? { label: 'Stop and write my notes', click: () => stopNotes() }
-          : { label: 'Take notes now', enabled: !writingNotes, click: () => startNotes({ title: 'Notes' }) },
-        { label: 'Take notes automatically in class', type: 'checkbox', checked: settings.autoNotes, click: (i) => applySettings({ autoNotes: i.checked }) },
-        { type: 'separator' },
-        { label: 'Open my notes folder', click: () => (fs.mkdirSync(NOTES_DIR, { recursive: true }), shell.openPath(NOTES_DIR)) },
-      ],
-    },
-    {
-      label: focus ? `🍅 Focus: ${Math.max(0, Math.ceil((focus.endAt - Date.now()) / 60_000))} min left` : '🍅 Focus timer',
-      submenu: focus
-        ? [{ label: 'Stop focus timer', click: () => stopFocus(false) }]
-        : [15, 25, 50].map((m) => ({ label: `${m} minutes`, click: () => (startFocus(m), send('say', { text: `🍅 Focus time! ${m} minutes. Let’s go! 💪` })) })),
-    },
-    {
-      label: `✅ To-do list${skills?.todos.list().length ? ` (${skills.todos.list().length})` : ''}`,
-      submenu: skills?.todos.list().length
-        ? [
-            ...skills.todos.list().map((x, i) => ({ label: `☐  ${x.text}`, toolTip: 'Click to tick it off', click: () => tickTodo(i) })),
-            { type: 'separator' },
-            { label: 'Add with “add … to my list” in the chat', enabled: false },
-          ]
-        : [{ label: 'Empty! Say “add … to my list” in the chat', enabled: false }],
-    },
-    {
-      label: '🚀 Open',
-      submenu: [
-        ...QUICK_OPEN.map(([label, what]) => ({ label, click: () => openThing(what) })),
-        { type: 'separator' },
-        { label: 'Something else… (say “open …” in the chat)', click: () => command('chat', { prefill: 'open ' }) },
-      ],
-    },
-    {
-      label: '🎙 Live captions',
-      submenu: [
-        { label: 'Show captions', type: 'checkbox', checked: settings.captionsOn, click: (i) => applySettings({ captionsOn: i.checked }) },
-        { type: 'separator' },
-        { label: '🎤 My microphone', type: 'checkbox', checked: settings.captionsMic, click: (i) => applySettings({ captionsMic: i.checked }) },
-        { label: '💻 Computer sound (needs BlackHole)', type: 'checkbox', checked: settings.captionsComputer, click: (i) => applySettings({ captionsComputer: i.checked }) },
-        { label: '🔊 Switch to Multi-Output Device automatically', type: 'checkbox', checked: settings.autoSwitchAudio, click: (i) => applySettings({ autoSwitchAudio: i.checked }) },
-        { type: 'separator' },
-        {
-          label: 'Translate into',
-          submenu: Object.entries(CAPTION_LANGUAGES).map(([key, label]) => radio(label, 'captionsLang', key)),
-        },
-      ],
-    },
-    {
-      label: '✏️ Highlighted text',
-      submenu: [
-        { label: 'Highlight text in any app, then:', enabled: false },
-        ...Object.entries(REWRITE_MODES).map(([mode, m]) => ({ label: m.label, accelerator: REWRITE_KEYS[mode], click: () => rewriteSelection(mode) })),
+            {
+              label: '🚀 Open',
+              submenu: [
+                ...QUICK_OPEN.map(([label, what]) => ({ label, click: () => openThing(what) })),
+                { type: 'separator' },
+                { label: 'Something else… (say “open …” in the chat)', click: () => command('chat', { prefill: 'open ' }) },
+              ],
+            },
+            {
+              label: `🗣 Hey ${personaFor(settings.mob).name}`,
+              submenu: [
+                { label: `Listen for “Hey ${personaFor(settings.mob).name}” (microphone only)`, type: 'checkbox', checked: settings.voiceOn, click: (i) => applySettings({ voiceOn: i.checked }) },
+                { label: 'Speak answers out loud', type: 'checkbox', checked: settings.voiceSpeak, click: (i) => applySettings({ voiceSpeak: i.checked }) },
+              ],
+            },
+            { label: `📱 Phone link${settings.phoneLink ? ' (on)' : ''}`, submenu: phoneMenu() },
       ],
     },
     { type: 'separator' },
-    {
-      label: '🐥 Do something',
-      submenu: [
-        { label: asleep ? 'Wake up' : 'Go to sleep', click: () => command('trigger', { name: asleep ? 'wake' : 'sleepy' }) },
-        { label: 'Dance', click: () => command('trigger', { name: 'dance' }), enabled: !asleep },
-        { label: 'Wave', click: () => command('trigger', { name: 'wave' }), enabled: !asleep },
-      ],
-    },
+    { label: updateLabel(), enabled: !updating, click: () => runUpdate() },
     { type: 'separator' },
     // All the on/off settings in one place, so the menu stays short enough to fit on a laptop screen.
     {
@@ -630,7 +681,15 @@ function startFaceAway() {
   if (process.platform !== 'darwin') return;
   faceAway = new FaceAwayBridge(onFaceAwayEvent);
   faceAway.start();
-  if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) faStart(); // starts with the pet
+  if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) {
+    // after an update FaceAway's code is newer than the program: rebuild it quietly first (your faces stay)
+    if (faceAwayStale()) buildFaceAway().then((r) => { if (!r.ok) send('say', { text: `FaceAway’s update didn’t build: ${r.text}`, error: true }); faStart(); });
+    else faStart(); // starts with the pet
+  } else if (settings.faceAwayAuto !== false && !settings.faceAwayTried) {
+    // first time: build FaceAway for you (needs Apple's command line tools)
+    applySettings({ faceAwayTried: true });
+    setTimeout(() => faceAwayBuild(), 8000);
+  }
   // The real Mac lock (Glance unlocks it with your face): the pet sleeps while locked and cheers when you're back.
   powerMonitor.on('lock-screen', () => send('faceaway', { type: 'locked', source: 'mac' }));
   powerMonitor.on('unlock-screen', () => send('faceaway', { type: 'unlocked', source: 'mac' }));
@@ -664,10 +723,14 @@ const FA_VALUES = [
 ];
 const faOpts = () => settings.faceAwayOpts ?? {};
 function faArgs() {
-  const o = faOpts(), a = [];
+  const o = faOpts();
+  // Guard mode: Face ID is the lock. Watching checks who's there; you → nothing, a stranger → Face ID lock + photo +
+  // text, away → Face ID lock. Bbokari's menu bar icon runs it (no second eye in the menu bar).
+  const a = ['--guard', '--no-status-item'];
+  if (o.guard !== false) a.push('--watch');
   for (const [k, flag] of FA_FLAGS) if (o[k]) a.push(flag);
   for (const [k, flag] of FA_VALUES) if (o[k] !== undefined && o[k] !== '') a.push(flag, String(o[k]));
-  if (o.decoy) a.push('--decoy', o.decoy);
+  if (o.hideLook && o.decoy) a.push('--decoy', o.decoy); // hiding the screen when you look away is optional now
   if (o.theme) a.push('--theme', o.theme);
   return a;
 }
@@ -1002,35 +1065,71 @@ function faceAwayChat(text) {
   if (/^(set|change) (my |the )?(panic )?password$/.test(t)) { faceAwayPassword(); return '🔑 Type it in the little window (it stays private).'; }
   if (/^(who can use my (mac|computer)|list (faces|people))$/.test(t)) { faceAwayPeople(); return '👥 Checking…'; }
   if (/^(start|open|run) face ?away$/.test(t)) { const r = faStart(); return r.ok ? '▶️ FaceAway is running (the eye in your menu bar).' : r.text; }
-  if (/^(build|update) face ?away$/.test(t)) { faceAwayBuild(); return '🔨 On it!'; }
+  if (/^(build|rebuild) face ?away$/.test(t)) { faceAwayBuild(); return '🔨 On it!'; }
+  if (/^(update|upgrade)( (yourself|bbokari|face ?away|everything|the app))?$|^check for updates?$/.test(t)) { runUpdate(); return '⬇️ Checking for updates…'; }
   return null;
 }
+const AWAY_TIMES = [[0, 'Never'], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute'], [300, '5 minutes']];
 function faceAwayMenu() {
   const built = fs.existsSync(FACEAWAY_BIN);
   if (!built) return [{ label: '🔨 Set up FaceAway', click: faceAwayBuild }];
   const on = faceAwayRunning();
+  const o = faOpts();
+  const guarding = on && faceAwayState.watching;
+  const away = Number(o.lockAfter ?? 30);
   return [
-    { label: on ? (faceAwayState.watching ? '🟢 Protecting you' : '⚪ FaceAway is ready') : '🔴 FaceAway is off', enabled: false },
+    { label: !on ? '🔴 FaceAway is off' : guarding ? '🟢 Guarding your Mac (Face ID)' : '⚪ FaceAway is ready (not guarding)', enabled: false },
     ...(on ? [] : [{ label: '▶️ Turn FaceAway on', click: () => (faStart(), setTimeout(buildTray, 600)) }]),
-    { label: '👀 Hide my screen when I look away', type: 'checkbox', checked: faceAwayState.watching, enabled: on, click: (i) => faceAway?.command('watch', { on: i.checked }) },
-    { label: '🔒 Lock (Face ID unlock)', enabled: on, click: () => faceAway?.command('lock') },
-    { label: '🚨 Panic', enabled: on, click: () => faceAway?.command('panic') },
-    { label: '👤 Add a face…', click: () => faceAwayAddFace() },
+    { label: '🛡️ Guard my Mac with Face ID', type: 'checkbox', checked: guarding, enabled: on, click: (i) => { faceAway?.command('watch', { on: i.checked }); applySettings({ faceAwayOpts: { ...faOpts(), guard: i.checked } }); } },
+    { label: '🔒 Lock now (Face ID unlocks)', accelerator: 'Control+Alt+Command+L', enabled: on, click: () => faceAway?.command('lock') },
+    { label: '🚨 Panic screen', enabled: on, click: () => faceAway?.command('panic') },
     { type: 'separator' },
-    { label: 'More', submenu: [
-      { label: '🎭 Decoy screen', submenu: [['school', '🏫 School'], ['update', '⚙️ Software update'], ['black', '⬛ Black']].map(([name, label]) => ({ label, type: 'radio', checked: (faceAwayState.decoy ?? faOpts().decoy) === name, click: () => (faceAway?.command('decoy', { name }), applySettings({ faceAwayOpts: { ...faOpts(), decoy: name } })) })) },
+    { label: o.textMe ? `💬 Text me if it’s not me: ${o.textMe}` : '💬 Text me if it’s not me…', click: async () => {
+      const v = await askForm('Text me if it’s not me', [{ label: 'Your phone number or Apple ID email (iMessage). Leave empty to turn off.' }]);
+      if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
+    } },
+    { label: `⏱ Lock when I walk away: ${AWAY_TIMES.find(([t]) => t === away)?.[1] ?? `${away} s`}`, submenu: AWAY_TIMES.map(([t, label]) => ({ label, type: 'radio', checked: away === t, click: () => faSet({ lockAfter: t }) })) },
+    { label: `🙈 Hide my screen when I look away${o.hideLook ? ': on' : ''}`, submenu: [
+      { label: 'Off', type: 'radio', checked: !o.hideLook, click: () => faSet({ hideLook: false }) },
+      ...[['school', '🏫 With a school page'], ['update', '⚙️ With a software update'], ['black', '⬛ With a black screen']].map(([name, label]) => ({ label, type: 'radio', checked: !!o.hideLook && (o.decoy ?? 'school') === name, click: () => faSet({ hideLook: true, decoy: name }) })),
+    ] },
+    { type: 'separator' },
+    { label: '👤 Faces', submenu: [
+      { label: '👤 Add a face…', click: () => faceAwayAddFace() },
       { label: '👥 Who can use my Mac', click: faceAwayPeople },
       { label: '🗑️ Remove someone…', click: faceAwayRemove },
-      { label: '🔑 Set panic password…', click: faceAwayPassword },
       { label: '🔍 Live face test', click: () => (faceAwayRunning() && stopFaceAwayApp(), runFaceAway(['--check']).then(() => settings.faceAwayAuto !== false && faStart())) },
+    ] },
+    { label: '🔑 Make Face ID my only lock (no password)…', click: faceIdOnlyLock },
+    { label: '⚙️ More', submenu: [
+      { label: '🔑 Set panic password…', click: faceAwayPassword },
+      { label: '📷 Photos of strangers', click: () => runFaceAway(['--intruders']) },
+      { label: '📜 What happened (log)', click: () => runFaceAway(['--log']).then((r) => send('say', { text: r.text.split('\n').slice(-6).join('\n') || 'Nothing yet.' })) },
       { label: '💻 Make my whole Mac look like a hacker’s', click: () => runFaceAway(['--hacker-mac', 'on']).then((r) => send('say', { text: r.ok ? '💻 Hacker Mac on.' : r.text, error: !r.ok })) },
       { label: '↩️ Put my Mac’s look back', click: () => runFaceAway(['--hacker-mac', 'off']).then((r) => send('say', { text: r.ok ? 'Back to normal.' : r.text, error: !r.ok })) },
       { label: '⚙️ All options', submenu: faceAwayOptionsMenu() },
-      { label: '🔨 Update FaceAway', click: faceAwayBuild },
+      { label: '🔨 Rebuild FaceAway', click: faceAwayBuild },
       { label: on ? '⏹ Turn FaceAway off' : '▶️ Turn FaceAway on', click: () => (on ? stopFaceAwayApp() : faStart(), setTimeout(buildTray, 600)) },
-      { label: 'Turn FaceAway on with me', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
+      { label: 'Start FaceAway with Bbokari', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
     ] },
   ];
+}
+/** macOS's own lock always wants the password. To make FaceAway's Face ID lock the only one, macOS must stop asking
+ *  for the password after sleep or the screen saver: that's one switch in System Settings (only you can flip it). */
+async function faceIdOnlyLock() {
+  const r = await dialog.showMessageBox({
+    type: 'info', buttons: ['Open Lock Screen settings', 'Cancel'], defaultId: 0, cancelId: 1,
+    message: 'Make Face ID your only lock',
+    detail: 'FaceAway’s Face ID lock screen already comes up when you close the lid, walk away or press ⌃⌥⌘L, and it opens as soon as it sees you.\n\n'
+      + 'macOS also has its own lock that always asks for your password. To skip it:\n'
+      + 'System Settings → Lock Screen → “Require password after screen saver begins or display is turned off” → Never.\n\n'
+      + 'Good to know:\n• Turning the Mac on or restarting still asks for your password once (macOS needs it to unlock your disk).\n'
+      + '• If the camera can’t see you (dark room), click “Use Mac password” on the lock screen.\n'
+      + '• If someone else keeps trying for a minute, FaceAway switches to the real password lock and texts you.\n'
+      + '• A photo of you could fool a webcam more easily than an iPhone’s Face ID, so keep the password lock if your Mac holds anything really private.',
+  });
+  if (r.response === 0) shell.openExternal('x-apple.systempreferences:com.apple.Lock-Screen-Settings.extension');
+  if (faOpts().unlockTime === undefined) faSet({ unlockTime: 60 });
 }
 ipcMain.on('faceaway:command', (_e, { type, ...extra } = {}) => faceAway?.command(type, extra));
 
@@ -2916,6 +3015,9 @@ app.whenReady().then(() => {
   powerMonitor.on('resume', welcomeBack);
   // The tray's "today" list changes at midnight.
   setInterval(buildTray, 10 * 60_000);
+  // updates: check a minute after starting, then every 3 hours
+  setTimeout(checkUpdates, 60_000);
+  setInterval(checkUpdates, 3 * 3_600_000);
   setInterval(pollIdle, IDLE_POLL_MS);
   win.webContents.once('did-finish-load', () => setTimeout(syncActivity, 4000));
   // If the sound was left on the Multi-Output Device (volume keys off), put it back on your normal output.

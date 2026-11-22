@@ -69,6 +69,22 @@ import { spawn } from 'node:child_process';
 export const FACEAWAY_DIR = path.join(os.homedir(), 'FaceAway');
 export const FACEAWAY_BIN = path.join(FACEAWAY_DIR, 'faceaway');
 
+const REPO_FA = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'faceaway');
+/** Names and sizes of the model's files: changes when the model does. */
+function modelStamp(dir) {
+  const parts = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else parts.push(`${path.relative(dir, f)}:${fs.statSync(f).size}`); } };
+  try { walk(dir); } catch {}
+  return parts.sort().join('|');
+}
+/** True when FaceAway's code in the project is newer than the built program (e.g. after an update). */
+export function faceAwayStale() {
+  try {
+    const built = fs.statSync(FACEAWAY_BIN).mtimeMs;
+    return ['FaceAway.swift', 'GlanceFace.swift', 'GlanceUI.swift'].some((f) => fs.statSync(path.join(REPO_FA, f)).mtimeMs > built);
+  } catch { return false; }
+}
+
 /** Builds FaceAway from ~/FaceAway/FaceAway.swift (taking a newer ~/Downloads/FaceAway.swift first, if there is one). */
 export function buildFaceAway(onLine = () => {}) {
   return new Promise((resolve) => {
@@ -79,9 +95,14 @@ export function buildFaceAway(onLine = () => {}) {
       for (const f of ['FaceAway.swift', 'GlanceFace.swift', 'GlanceUI.swift', 'LICENSE-glance.txt', 'unlockanimation.mp4', 'unsuccessfulunlockanimation.mp4', 'unlockstatic.png']) fs.copyFileSync(path.join(repo, f), path.join(FACEAWAY_DIR, f));
       // with several files, Swift runs the one called main.swift
       fs.copyFileSync(path.join(repo, 'FaceAway.swift'), path.join(FACEAWAY_DIR, 'main.swift'));
+      // only when the face model itself changed: drop the compiled copy so it's rebuilt (your saved faces stay)
+      const stamp = modelStamp(path.join(repo, 'ArcFace.mlpackage'));
+      const stampFile = path.join(FACEAWAY_DIR, 'model.stamp');
+      let old = '';
+      try { old = fs.readFileSync(stampFile, 'utf8'); } catch {}
       fs.cpSync(path.join(repo, 'ArcFace.mlpackage'), path.join(FACEAWAY_DIR, 'ArcFace.mlpackage'), { recursive: true });
-      // the new model means new face samples: drop the compiled copy so it's rebuilt
-      fs.rmSync(path.join(os.homedir(), 'Library', 'Application Support', 'FaceAway', 'ArcFace.mlmodelc'), { recursive: true, force: true });
+      if (old && old !== stamp) fs.rmSync(path.join(os.homedir(), 'Library', 'Application Support', 'FaceAway', 'ArcFace.mlmodelc'), { recursive: true, force: true });
+      fs.writeFileSync(stampFile, stamp);
     } catch (e) { return resolve({ ok: false, text: e.message }); }
     // macOS 14 or newer (Glance's SwiftUI animations need it)
     const target = `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macos14.0`;

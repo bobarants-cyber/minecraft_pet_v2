@@ -291,8 +291,9 @@ const applyActivity = () => {
 // FaceAway (Face ID lock, panic screen, themes) tells us what it's doing.
 host?.onFaceAway?.((ev) => {
   if (ev.type === 'theme') { faceTheme = ev.name; applyActivity(); character.emote('sparkle', 0.5); }
-  else if (ev.type === 'watching' && ev.on) { character.trigger('curious', { then: 'idle' }, true); character.emote('exclaim', 0.5); chat.say('🛡️ Watching is on. I’ll keep an eye out with you!'); }
+  else if (ev.type === 'watching' && ev.on) { character.trigger('curious', { then: 'idle' }, true); character.emote('exclaim', 0.5); chat.say('🛡️ Guarding your Mac with Face ID. If it’s not you, it locks.'); }
   else if (ev.type === 'watching') character.emote('sparkle', 0.4);
+  else if (ev.type === 'stranger') { character.face.setExpression('angry'); character.emote('exclaim', 0.5); chat.say('🚨 Someone who isn’t you tried to use the Mac. FaceAway kept it locked' + (settings.faceAwayOpts?.textMe ? ' and texted you.' : '.')); }
   else if (ev.type === 'locked') { character.face.setExpression('sleepy'); character.trigger('sleep', {}, true); }
   else if (ev.type === 'unlocked') {
     character.trigger('surprised', { then: 'happy' }, true);

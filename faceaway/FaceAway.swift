@@ -1189,6 +1189,9 @@ final class SoftLock {
         return f
     }()
     private var timer: Timer?
+    /// "Use Mac password": hands over to the real macOS lock (e.g. the camera can't see you in the dark).
+    var onUsePassword: (() -> Void)?
+    private var buttonActions: [MenuAction] = []
     private(set) var message = SoftLock.prompt
     static let prompt = "Look at the camera to unlock"
     var isShowing: Bool { !windows.isEmpty }
@@ -1226,6 +1229,7 @@ final class SoftLock {
         messages = []
         clocks = []
         dates = []
+        buttonActions = []
     }
 
     /// The line under "Locked": the unlock prompt, or a red "Not recognized".
@@ -1302,6 +1306,14 @@ final class SoftLock {
 
         let prompt = text(message, size: 14, weight: .medium, white: 0.85, y: 140, width: size.width)
         v.addSubview(prompt)
+        let action = MenuAction { [weak self] in self?.onUsePassword?() }
+        buttonActions.append(action)
+        let button = NSButton(title: "Use Mac password", target: action, action: #selector(MenuAction.fire))
+        button.bezelStyle = .rounded
+        button.appearance = NSAppearance(named: .darkAqua)
+        button.sizeToFit()
+        button.frame.origin = NSPoint(x: (size.width - button.frame.width) / 2, y: 60)
+        v.addSubview(button)
         messages.append(prompt)
         clocks.append(clockLabel)
         dates.append(date)
@@ -2449,6 +2461,9 @@ final class MenuAction: NSObject {
     #endif
 }
 
+/// Set before the menu is made: Bbokari's menu bar icon runs FaceAway, so FaceAway shows no eye of its own.
+var statusItemHidden = false
+
 /// FaceAway's icon in the menu bar: the easy on/off button for everything.
 final class StatusMenu {
     private let item: NSStatusItem
@@ -2463,6 +2478,7 @@ final class StatusMenu {
     init(controller: Controller) {
         self.controller = controller
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.isVisible = !statusItemHidden   // Bbokari's menu bar icon runs FaceAway then
         rebuild()
     }
 
@@ -2617,13 +2633,16 @@ struct Options {
     var hotkeys = true
     var faceID = false
     var faceUnlock = false
-    var softLockSeconds: Double = 20   // how long a stranger may try before the Mac lock (0 = never)
+    var softLockSeconds: Double = 60   // how long a stranger may try before the Mac lock (0 = never)
     var lockAfter: Double = 30         // face-lock after you've been away this long (0 = don't)
     var minQuality: Double = 0.3
     var strict = false
     var home = false
     var panicButton = false
     var theme: String?
+    var guardMode = false      // --guard: Face ID is the lock; no decoy or tab switching unless asked for
+    var startWatching = false  // --watch: start with the camera checking who's there
+    var noStatusItem = false   // --no-status-item: no eye in the menu bar (Bbokari's menu runs FaceAway)
 }
 
 let usage = """
@@ -2666,9 +2685,14 @@ EXTRAS
                     unlocks as soon as it sees you. No password.
   --lock-after S    Face-lock after you've been away this many seconds (default: 30, 0 = don't)
   --unlock-time S   If a stranger keeps trying this long, switch to the real Mac lock, which
-                    needs your password (default: 20, 0 = never)
+                    needs your password (default: 60, 0 = never)
   --no-photos       Don't save photos of strangers
   --no-hotkeys      Turn off the panic keys
+  --guard           With --app: Face ID is your lock. Watching only checks who's there: you → nothing
+                    happens; nobody for --lock-after seconds → Face ID lock; a stranger → Face ID lock,
+                    a photo and a text (--text-me). No decoy or tab switching unless you ask for one.
+  --watch           With --app: start with watching on
+  --no-status-item  With --app: no eye in the menu bar (when Bbokari's menu runs FaceAway)
 
 HOME SCREEN AND PANIC BUTTON
   faceaway --set-password           Choose the password that closes the panic screen
@@ -2775,6 +2799,9 @@ func parseOptions() -> Options {
             o.hacker = true; o.voice = true
             o.alarm = true; o.gestures = true; o.mute = true; o.faceID = true; o.faceUnlock = true
         case "--app": o.mode = .app
+        case "--guard": o.guardMode = true
+        case "--watch": o.startWatching = true
+        case "--no-status-item": o.noStatusItem = true
         case "--home": o.home = true
         case "--home-only": o.mode = .homeOnly; o.home = true
         case "--panic-button": o.panicButton = true
@@ -3039,6 +3066,7 @@ final class Controller {
         _ = ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.macDidWake() }
 
         if let style = options.decoy { decoy = Decoy(style: style, schoolName: options.schoolName) }
+        softLock.onUsePassword = { [weak self] in self?.usePassword() }
 
         watcher = FaceWatcher(checksPerSecond: options.checksPerSecond, minSize: options.minSize) {
             [weak self] pixels, faces in self?.frame(pixels, faces)
@@ -3249,6 +3277,7 @@ final class Controller {
                 softTrust = 0
                 if strangerSince == nil {
                     strangerSince = Date()
+                    strangerAtLock(photo: photo)
                     softLock.setMessage("Not recognized", alert: true)
                     if options.faceID { faceIDOverlay.failure("Not recognized") }   // Glance's red shake, then waits again
                 }
@@ -3342,6 +3371,7 @@ final class Controller {
         softLocked = true
         holding = true
         softTrust = 0
+        textedThisLock = stranger && options.textTo != nil   // catchIntruder has just texted
         Bridge.emit(["type": stranger ? "stranger" : "locked"])
         strangerSince = stranger ? Date() : nil
         softLock.show()
@@ -3354,6 +3384,35 @@ final class Controller {
         }
         say("\(reason) — locked. Look at the camera to unlock.", stranger ? .alert : .info)
         EventLog.add("Face-locked: \(reason)")
+    }
+
+    /// You picked "Use Mac password" on the Face ID lock screen.
+    private func usePassword() {
+        guard softLocked, !screenLocked else { return }
+        faceIDOverlay.dismissNow()
+        EventLog.add("Switched to the Mac password")
+        screenLocked = true
+        lockScreen()
+    }
+
+    /// A stranger is at the Face ID lock screen: a photo and a text, once per lock.
+    private var textedThisLock = false
+    private func strangerAtLock(photo: Data?) {
+        guard !textedThisLock else { return }
+        textedThisLock = true
+        var photoURL: URL?
+        if options.photos, let data = photo ?? pendingPhoto, let url = Intruders.save(data) {
+            photoURL = url
+            intruderPhotos.append(url)
+            EventLog.add("Photo: \(url.path)")
+        }
+        pendingPhoto = nil
+        EventLog.add("Stranger tried to unlock with Face ID")
+        Bridge.emit(["type": "stranger"])
+        if let to = options.textTo {
+            let msg = "🚨 FaceAway: someone who isn't you tried to unlock your Mac at \(clock.string(from: Date())). It stayed locked."
+            textMe(to, message: msg, photo: photoURL)
+        }
     }
 
     /// A stranger kept trying: hand over to the real macOS lock (password).
@@ -3768,15 +3827,18 @@ case .app:
     let people = FaceStore.loadAll()
     // Sensible defaults for the menu bar app: Face ID lock on lid close, decoy unless a tab was given.
     if !people.isEmpty { appOptions.faceUnlock = true; appOptions.faceID = true }
-    appOptions.lockAfter = 0
     let needle = options.needle ?? options.openURL ?? ""
-    if needle.isEmpty && appOptions.decoy == nil { appOptions.decoy = "school" }
+    if !options.guardMode {   // the old menu bar app: hide with the school decoy, no away-lock
+        appOptions.lockAfter = 0
+        if needle.isEmpty && appOptions.decoy == nil { appOptions.decoy = "school" }
+    }
     controller = Controller(options: appOptions, browser: browser, needle: needle, openURL: options.openURL,
-                            people: people, watching: false)
+                            people: people, watching: options.startWatching)
     withCamera {
         guard let c = controller else { return }
         c.start()
         startHomeAndPanic()
+        statusItemHidden = options.noStatusItem
         let menu = StatusMenu(controller: c)
         if let s = panicScreen {
             menu.panic = { if !s.isShowing { s.show() } }
@@ -3821,7 +3883,7 @@ case .app:
             }
         }
         Bridge.emit(["type": "theme", "name": menu.currentTheme()])
-        Bridge.emit(["type": "watching", "on": false])
+        Bridge.emit(["type": "watching", "on": c.watching])
         say("FaceAway is in your menu bar (the eye icon). Everything is off until you turn it on.", .good)
         if !people.isEmpty {
             say("Face ID lock: closing the lid locks the screen; opening it unlocks when it sees you.", .good)

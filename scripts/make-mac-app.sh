@@ -1,11 +1,13 @@
 #!/bin/bash
-# Makes a "Bbokari" app you can open from Launchpad, Spotlight or the Dock, with Bbokari's icon.
+# Makes a "Bbokari" app you can open from Launchpad, Spotlight or the Dock, with the Bbokari + FaceAway icon.
+# Every time you open it, it downloads the newest Bbokari and FaceAway first, then starts both.
 # Run once from the project folder:  npm run make-app
 # (Run it again any time to rebuild the app, e.g. after moving the project folder.)
 set -euo pipefail
 
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
-ICON_PNG="$PROJECT/assets/icon/bbokari.png"
+ICON_PNG="$PROJECT/assets/icon/bbokari-faceaway.png"
+[ -f "$ICON_PNG" ] || ICON_PNG="$PROJECT/assets/icon/bbokari.png"
 BUNDLE_ID="com.bbokari.launcher"
 
 # Where to put it: /Applications if we can write there, otherwise your own Applications folder.
@@ -57,7 +59,22 @@ if [ ! -d "$ELECTRON" ]; then
   exit 1
 fi
 cd "$PROJECT" || exit 1
-{ echo "--- $(date)"; npm run build; } >> "$LOG" 2>&1
+# Already running? Just show it.
+if pgrep -f "Electron.app/Contents/MacOS/Electron $PROJECT" >/dev/null 2>&1; then
+  osascript -e 'display notification "Bbokari is already running: click the bee in the menu bar." with title "Bbokari"'
+  exit 0
+fi
+osascript -e 'display notification "Checking for updates…" with title "Bbokari"' >/dev/null 2>&1
+{
+  echo "--- $(date)"
+  BEFORE="$(git rev-parse HEAD 2>/dev/null)"
+  # 1. the newest Bbokari + FaceAway (skipped when offline; your settings and faces are kept outside this folder)
+  GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 pull --no-edit --no-rebase origin claude/focused-clarke-n2vhgf || echo "(update skipped)"
+  # 2. new packages only when they changed
+  if [ -n "$BEFORE" ] && ! git diff --quiet "$BEFORE" HEAD -- package.json package-lock.json; then npm install --no-audit --no-fund; fi
+  # 3. build the pet's page (FaceAway is rebuilt by Bbokari when its code changed)
+  npm run build
+} >> "$LOG" 2>&1
 open -a "$ELECTRON" --args "$PROJECT"
 LAUNCHER
 sed -i '' "s|__PROJECT__|$PROJECT|" "$APP/Contents/MacOS/Bbokari" 2>/dev/null || sed -i "s|__PROJECT__|$PROJECT|" "$APP/Contents/MacOS/Bbokari"
