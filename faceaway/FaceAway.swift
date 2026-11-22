@@ -782,27 +782,36 @@ enum Replies {
         return handle.lowercased() == to.lowercased()
     }
 
-    /// A YES (true) or NO (false) from `to` in the messages after row `after`, and the newest row seen.
-    static func answer(from to: String, after: Int) -> (answer: Bool?, last: Int) {
-        // the chat's own id too: texting your own number, your replies can show up with no sender
-        let r = sqlite("SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),''), IFNULL(c.chat_identifier,'') FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID LEFT JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = j.chat_id WHERE m.ROWID > \(after) ORDER BY m.ROWID;")
-        guard r.ok else { return (nil, after) }
+    /// The first word of each new message from `to` (lowercased), and the newest row seen.
+    static func words(from to: String, after: Int) -> (words: [String], last: Int) {
+        let r = sqlite("SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),''), IFNULL(c.chat_identifier,''), m.is_from_me FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID LEFT JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = j.chat_id WHERE m.ROWID > \(after) ORDER BY m.ROWID;")
+        guard r.ok else { return ([], after) }
         var last = after
-        var result: Bool?
+        var out: [String] = []
         for line in r.out.split(separator: "\n") {
             let f = line.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
-            guard f.count >= 4, let id = Int(f[0]) else { continue }
+            guard f.count >= 6, let id = Int(f[0]) else { continue }
             last = max(last, id)
-            let chatID = f.count >= 5 ? f[4] : ""
-            guard samePerson(f[1], to) || (!chatID.isEmpty && samePerson(chatID, to)) else { continue }
+            if f[5] == "1" { continue }   // what the Mac itself sent
+            guard samePerson(f[1], to) || (!f[4].isEmpty && samePerson(f[4], to)) else { continue }
             var t = f[2]
             if t.isEmpty { t = text(fromHexBody: f[3]) ?? "" }
-            let word = t.lowercased().components(separatedBy: CharacterSet.letters.inverted).first(where: { !$0.isEmpty }) ?? ""
-            if ["yes", "y", "yeah", "yep", "yup", "lock", "si", "sí"].contains(word) { result = true }
+            out.append(t.lowercased().components(separatedBy: CharacterSet.letters.inverted).first(where: { !$0.isEmpty }) ?? "")
+        }
+        return (out, last)
+    }
+
+    /// A YES (true) or NO (false) from `to` in the messages after row `after`, and the newest row seen.
+    static func answer(from to: String, after: Int) -> (answer: Bool?, last: Int) {
+        let (words, last) = Replies.words(from: to, after: after)
+        var result: Bool?
+        for word in words {
+            if ["yes", "y", "yeah", "yep", "yup", "lock", "si", "sí", "s"].contains(word) { result = true }
             if ["no", "n", "nope", "nah", "dont", "don"].contains(word) { result = false }
         }
         return (result, last)
     }
+
 }
 
 // MARK: - Auto-mute
@@ -3155,6 +3164,7 @@ final class Controller {
 
         if let style = options.decoy { decoy = Decoy(style: style, schoolName: options.schoolName) }
         softLock.onUsePassword = { [weak self] in self?.usePassword() }
+        startRemoteLock()
 
         watcher = FaceWatcher(checksPerSecond: options.checksPerSecond, minSize: options.minSize) {
             [weak self] pixels, faces in self?.frame(pixels, faces)
@@ -3379,7 +3389,7 @@ final class Controller {
         if primary.isTrusted {
             unknownStreak = 0
             presentSinceTrusted = true
-            cancelAsk()
+            if !askIsTest { cancelAsk() }
             return
         }
         unknownStreak += 1
@@ -3485,6 +3495,7 @@ final class Controller {
 
     // "Lock computer?" by text
     private var asking = false
+    private var askIsTest = false
     private var askTimer: Timer?
     private var askRow = -1
     private var askStarted = Date()
@@ -3526,6 +3537,7 @@ final class Controller {
         askTimer?.invalidate()
         askTimer = nil
         asking = false
+        askIsTest = false
         guard let to = options.textTo else { return }
         if lock {
             EventLog.add(timedOut ? "No answer — locked" : "You answered YES — locked")
@@ -3537,6 +3549,32 @@ final class Controller {
             Bridge.emit(["type": "allowed"])
             textMe(to, message: "👍 OK, I'll leave it unlocked and won't ask again for 30 minutes.", photo: nil)
         }
+    }
+
+    /// Text "lock" from your phone any time: the Face ID lock comes up.
+    private var remoteRow = -1
+    private var remoteTimer: Timer?
+    func startRemoteLock() {
+        guard let to = options.textTo, options.faceUnlock else { return }
+        remoteRow = Replies.lastRow() ?? -1
+        remoteTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self = self, !self.asking else { return }
+            if self.remoteRow < 0 { self.remoteRow = Replies.lastRow() ?? -1; return }
+            let (words, last) = Replies.words(from: to, after: self.remoteRow)
+            self.remoteRow = last
+            if words.contains(where: { ["lock", "bloquear", "bloquea"].contains($0) }) && !self.softLocked {
+                EventLog.add("You texted LOCK")
+                self.enterSoftLock(reason: "You texted lock", stranger: false)
+                textMe(to, message: "🔒 Locked. Only your face opens it.", photo: nil)
+            }
+        }
+    }
+
+    /// Bbokari's "Try it" button: ask by text as if a stranger had sat down.
+    func testAsk() {
+        guard options.textTo != nil else { say("Set a number to text first (--text-me).", .alert); return }
+        askToLock(photo: nil)
+        askIsTest = asking
     }
 
     /// You came back while we were asking: never mind.
@@ -4042,6 +4080,7 @@ case .app:
             case "watch": c.setWatching(cmd["on"] as? Bool ?? !c.watching)
             case "lock": c.lockNowFromMenu()
             case "decoy": if let name = cmd["name"] as? String { c.setDecoy(name) }
+            case "testAsk": c.testAsk()
             default: break
             }
         }

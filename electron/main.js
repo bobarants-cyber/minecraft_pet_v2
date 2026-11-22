@@ -1116,6 +1116,7 @@ function faceAwayMenu() {
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
     { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); testText(n); } },
+    { label: '🧪 Try it: pretend a stranger is here', enabled: on && !!o.textMe, click: () => { faceAway?.command('testAsk'); send('say', { text: '📱 I texted you “Lock computer?” like a stranger was here. Answer Y and your Mac locks (look at the camera to open it), or N. You can also text “lock” any time.' }); } },
     { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
       { label: 'Text me “Lock computer?” and I answer Y or N', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
       { label: 'Lock right away (and text me)', type: 'radio', checked: o.askFirst === false, click: () => faSet({ askFirst: false }) },
