@@ -695,6 +695,7 @@ function startFaceAway() {
       } else faceAway?.command('answer', { lock });
     },
     onLock: () => { faceAway?.command('lock'); sendText(faOpts().textMe, '🔒 Locked. Only your face opens it.'); },
+    onFaceTest: () => faceTestByText(),
     onStatus: () => {
       if (!faceAwayRunning()) return sendText(faOpts().textMe, '🛡️ FaceAway is off right now, so I can’t take a photo.');
       faceAway?.command('snapshot');
@@ -1144,7 +1145,7 @@ function faceAwayMenu() {
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
     { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); testText(n); } },
-    ...(o.textMe ? [{ label: '💡 From your iPhone, text “test” for a photo of who’s here, or “lock” to lock', enabled: false }] : []),
+    ...(o.textMe ? [{ label: '💡 From your iPhone, text “test” (photo), “face test” (30 s check) or “lock”', enabled: false }] : []),
     { label: '🧪 Try it: pretend a stranger is here', enabled: on && !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); sendText(n, '🚨 FaceAway (test): someone who isn’t you is at your Mac. Lock computer? Reply Y or N.').then((r) => r.ok ? texting?.expect({ test: true }, 600) : send('say', { text: `📱 Couldn’t text you: ${r.text}`, error: true })); send('say', { text: '📱 I texted you “Lock computer?” like a stranger was here. Answer Y and your Mac locks (look at the camera to open it), or N. You can also text “lock” any time.' }); } },
     { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
       { label: 'Text me “Lock computer?” and I answer Y or N', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
@@ -1192,6 +1193,47 @@ function phoneWithCountry(raw) {
   if (d.length >= 7) setTimeout(() => send('say', { text: '📱 Add your country code in front of the number (like +34 for Spain), or the texts won’t arrive.', error: true }), 500);
   return t;
 }
+/** "face test" by text: runs FaceAway's live face test for 30 seconds and texts back what it saw. */
+let faceTesting = false;
+function faceTestByText() {
+  const to = faOpts().textMe;
+  if (!to || faceTesting) return;
+  if (!fs.existsSync(FACEAWAY_BIN)) return sendText(to, '🧪 FaceAway isn’t set up yet.');
+  faceTesting = true;
+  sendText(to, '🧪 Face test: 30 seconds, whoever is at the Mac should look at the camera…');
+  const p = spawn(FACEAWAY_BIN, ['--check'], { cwd: path.dirname(FACEAWAY_BIN) });
+  let out = '';
+  p.stdout.on('data', (d) => (out += d));
+  p.stderr.on('data', (d) => (out += d));
+  const done = () => {
+    faceTesting = false;
+    sendText(to, summarizeFaceTest(out));
+  };
+  p.on('error', () => { faceTesting = false; sendText(to, '🧪 The face test couldn’t start.'); });
+  p.on('close', done);
+  setTimeout(() => { try { p.kill('SIGINT'); } catch {} }, 30_000);
+}
+/** Counts who it saw and the distances, plus the last lines. */
+function summarizeFaceTest(out) {
+  const lines = out.split('\n').map((l) => l.trim()).filter((l) => /^\[\d\d:\d\d:\d\d\]/.test(l) && !/camera ready/i.test(l));
+  if (!lines.length) return '🧪 Face test: the camera didn’t give any results (is the lid open?).\n' + out.trim().split('\n').slice(-3).join('\n');
+  const counts = {}, dist = {};
+  let limit = null;
+  for (const l of lines) for (const part of l.replace(/^\[[^\]]*\]\s*/, '').split('|').map((x) => x.trim())) {
+    const who = /^no face/i.test(part) ? 'no face' : /^unsure/i.test(part) ? 'unsure' : /^STRANGER/.test(part) ? 'stranger' : part.split(' (')[0];
+    counts[who] = (counts[who] ?? 0) + 1;
+    const d = part.match(/distance ([\d.]+), limit ([\d.]+)/);
+    if (d) {
+      const name = who === 'stranger' ? `stranger (closest ${part.match(/closest: ([^,]+)/)?.[1] ?? '?'})` : who;
+      (dist[name] ??= []).push(Number(d[1]));
+      limit = d[2];
+    }
+  }
+  const seen = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${n}×`).join(', ');
+  const ranges = Object.entries(dist).map(([w, ds]) => `${w}: ${Math.min(...ds).toFixed(2)}–${Math.max(...ds).toFixed(2)}`).join('\n');
+  return `🧪 Face test (30 s)\nSeen: ${seen}${ranges ? `\nDistance (lower = more alike${limit ? `, counts as a match under ${limit}` : ''}):\n${ranges}` : ''}\n\nLast lines:\n${lines.slice(-10).map((l) => l.replace(/^\[([^\]]*)\]/, '$1')).join('\n')}`;
+}
+
 /** Sends a test iMessage to your phone through the Messages app (the same way FaceAway does). */
 function testText(to) {
   sendText(to, '🐝 Bbokari test: this is how FaceAway will ask “Lock computer?” You can answer Y or N.').then((r) => send('say', r.ok
