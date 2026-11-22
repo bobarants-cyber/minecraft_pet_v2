@@ -1216,8 +1216,18 @@ function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null, ownPal = n
 
 // ---------------- the loop ----------------
 let last = performance.now(), acc = 0;
+// Every frame is guarded: if one feature throws (a bug, a missing photo…), the error is reported once and the snow
+// keeps falling instead of stopping.
+const reported = new Set();
 function frame(now) {
   requestAnimationFrame(frame);
+  try { frameInner(now); } catch (e) {
+    const key = String(e?.message);
+    if (!reported.has(key)) { reported.add(key); console.error('snow frame error: ' + (e?.stack || e)); }
+    try { g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; } catch {}
+  }
+}
+function frameInner(now) {
   const minDt = cfg.saver ? 1000 / 30 : 0;
   if (now - last < minDt - 1) return;
   const dt = Math.min(0.05, (now - last) / 1000);

@@ -86,6 +86,15 @@ export function createSnow({ getSettings, applySettings, say }) {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.setIgnoreMouseEvents(true, { forward: true });
     win.loadFile(path.join(HERE, 'snow', 'snow.html'));
+    // problems go to a log (send it to Claude): ~/Library/Application Support/<app>/snow.log
+    const log = (line) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'snow.log'), `${new Date().toLocaleString()}  ${line}\n`); } catch {} };
+    log('snow started');
+    win.webContents.on('console-message', (e, lvl, msg) => { const level = e?.level ?? lvl, message = e?.message ?? msg; if (level === 'error' || level === 3) log(message); });
+    win.webContents.on('render-process-gone', (_e, d) => { // crashed: start it again
+      log('snow crashed: ' + d.reason);
+      const w = win; win = null; try { w?.destroy(); } catch {}
+      setTimeout(() => cfg().mode !== 'off' && start(), 1500);
+    });
     win.once('ready-to-show', () => {
       win.showInactive();
       push();
@@ -146,7 +155,11 @@ export function createSnow({ getSettings, applySettings, say }) {
     }
   };
 
-  app.whenReady().then(() => cfg().mode !== 'off' && start());
+  app.whenReady().then(() => {
+    const home = getSettings().home ?? {};
+    if (cfg().mode === 'off' && home.theme === 'winter' && (home.on || home.desktopTheme === 'winter')) set({ mode: 'on' }); // the Snowy cabin always snows
+    else if (cfg().mode !== 'off') start();
+  });
 
   return {
     get config() { return cfg(); },
