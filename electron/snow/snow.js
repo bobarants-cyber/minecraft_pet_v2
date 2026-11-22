@@ -77,9 +77,15 @@ function burst(x, y, n, vx = 0, vy = -120, spread = 160) {
 }
 
 // ---------------- windows from the helper ----------------
-host.onWins(({ w, f }) => {
+host.onWins(({ w, f, d }) => {
   const now = performance.now();
   const next = w.map(([id, x, y, ww, hh]) => ({ id, x, y, w: ww, h: hh }));
+  // the Dock, while it's showing, is the frontmost thing snow can land on (when it hides, its snow falls off)
+  if (d) {
+    let [x, y, ww, hh] = d;
+    if (dockTop && dockTop > y && dockTop < y + hh) { hh -= dockTop - y; y = dockTop; } // its visible top, not the magnify space
+    next.unshift({ id: 'dock', x, y, w: ww, h: hh, dock: true });
+  }
   const seen = new Set();
   for (const win of next) {
     seen.add(win.id);
@@ -553,27 +559,34 @@ function drawSleigh(dt) {
 
 // ---------------- drawing drifts ----------------
 function drawDrift(x0, y0, arr, shake = 0) {
+  // only where there's snow: each run of snowy columns is its own soft mound (nothing at all on a bare window)
   const n = arr.length;
   const jx = shake ? Math.sin(performance.now() / 18) * 3 * shake : 0;
-  g.beginPath();
-  g.moveTo(x0 - 3 + jx, y0 + 1);
-  let prevX = x0 - 3, prevY = y0 - Math.max(0, arr[0] - 1);
-  g.lineTo(prevX + jx, prevY);
-  for (let i = 1; i < n; i++) {
-    const x = x0 + i * COL, y = y0 - arr[i];
-    g.quadraticCurveTo(prevX + jx, prevY, (prevX + x) / 2 + jx, (prevY + y) / 2);
-    prevX = x; prevY = y;
+  const gr = g.createLinearGradient(0, y0 - MAXH, 0, y0);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.75, '#f3f7fd'); gr.addColorStop(1, '#dbe5f3');
+  let i = 0;
+  while (i < n) {
+    while (i < n && arr[i] < 0.8) i++;
+    if (i >= n) break;
+    const start = i;
+    while (i < n && arr[i] >= 0.8) i++;
+    const end = i - 1;
+    if (end - start < 1) continue;
+    g.beginPath();
+    let px = x0 + start * COL + jx, py = y0;
+    g.moveTo(px - 2, y0);
+    for (let k = start; k <= end; k++) {
+      const x = x0 + k * COL + jx, y = y0 - arr[k];
+      g.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2);
+      px = x; py = y;
+    }
+    g.quadraticCurveTo(px, py, px + 3, y0);
+    g.closePath();
+    g.fillStyle = gr;
+    g.shadowColor = 'rgba(40,60,100,0.22)'; g.shadowBlur = 5; g.shadowOffsetY = 1;
+    g.fill();
+    g.shadowColor = 'transparent';
   }
-  g.lineTo(x0 + (n - 1) * COL + 3 + jx, y0 - Math.max(0, arr[n - 1] - 1));
-  g.lineTo(x0 + (n - 1) * COL + 3 + jx, y0 + 1);
-  g.closePath();
-  const gr = g.createLinearGradient(0, y0 - MAXH, 0, y0 + 2);
-  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.75, '#f3f7fd'); gr.addColorStop(1, '#cfdcee');
-  g.fillStyle = gr;
-  g.shadowColor = 'rgba(40,60,100,0.25)'; g.shadowBlur = 6; g.shadowOffsetY = 2;
-  g.fill();
-  g.shadowColor = 'transparent';
-  g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1; g.stroke();
 }
 
 // ---------------- the loop ----------------
@@ -613,6 +626,7 @@ function frame(now) {
 
   // ground along the bottom (behind everything)
   drawDrift(0, groundBase(), ground);
+  { const dk = wins.find((w) => w.dock); if (dk) g.clearRect(dk.x, dk.y, dk.w, H - dk.y); }
   for (const s of snowmen) if (!s.on) s.draw(g);
   if (cfg.mode === 'on' && cfg.fx.piles) {
     for (let i = wins.length - 1; i >= 0; i--) {

@@ -1,6 +1,6 @@
 // Bbokari's snow helper: tells the snow overlay where your windows are, so snow can pile up on them.
 // It only reads each window's position and size (front to back), never what's in it, and needs no permission.
-// Prints one JSON line per tick:  {"w":[[id,x,y,w,h],...],"f":frontAppPid}
+// Prints one JSON line per tick:  {"w":[[id,x,y,w,h],...],"f":frontAppPid,"d":[x,y,w,h] or null (the Dock)}
 // Usage: snowHelper <pid to ignore (Bbokari)> <milliseconds between ticks>
 import AppKit
 import CoreGraphics
@@ -14,8 +14,21 @@ var lastLine = ""
 func tick() {
     guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return }
     var parts: [String] = []
+    var dock = "null"
+    let dockLevel = Int(CGWindowLevelForKey(.dockWindow))
+    let screenH = NSScreen.screens.first?.frame.height ?? 10000
     for w in list {
-        guard let layer = w[kCGWindowLayer as String] as? Int, layer == 0,
+        // the Dock (only while it's showing): snow piles on it
+        if let layer = w[kCGWindowLayer as String] as? Int, layer == dockLevel,
+           (w[kCGWindowOwnerName as String] as? String) == "Dock",
+           let bounds = w[kCGWindowBounds as String] as? NSDictionary,
+           let r = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+           r.height < 300, r.width > 50, r.minY < screenH - 4, dock == "null" {
+            dock = "[\(Int(r.origin.x)),\(Int(r.origin.y)),\(Int(r.width)),\(Int(r.height))]"
+            continue
+        }
+        // normal windows, plus floating ones (Quick Look previews, panels, picture in picture)
+        guard let layer = w[kCGWindowLayer as String] as? Int, layer >= 0, layer < dockLevel,
               let pid = w[kCGWindowOwnerPID as String] as? Int32, pid != ignorePid,
               let id = w[kCGWindowNumber as String] as? Int,
               let bounds = w[kCGWindowBounds as String] as? NSDictionary,
@@ -26,7 +39,7 @@ func tick() {
         if parts.count >= 24 { break }
     }
     let front = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-    let line = "{\"w\":[\(parts.joined(separator: ","))],\"f\":\(front)}"
+    let line = "{\"w\":[\(parts.joined(separator: ","))],\"f\":\(front),\"d\":\(dock)}"
     if line != lastLine {   // only when something changed
         lastLine = line
         print(line)
