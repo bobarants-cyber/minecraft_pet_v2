@@ -110,7 +110,13 @@ export function buildFaceAway(onLine = () => {}) {
     let err = '';
     p.stderr.on('data', (d) => { err += d; onLine(String(d)); });
     p.on('error', (e) => resolve({ ok: false, text: `Couldn’t run swiftc (${e.message}). Install the Xcode Command Line Tools once.` }));
-    p.on('close', (code) => { try { fs.writeFileSync(path.join(FACEAWAY_DIR, 'build.log'), err); } catch {} });
+    p.on('close', (code) => {
+      try { fs.writeFileSync(path.join(FACEAWAY_DIR, 'build.log'), err); } catch {}
+      // just the errors (with a few lines around each), easy to send to Claude
+      const lines = err.split('\n'), keep = [];
+      lines.forEach((l, i) => { if (/\berror:/.test(l)) keep.push(...lines.slice(i, i + 8), '---'); });
+      try { fs.writeFileSync(path.join(FACEAWAY_DIR, 'build-errors.txt'), keep.join('\n') || (code === 0 ? 'Built OK' : 'Failed, but no error lines: see build.log')); } catch {}
+    });
     p.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, text: err.split('\n').filter((l) => /error:/.test(l)).slice(0, 4).join('\n') || 'Build failed.' }));
   });
 }
