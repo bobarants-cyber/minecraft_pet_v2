@@ -126,7 +126,6 @@ export function runFaceAway(args, { input = null, onLine = () => {} } = {}) {
     p.stderr.on('data', take);
     if (input !== null) { p.stdin.write(input + '\n'); p.stdin.end(); }
     p.on('error', (e) => resolve({ ok: false, text: e.message }));
-    p.on('close', (code) => { try { fs.writeFileSync(path.join(FACEAWAY_DIR, 'build.log'), err); } catch {} });
     p.on('close', (code) => resolve({ ok: code === 0, text: out.trim() }));
   });
 }

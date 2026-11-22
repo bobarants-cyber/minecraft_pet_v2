@@ -683,7 +683,10 @@ function startFaceAway() {
   faceAway.start();
   if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) {
     // after an update FaceAway's code is newer than the program: rebuild it quietly first (your faces stay)
-    if (faceAwayStale()) buildFaceAway().then((r) => { if (!r.ok) send('say', { text: `FaceAway’s update didn’t build: ${r.text}`, error: true }); faStart(); });
+    if (faceAwayStale()) buildFaceAway().then((r) => {
+      if (!r.ok) { faLegacy = true; send('say', { text: `🛡️ FaceAway’s update didn’t build, so I’m running the older one for now. Send Claude what this Terminal command shows:\n tail -25 ~/FaceAway/build.log\n(${r.text.split('\n')[0].slice(0, 160)})`, error: true }); }
+      faStart();
+    });
     else faStart(); // starts with the pet
   } else if (settings.faceAwayAuto !== false && !settings.faceAwayTried) {
     // first time: build FaceAway for you (needs Apple's command line tools)
@@ -737,8 +740,26 @@ function faArgs() {
 }
 // FaceAway keeps running: if it stops on its own it's started again (up to 5 times in 2 minutes), and we say why.
 let faRestarts = [];
+// An older FaceAway (its update didn't build) doesn't know the new options: start it without them instead of crashing.
+let faLegacy = false;
+const NEW_FLAGS = new Set(['--guard', '--no-status-item', '--watch', '--ask-first']);
+function legacyArgs(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (NEW_FLAGS.has(args[i])) continue;
+    if (args[i] === '--ask-timeout') { i++; continue; }
+    out.push(args[i]);
+  }
+  return out;
+}
 function faStart() {
-  return startFaceAwayApp(faArgs(), (why, ranMs) => {
+  return startFaceAwayApp(faLegacy ? legacyArgs(faArgs()) : faArgs(), (why, ranMs) => {
+    if (!faLegacy && /unknown option/i.test(why)) {
+      faLegacy = true;
+      send('say', { text: '🛡️ The new FaceAway didn’t build, so I started the older one (without Face ID guard mode for now). Send Claude what this Terminal command shows:\n tail -25 ~/FaceAway/build.log', error: true });
+      setTimeout(faStart, 800);
+      return;
+    }
     const needsPassword = /password/i.test(why);
     faRestarts = faRestarts.filter((t) => Date.now() - t < 120000);
     if (!needsPassword && faRestarts.length < 5 && settings.faceAwayAuto !== false) {
