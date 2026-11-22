@@ -698,7 +698,18 @@ enum Intruders {
 }
 
 /// Sends you an iMessage (and the photo, if Messages allows it) through the Messages app.
+/// Set with --text-via-bridge: Bbokari sends the texts (it already may use Messages) and reads your replies.
+var textViaBridge = false
+
 func textMe(_ to: String, message: String, photo: URL?) {
+    if textViaBridge {
+        var ev: [String: Any] = ["type": "text", "message": message]
+        if let photo = photo { ev["photo"] = photo.path }
+        Bridge.emit(ev)
+        say("Asked Bbokari to text you.")
+        EventLog.add("Text sent via Bbokari")
+        return
+    }
     for keyword in ["participant", "buddy"] {   // "buddy" on macOS 12 and older
         var src = """
         tell application "Messages"
@@ -2735,6 +2746,7 @@ struct Options {
     var noStatusItem = false   // --no-status-item: no eye in the menu bar (Bbokari's menu runs FaceAway)
     var askFirst = false       // --ask-first: text "Lock computer?" and wait for YES / NO instead of locking at once
     var askTimeout: Double = 120 // --ask-timeout: no answer in this many seconds → lock (0 = never)
+    var textViaBridge = false  // --text-via-bridge: Bbokari sends the texts and reads your Y / N
 }
 
 let usage = """
@@ -2899,6 +2911,7 @@ func parseOptions() -> Options {
         case "--no-status-item": o.noStatusItem = true
         case "--ask-first": o.askFirst = true
         case "--ask-timeout": o.askTimeout = number(a)
+        case "--text-via-bridge": o.textViaBridge = true
         case "--home": o.home = true
         case "--home-only": o.mode = .homeOnly; o.home = true
         case "--panic-button": o.panicButton = true
@@ -3505,7 +3518,7 @@ final class Controller {
         guard let to = options.textTo, !asking else { return }
         asking = true
         askStarted = Date()
-        askRow = Replies.lastRow() ?? -1
+        askRow = textViaBridge ? 0 : (Replies.lastRow() ?? -1)
         var msg = "🚨 FaceAway: someone who isn't you is at your Mac (\(clock.string(from: Date()))). Lock computer? Reply Y or N."
         if options.askTimeout > 0 { msg += " If you don't answer in \(formatDuration(Int(options.askTimeout))), I'll lock it." }
         textMe(to, message: msg, photo: photo)
@@ -3521,7 +3534,9 @@ final class Controller {
 
     private func pollAnswer() {
         guard asking, let to = options.textTo else { return }
-        if askRow >= 0 {
+        if textViaBridge {
+            // Bbokari reads your reply and sends it back as an "answer" command
+        } else if askRow >= 0 {
             let (answer, last) = Replies.answer(from: to, after: askRow)
             askRow = last
             if let lock = answer { finishAsk(lock: lock, timedOut: false); return }
@@ -3555,7 +3570,7 @@ final class Controller {
     private var remoteRow = -1
     private var remoteTimer: Timer?
     func startRemoteLock() {
-        guard let to = options.textTo, options.faceUnlock else { return }
+        guard let to = options.textTo, options.faceUnlock, !textViaBridge else { return }
         remoteRow = Replies.lastRow() ?? -1
         remoteTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             guard let self = self, !self.asking else { return }
@@ -3568,6 +3583,12 @@ final class Controller {
                 textMe(to, message: "🔒 Locked. Only your face opens it.", photo: nil)
             }
         }
+    }
+
+    /// Your Y / N, read by Bbokari.
+    func answerFromBridge(lock: Bool) {
+        guard asking else { return }
+        finishAsk(lock: lock, timedOut: false)
     }
 
     /// Bbokari's "Try it" button: ask by text as if a stranger had sat down.
@@ -4033,6 +4054,7 @@ case .app:
         appOptions.lockAfter = 0
         if needle.isEmpty && appOptions.decoy == nil { appOptions.decoy = "school" }
     }
+    textViaBridge = options.textViaBridge   // before start(): Bbokari does the texting
     controller = Controller(options: appOptions, browser: browser, needle: needle, openURL: options.openURL,
                             people: people, watching: options.startWatching)
     withCamera {
@@ -4081,6 +4103,7 @@ case .app:
             case "lock": c.lockNowFromMenu()
             case "decoy": if let name = cmd["name"] as? String { c.setDecoy(name) }
             case "testAsk": c.testAsk()
+            case "answer": c.answerFromBridge(lock: cmd["lock"] as? Bool ?? true)
             default: break
             }
         }

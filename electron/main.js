@@ -30,6 +30,7 @@ import { fillTemplate } from './fillTemplate.js';
 import * as inbox from './inbox.js';
 import { FaceAwayBridge, buildFaceAway, runFaceAway, startFaceAwayApp, stopFaceAwayApp, faceAwayRunning, faceAwayStale, FACEAWAY_BIN } from './faceaway.js';
 import * as updater from './updater.js';
+import { createTexting, sendText } from './texting.js';
 import { Memory } from './memory.js';
 import { Diary } from './diary.js';
 import { looksLikePlan, makePlan, parseDue, planText } from './planner.js';
@@ -676,11 +677,26 @@ function pollIdle() {
 
 // ---------- FaceAway (Face ID lock, panic screen, themes): the pet reacts, and can drive it ----------
 let faceAway = null;
+let texting = null;
 const faceAwayState = { watching: false, theme: null, hiddenBefore: null, seen: false };
 function startFaceAway() {
   if (process.platform !== 'darwin') return;
   faceAway = new FaceAwayBridge(onFaceAwayEvent);
   faceAway.start();
+  // 📱 your Y / N (and "lock" any time) from your phone
+  texting = createTexting({
+    getTo: () => faOpts().textMe || null,
+    onAnswer: (lock, q) => {
+      const to = faOpts().textMe;
+      if (q.test) {
+        if (lock) faceAway?.command('lock');
+        sendText(to, lock ? '🔒 Locked! Only your face opens it. (That was a test.)' : '👍 OK, not locking. (That was a test.)');
+        send('say', { text: lock ? '📱 You answered Y: locking! Look at the camera to open it.' : '📱 You answered N: not locking.' });
+      } else faceAway?.command('answer', { lock });
+    },
+    onLock: () => { faceAway?.command('lock'); sendText(faOpts().textMe, '🔒 Locked. Only your face opens it.'); },
+    onNoAccess: () => send('say', { text: '📱 I can’t read your replies yet: Bbokari (Electron) needs Full Disk Access. 🛡️ FaceAway → 🤔 When it’s not me → 🔓 Let FaceAway read my replies.', error: true }),
+  });
   if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) {
     // after an update FaceAway's code is newer than the program: rebuild it quietly first (your faces stay)
     if (faceAwayStale()) buildFaceAway().then((r) => {
@@ -733,6 +749,7 @@ function faArgs() {
   // text, away → Face ID lock. Bbokari's menu bar icon runs it (no second eye in the menu bar).
   const a = ['--guard', '--no-status-item'];
   if (o.guard !== false) a.push('--watch');
+  if (o.textMe) a.push('--text-via-bridge'); // Bbokari sends the texts and reads your Y / N
   if (o.textMe && o.askFirst !== false) a.push('--ask-first', '--ask-timeout', String(o.askTimeout ?? 120));
   for (const [k, flag] of FA_FLAGS) if (o[k]) a.push(flag);
   for (const [k, flag] of FA_VALUES) if (o[k] !== undefined && o[k] !== '') a.push(flag, String(o[k]));
@@ -744,7 +761,7 @@ function faArgs() {
 let faRestarts = [];
 // An older FaceAway (its update didn't build) doesn't know the new options: start it without them instead of crashing.
 let faLegacy = false;
-const NEW_FLAGS = new Set(['--guard', '--no-status-item', '--watch', '--ask-first']);
+const NEW_FLAGS = new Set(['--guard', '--no-status-item', '--watch', '--ask-first', '--text-via-bridge']);
 function legacyArgs(args) {
   const out = [];
   for (let i = 0; i < args.length; i++) {
@@ -860,6 +877,8 @@ function onFaceAwayEvent(ev) {
     faceAwayState.hiddenBefore = null;
   }
   if (ev.type === 'watching') faceAwayState.watching = !!ev.on;
+  if (ev.type === 'text' && faOpts().textMe) sendText(faOpts().textMe, ev.message, ev.photo).then((r) => !r.ok && send('say', { text: `📱 FaceAway couldn’t text you: ${r.text}`, error: true }));
+  if (ev.type === 'asking') texting?.expect({ test: false }, (Number(faOpts().askTimeout ?? 120) || 600) + 60);
   if (ev.type === 'needFullDisk' && !faceAwayState.toldFullDisk) { faceAwayState.toldFullDisk = true; send('say', { text: '📱 I texted you “Lock computer?”, but I can’t read your answer yet. 🛡️ FaceAway → 🤔 When it’s not me → 🔓 Let FaceAway read my replies shows how (one time).', error: true }); }
   if (ev.type === 'theme') faceAwayState.theme = ev.name ?? null;
   if (ev.type === 'decoy') faceAwayState.decoy = ev.name ?? null;
@@ -1116,7 +1135,7 @@ function faceAwayMenu() {
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
     { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); testText(n); } },
-    { label: '🧪 Try it: pretend a stranger is here', enabled: on && !!o.textMe, click: () => { faceAway?.command('testAsk'); send('say', { text: '📱 I texted you “Lock computer?” like a stranger was here. Answer Y and your Mac locks (look at the camera to open it), or N. You can also text “lock” any time.' }); } },
+    { label: '🧪 Try it: pretend a stranger is here', enabled: on && !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); sendText(n, '🚨 FaceAway (test): someone who isn’t you is at your Mac. Lock computer? Reply Y or N.').then((r) => r.ok ? texting?.expect({ test: true }, 600) : send('say', { text: `📱 Couldn’t text you: ${r.text}`, error: true })); send('say', { text: '📱 I texted you “Lock computer?” like a stranger was here. Answer Y and your Mac locks (look at the camera to open it), or N. You can also text “lock” any time.' }); } },
     { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
       { label: 'Text me “Lock computer?” and I answer Y or N', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
       { label: 'Lock right away (and text me)', type: 'radio', checked: o.askFirst === false, click: () => faSet({ askFirst: false }) },
@@ -1165,20 +1184,15 @@ function phoneWithCountry(raw) {
 }
 /** Sends a test iMessage to your phone through the Messages app (the same way FaceAway does). */
 function testText(to) {
-  const q = (x) => '"' + String(x).replace(/["\\]/g, '\\$&') + '"';
-  const script = `tell application "Messages"
-    set svc to 1st account whose service type = iMessage
-    send ${q('🐝 Bbokari test: this is how FaceAway will ask “Lock computer?” You can answer Y or N.')} to participant ${q(to)} of svc
-  end tell`;
-  execFile('osascript', ['-e', script], (err, _o, e) => send('say', err
-    ? { text: `I couldn’t send it: ${String(e || err.message).split('\n')[0].slice(0, 160)}. Is Messages signed in with your Apple ID? (The first time, macOS asks if Bbokari may control Messages: click OK.)`, error: true }
-    : { text: `📱 Sent! Check your iPhone for the test text.` }));
+  sendText(to, '🐝 Bbokari test: this is how FaceAway will ask “Lock computer?” You can answer Y or N.').then((r) => send('say', r.ok
+    ? { text: '📱 Sent! Check your iPhone for the test text.' }
+    : { text: `I couldn’t send it: ${r.text}. Is Messages signed in? (The first time, macOS asks if Bbokari may control Messages: click OK.)`, error: true }));
 }
 /** Reading your YES / NO replies needs Full Disk Access (Messages keeps them in a protected file). */
 function fullDiskHelp() {
   dialog.showMessageBox({ type: 'info', buttons: ['Open Full Disk Access', 'Later'], defaultId: 0, message: 'Let FaceAway read your YES / NO replies',
-    detail: 'FaceAway texts you “Lock computer?” through Messages. To see your answer it has to read Messages on this Mac, which macOS only allows with Full Disk Access.\n\n'
-      + 'In the list, click + and add both:\n• ~/FaceAway/faceaway  (press ⌘⇧G and paste ~/FaceAway)\n• Electron  (in your minecraft_pet_v2 folder → node_modules → electron → dist)\n\nThen turn FaceAway off and on (or restart Bbokari).\n\n'
+    detail: 'Bbokari texts you “Lock computer?” through Messages. To see your answer it has to read Messages on this Mac, which macOS only allows with Full Disk Access.\n\n'
+      + 'In the list, turn on Electron (if it isn’t there, click + and add it: your minecraft_pet_v2 folder → node_modules → electron → dist → Electron).\n\nThen restart Bbokari (⌃⌥Q and open it again).\n\n'
       + 'Without it you still get the text, and FaceAway locks if you don’t answer in time.' })
     .then((r) => r.response === 0 && shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'));
 }
