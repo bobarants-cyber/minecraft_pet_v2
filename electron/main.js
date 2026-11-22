@@ -1155,7 +1155,7 @@ function faceAwayMenu() {
       { label: '👤 Add a face…', click: () => faceAwayAddFace() },
       { label: '👥 Who can use my Mac', click: faceAwayPeople },
       { label: '🗑️ Remove someone…', click: faceAwayRemove },
-      { label: '🔍 Live face test', click: () => (faceAwayRunning() && stopFaceAwayApp(), runFaceAway(['--check']).then(() => settings.faceAwayAuto !== false && faStart())) },
+      { label: '🔍 Live face test (opens Terminal)', click: () => execFile('osascript', ['-e', 'tell application "Terminal"\n activate\n do script "clear; echo Look at the camera. Press Control+C to stop.; ~/FaceAway/faceaway --check"\nend tell']) },
     ] },
     { label: '🔑 Make Face ID my only lock (no password)…', click: faceIdOnlyLock },
     { label: '⚙️ More', submenu: [
