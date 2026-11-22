@@ -12,20 +12,21 @@ const HERE = path.dirname(new URL(import.meta.url).pathname);
 export const SNOW_DEFAULTS = {
   mode: 'off', // 'off' | 'on' (over everything) | 'desktop' (only on the desktop, behind windows)
   amount: 'medium', // 'light' | 'medium' | 'heavy'
-  fx: { piles: true, snowmen: true, fights: true, sleigh: true, wind: true },
+  fx: { piles: true, snowmen: true, fights: true, sleigh: true, wind: true, plow: true },
   saver: false, // battery saver: 30 fps
 };
 
 /** What's on the desktop that snow can land on: the Winter night scene and Bbokari's own widgets. */
 function deskInfo(settings, bounds) {
   const home = settings.home ?? {};
-  const winter = (home.on && home.wallpaper?.value === 'winter') || (!home.on && home.desktopTheme === 'winter');
+  const winter = (home.on && home.wallpaper?.value === 'winter') || (!home.on && home.desktopTheme === 'winterArt');
+  const cabin = (home.on && home.wallpaper?.type === 'live' && home.wallpaper?.value === 'cabin') || (!home.on && home.desktopTheme === 'winter');
   const W = bounds.width, H = bounds.height;
   const widgets = home.on ? (home.widgets ?? []).map((w) => {
     const ww = Math.min(w.w, W - 16), hh = Math.min(w.h, H - 16);
     return { id: w.id, x: Math.max(8, Math.min(W - ww - 8, w.x * W)), y: Math.max(8, Math.min(H - hh - 8, w.y * H)), w: ww, h: hh };
   }) : [];
-  return { scene: winter ? 'winter' : null, widgets, radius: home.glass?.radius ?? 28 };
+  return { scene: cabin ? 'cabin' : winter ? 'winter' : null, widgets, radius: home.glass?.radius ?? 28 };
 }
 
 export function createSnow({ getSettings, applySettings, say }) {
@@ -153,5 +154,6 @@ export function createSnow({ getSettings, applySettings, say }) {
     blizzard: () => { if (cfg().mode === 'off') set({ mode: 'on' }); setTimeout(() => win?.webContents.send('snow:do', 'blizzard'), 600); },
     sleigh: () => { if (cfg().mode === 'off') set({ mode: 'on' }); setTimeout(() => win?.webContents.send('snow:do', 'sleigh'), 600); },
     wind: () => win?.webContents.send('snow:do', 'wind'),
+    plow: () => { if (cfg().mode === 'off') set({ mode: 'on' }); setTimeout(() => win?.webContents.send('snow:do', 'plow'), 600); },
   };
 }

@@ -8,5 +8,7 @@ export const THEMES = {
   sunset: { label: '🌅 Sunset', wallpaper: { type: 'gradient', value: 'sunset' }, glass: { tint: { r: 255, g: 140, b: 120, a: 0.18 }, blurRadius: 16 }, textDark: false, pet: 'sunset' },
   aurora: { label: '🌌 Aurora', wallpaper: { type: 'animated', value: 'aurora' }, glass: { blurRadius: 26, tint: { r: 255, g: 255, b: 255, a: 0.12 }, refDispersion: 14 }, textDark: false, pet: 'midnight' },
   ocean: { label: '🌊 Ocean', wallpaper: { type: 'animated', value: 'waves' }, glass: { blurRadius: 18, refDispersion: 10 }, textDark: false, pet: 'glass' },
-  winter: { label: '❄️ Winter night', wallpaper: { type: 'animated', value: 'winter' }, glass: { blurRadius: 18 }, textDark: false, pet: 'midnight' },
+  // a real photo brought to life (home/wallpapers.js liveCabin): swaying forest, campfire, lamps; real snow piles on it
+  winter: { label: '❄️ Snowy cabin', wallpaper: { type: 'live', value: 'cabin' }, glass: { blurRadius: 22, tint: { r: 20, g: 30, b: 60, a: 0.25 }, glareFactor: 60 }, textDark: false, pet: 'midnight', photo: 'cabin' },
+  winterArt: { label: '🌲 Winter night (drawn)', wallpaper: { type: 'animated', value: 'winter' }, glass: { blurRadius: 18 }, textDark: false, pet: 'midnight' },
 };

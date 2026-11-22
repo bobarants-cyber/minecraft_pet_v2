@@ -72,7 +72,7 @@ const saveWidgets = () => save({ widgets: config.widgets });
 async function loadWallpaper() {
   // the wallpaper is its own sharp layer at the screen's real resolution (moving ones at 1x, to stay smooth)
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  const animated = config.wallpaper?.type === 'animated';
+  const animated = config.wallpaper?.type === 'animated' || config.wallpaper?.type === 'live';
   const k = animated ? 1 : dpr;
   wallpaper = createWallpaper(config.wallpaper, innerWidth * k, innerHeight * k, { animatedScale: 1 });
   await wallpaper.ready;
@@ -270,6 +270,7 @@ function applyLook(c) {
 async function applyTheme(name, panel) {
   const t = THEMES[name];
   if (!t) return;
+  if (t.photo) { await host.action('setTheme', name); if (panel) setTimeout(() => PANELS.themes(panel), 800); return; } // Bbokari finds the photo
   save({ theme: name, wallpaper: t.wallpaper, glass: { ...t.glass }, textDark: t.textDark }, true);
   applyLook(config);
   await loadWallpaper();

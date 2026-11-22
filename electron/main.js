@@ -848,6 +848,7 @@ function setupHomeScreen() {
             return buildTray();
           }
           case 'desktopPicture': return setDesktopPicture(arg);
+          case 'setTheme': return homeScreen.setTheme(arg);
           case 'deskOn': homeScreen.setOn(!!arg); return buildTray();
           default: return null;
         }
@@ -880,12 +881,14 @@ function snowMenu() {
     { label: '🌨 Start a blizzard', click: () => snow.blizzard() },
     { label: '🛷 Send the sleigh', click: () => snow.sleigh() },
     { label: '💨 Blow it away', enabled: c.mode !== 'off', click: () => snow.wind() },
+    { label: '🚜 Send the snowplow', click: () => snow.plow() },
     { type: 'separator' },
     fx('piles', 'Snow piles up on windows'),
     fx('snowmen', 'Snowmen move in'),
     fx('fights', 'Snowball fights'),
     fx('sleigh', 'Sleigh when I switch apps'),
     fx('wind', 'Shake the mouse to clear it'),
+    fx('plow', 'Snowplow comes by now and then'),
     { label: 'Battery saver (30 fps)', type: 'checkbox', checked: !!c.saver, click: (i) => snow.set({ saver: i.checked }) },
     { type: 'separator' },
     { label: 'Tip: drag along the snow to roll a snowball, throw it at a window. Stack 3 for a snowman!', enabled: false },
@@ -900,6 +903,7 @@ function snowChat(text) {
   if (/snow.*(only|just).*desktop|desktop.*only.*snow/.test(t)) { snow.set({ mode: 'desktop' }); return '❄️ Snow only on the desktop now (behind your windows).'; }
   if (/^(start a |a )?blizzard$/.test(t)) { snow.blizzard(); return '🌨 Blizzard!'; }
   if (/^(send|call)( the| a)? (sleigh|santa|reindeer)$/.test(t)) { snow.sleigh(); return '🛷 Here comes the sleigh!'; }
+  if (/^((send|call)( the| a)? )?(snow ?plow|plow|plough|snow ?plough)( truck)?$/.test(t)) { snow.plow(); return '🚜 Here comes the snowplow!'; }
   return null;
 }
 
@@ -965,9 +969,9 @@ function homeChat(text) {
     homeScreen.openFront();
     return `🏠 Your home screen! Press Esc to go back${homeKey ? ` (or ${homeKey.replace('Control+', '⌃').replace('Alt+', '⌥').replace('Shift+', '⇧')} any time)` : ''}, double-click the background to edit.`;
   }
-  const th = t.match(/^(?:(?:set|change|switch|use)(?: the| my)?(?: home ?screen)? theme to |(?:use |put on )?(?:the )?)(clean|liquid glass|glass|hacker|midnight|sunset|aurora|ocean|winter(?: night)?)(?: theme| mode| home ?screen)?$/);
-  if (th && (/theme|mode|home|glass|hacker|aurora/.test(t))) {
-    const name = { 'liquid glass': 'glass', 'winter night': 'winter' }[th[1]] ?? th[1];
+  const th = t.match(/^(?:(?:set|change|switch|use)(?: the| my)?(?: home ?screen)? theme to |(?:use |put on )?(?:the )?)(clean|liquid glass|glass|hacker|midnight|sunset|aurora|ocean|winter(?: night)?|snowy cabin|cabin)(?: theme| mode| home ?screen)?$/);
+  if (th && (/theme|mode|home|glass|hacker|aurora|cabin/.test(t))) {
+    const name = { 'liquid glass': 'glass', 'winter night': 'winter', cabin: 'winter', 'snowy cabin': 'winter' }[th[1]] ?? th[1];
     homeScreen.setTheme(name);
     return `🎨 ${THEMES[name].label} is on your desktop now${name === 'winter' ? ', and it’s snowing ❄️' : ''}! (Menu → 🏠 Home screen → ↩️ Back to my own wallpaper to undo.)`;
   }

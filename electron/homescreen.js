@@ -103,6 +103,20 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
   const bounds = () => screen.getPrimaryDisplay().bounds;
   const prefs = { preload: path.join(HERE, 'preload.cjs'), contextIsolation: true, backgroundThrottling: true };
 
+  /** The photo for a photo theme (e.g. the Snowy cabin): asks you to pick it the first time, then keeps a copy. */
+  async function themePhoto(key) {
+    const keep = path.join(app.getPath('userData'), 'home-photos', `theme-${key}.jpg`);
+    if (fs.existsSync(keep)) return keep;
+    const r = await dialog.showOpenDialog({
+      title: 'Choose the snowy cabin photo (snowy-cabin.jpg)', message: 'Pick the snowy cabin photo Claude sent you (snowy-cabin.jpg).',
+      properties: ['openFile'], filters: [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    fs.mkdirSync(path.dirname(keep), { recursive: true });
+    fs.writeFileSync(keep, nativeImage.createFromPath(r.filePaths[0]).toJPEG(95));
+    return keep;
+  }
+
   // If a home screen page crashes (e.g. the graphics chip resets), reload it with simple CSS glass instead.
   let cssOnly = false;
   function guard(w, mode) {
@@ -240,10 +254,16 @@ export function createHomeScreen({ getSettings, applySettings, data, say }) {
     get saver() { return home().saver; },
     get theme() { return home().theme ?? null; },
     /** Picks a theme (wallpaper + glass + text) and shows the home screen. */
-    setTheme(name) {
+    async setTheme(name) {
       const t = THEMES[name];
       if (!t) return false;
-      save({ theme: name, wallpaper: t.wallpaper, glass: { ...t.glass }, textDark: t.textDark });
+      let wallpaper = t.wallpaper;
+      if (t.photo) { // a photo theme: the photo lives next to the settings (picked once)
+        const src = await themePhoto(t.photo);
+        if (!src) return false;
+        wallpaper = { ...t.wallpaper, src };
+      }
+      save({ theme: name, wallpaper, glass: { ...t.glass }, textDark: t.textDark });
       data.action?.('theme', name);
       // the theme goes on your real desktop (behind your windows), not in a window on top
       if (!home().on) { save({ on: true }); showDesk(); }

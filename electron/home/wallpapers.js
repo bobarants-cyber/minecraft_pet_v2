@@ -2,6 +2,7 @@
 // Everything is drawn into a canvas that the Liquid Glass renderer uses as its background.
 
 import { winterLayout, pineTiers, cabinRoof } from './winterScene.js';
+import { PHOTO_W, PHOTO_H, coverMap, LIGHTS, FIRE, CABIN, HORIZON, windAt } from './cabinScene.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -42,7 +43,7 @@ function paintGradient(g, w, h, spec) {
 
 /** A wallpaper: { canvas, animated, draw(t), ready }. spec = { type: 'gradient' | 'animated' | 'photo', value }. */
 export function createWallpaper(spec, width, height, { animatedScale = 0.5 } = {}) {
-  const scale = spec?.type === 'animated' ? animatedScale : 1; // moving ones can be drawn smaller
+  const scale = spec?.type === 'animated' || spec?.type === 'live' ? animatedScale : 1; // moving ones can be drawn smaller
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(2, Math.round(width * scale));
   canvas.height = Math.max(2, Math.round(height * scale));
@@ -64,6 +65,8 @@ export function createWallpaper(spec, width, height, { animatedScale = 0.5 } = {
     });
     return wp;
   }
+
+  if (spec?.type === 'live') return liveCabin(wp, g, W, H, spec);
 
   if (spec?.type === 'animated') {
     wp.animated = true;
@@ -197,5 +200,155 @@ export function createWallpaper(spec, width, height, { animatedScale = 0.5 } = {
   }
 
   paintGradient(g, W, H, GRADIENTS[spec?.value] ?? GRADIENTS.dawn);
+  return wp;
+}
+
+
+// ---------------- 🏡 the Snowy cabin: a real photo, brought to life ----------------
+// The forest sways in the wind (strips of the photo shift a little, more at the treetops, never the cabin), clumps of
+// snow drop from branches, the campfire burns (layered flames, embers, smoke, a glow that flickers on the snow), and
+// the cabin's lamps glow. The falling snow itself is the real snow (snow/snow.js), which piles on the roof and rails.
+function glowSprite(stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  for (const [o, col] of stops) gr.addColorStop(o, col);
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+  return c;
+}
+
+function liveCabin(wp, g, W, H, spec) {
+  wp.animated = true;
+  const img = new Image();
+  const m = coverMap(W, H);
+  const P = (x, y) => [m.ox + x * m.s, m.oy + y * m.s];
+  wp.ready = new Promise((resolve) => {
+    img.onload = resolve;
+    img.onerror = () => { paintGradient(g, W, H, GRADIENTS.midnight); wp.draw = () => {}; resolve(); };
+    const src = spec.src || '';
+    img.src = src.startsWith('/') ? 'file://' + encodeURI(src) : src;
+  });
+
+  // flames: three glowing layers (white-hot core → orange → deep red), drawn additively
+  const core = glowSprite([[0, 'rgba(255,250,215,1)'], [0.4, 'rgba(255,214,120,0.85)'], [1, 'rgba(255,160,40,0)']]);
+  const mid = glowSprite([[0, 'rgba(255,190,70,0.95)'], [0.5, 'rgba(255,120,20,0.6)'], [1, 'rgba(220,60,0,0)']]);
+  const outer = glowSprite([[0, 'rgba(230,80,10,0.7)'], [0.6, 'rgba(150,30,0,0.3)'], [1, 'rgba(90,10,0,0)']]);
+  const smokeS = glowSprite([[0, 'rgba(150,155,170,0.5)'], [1, 'rgba(120,125,140,0)']]);
+  const warm = glowSprite([[0, 'rgba(255,190,110,1)'], [0.35, 'rgba(255,160,80,0.45)'], [1, 'rgba(255,140,60,0)']]);
+  const flames = [], embers = [], smoke = [], clumps = [];
+  let last = 0;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // the forest = everything above the horizon except the cabin
+  const forestClip = () => {
+    g.beginPath();
+    g.rect(0, 0, W, m.oy + HORIZON * m.s);
+    const c0 = P(...CABIN[0]);
+    g.moveTo(c0[0], c0[1]);
+    for (const pt of CABIN.slice(1)) g.lineTo(...P(...pt));
+    g.closePath();
+    g.clip('evenodd');
+  };
+
+  wp.draw = (t) => {
+    if (!img.complete || !img.naturalWidth) return;
+    const dt = Math.min(0.1, Math.max(0, t - last)); last = t;
+    const now = Date.now() / 1000; // shared clock with the snow window (same wind)
+    const wind = windAt(now);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.drawImage(img, m.ox, m.oy, PHOTO_W * m.s, PHOTO_H * m.s);
+
+    // 🌲 trees in the wind: thin horizontal strips shift sideways, most at the top, smoothly varying
+    g.save();
+    forestClip();
+    const step = 3;
+    for (let y = 0; y < HORIZON; y += step) {
+      const k = Math.pow(1 - y / HORIZON, 1.6); // treetops move, trunks at the bottom don't
+      const dx = (wind * 3.2 + Math.sin(now * 1.7 + y * 0.045) * 0.9 * wind + Math.sin(now * 3.1 + y * 0.13) * 0.35) * k;
+      if (Math.abs(dx) < 0.05) continue;
+      g.drawImage(img, 0, y, PHOTO_W, step + 1, m.ox + dx * m.s, m.oy + y * m.s, PHOTO_W * m.s, (step + 1) * m.s);
+    }
+    g.restore();
+
+    // ❄️ now and then a clump of snow drops off a branch (more in gusts)
+    if (Math.random() < dt * (0.25 + wind * 0.5)) {
+      let x, y;
+      for (let tries = 0; tries < 6; tries++) { x = rnd(0, PHOTO_W); y = rnd(40, HORIZON - 60); if (!(x > 552 && x < 1120 && y > 110)) break; }
+      for (let i = 0; i < 14; i++) clumps.push({ x: x + rnd(-6, 6), y: y + rnd(-3, 3), vx: rnd(-8, 8) + wind * 12, vy: rnd(-10, 10), r: rnd(0.8, 2.2), life: rnd(1.2, 2.2) });
+    }
+    g.fillStyle = 'rgba(230,236,250,0.9)';
+    for (let i = clumps.length - 1; i >= 0; i--) {
+      const c = clumps[i];
+      c.vy += 160 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.life -= dt;
+      if (c.life <= 0 || c.y > HORIZON + 40) { clumps.splice(i, 1); continue; }
+      const [X, Y] = P(c.x, c.y);
+      g.globalAlpha = Math.min(1, c.life);
+      g.beginPath(); g.arc(X, Y, c.r * m.s, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+
+    // 🔥 the campfire
+    const fx = FIRE.x, fy = FIRE.y;
+    // a few tongues per frame (too many add up to a white blob): each a thin, tall flicker
+    if (Math.random() < 0.85) flames.push({ x: fx + rnd(-FIRE.w * 0.32, FIRE.w * 0.32), y: fy + rnd(-3, 2), vx: rnd(-5, 5), vy: -rnd(70, 125), life: 0, max: rnd(0.35, 0.75), size: rnd(5, 10) });
+    if (Math.random() < 0.5) flames.push({ x: fx + rnd(-FIRE.w * 0.2, FIRE.w * 0.2), y: fy - rnd(2, 8), vx: rnd(-3, 3), vy: -rnd(40, 70), life: 0, max: rnd(0.25, 0.45), size: rnd(8, 13), base: true });
+    if (Math.random() < dt * 8) embers.push({ x: fx + rnd(-10, 10), y: fy - rnd(10, 40), vx: rnd(-14, 14), vy: -rnd(40, 90), life: 0, max: rnd(1.2, 2.6), ph: rnd(0, 6) });
+    if (Math.random() < dt * 5) smoke.push({ x: fx + rnd(-8, 8), y: fy - FIRE.h * 0.8, vx: rnd(-4, 4) + wind * 6, vy: -rnd(14, 26), life: 0, max: rnd(3, 5), size: rnd(14, 24) });
+    const flick = 0.85 + 0.15 * Math.sin(now * 11.3) * Math.sin(now * 7.1 + 1.2) + Math.random() * 0.06;
+    // the warm light on the snow around the pit
+    g.globalCompositeOperation = 'lighter';
+    {
+      const [X, Y] = P(fx, fy - 10), R = 210 * m.s * flick;
+      g.globalAlpha = 0.33 * flick;
+      g.drawImage(warm, X - R, Y - R * 0.75, R * 2, R * 1.5);
+    }
+    // smoke (normal blending, faint)
+    g.globalCompositeOperation = 'source-over';
+    for (let i = smoke.length - 1; i >= 0; i--) {
+      const s = smoke[i];
+      s.life += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.size += dt * 9;
+      if (s.life > s.max) { smoke.splice(i, 1); continue; }
+      const k = s.life / s.max, [X, Y] = P(s.x, s.y), R = s.size * m.s;
+      g.globalAlpha = 0.16 * Math.sin(Math.PI * k);
+      g.drawImage(smokeS, X - R, Y - R, R * 2, R * 2);
+    }
+    // flames, additive: older particles cool from white-yellow to orange to red and shrink as they rise
+    g.globalCompositeOperation = 'lighter';
+    for (let i = flames.length - 1; i >= 0; i--) {
+      const f = flames[i];
+      f.life += dt;
+      const k = f.life / f.max;
+      if (k >= 1) { flames.splice(i, 1); continue; }
+      f.vx += (fx - f.x) * 1.8 * dt + Math.sin(now * 9 + f.y * 0.2) * 20 * dt + wind * 6 * dt; // drawn to the middle, licking
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      const [X, Y] = P(f.x, f.y), R = f.size * (1 - k * 0.75) * m.s;
+      const spr = f.base ? (k < 0.5 ? core : mid) : k < 0.25 ? core : k < 0.6 ? mid : outer;
+      g.globalAlpha = (k < 0.12 ? k / 0.12 : 1 - (k - 0.12) / 0.88) * (f.base ? 0.32 : 0.42);
+      g.drawImage(spr, X - R * 0.7, Y - R * 2.2, R * 1.4, R * 3.2); // narrow and tall, like a tongue of flame
+    }
+    // embers drifting up
+    for (let i = embers.length - 1; i >= 0; i--) {
+      const e = embers[i];
+      e.life += dt;
+      if (e.life > e.max) { embers.splice(i, 1); continue; }
+      e.x += (e.vx + Math.sin(now * 3 + e.ph) * 12 + wind * 8) * dt; e.y += e.vy * dt;
+      const [X, Y] = P(e.x, e.y);
+      g.globalAlpha = (1 - e.life / e.max) * (0.6 + 0.4 * Math.sin(now * 20 + e.ph));
+      g.fillStyle = '#ffcf7a';
+      g.beginPath(); g.arc(X, Y, 1.1 * m.s, 0, 7); g.fill();
+    }
+    // 💡 the cabin's lamps: a soft, living glow
+    for (const L of LIGHTS) {
+      const [X, Y] = P(L.x, L.y);
+      const f = 1 + L.flicker * (Math.sin(now * 13 + L.x) * 0.6 + (Math.random() - 0.5));
+      const R = L.r * m.s * (0.96 + 0.04 * f);
+      g.globalAlpha = L.a * 0.45 * f;
+      g.drawImage(warm, X - R, Y - R, R * 2, R * 2);
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+  };
   return wp;
 }
