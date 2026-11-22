@@ -684,10 +684,12 @@ function startFaceAway() {
   if (settings.faceAwayAuto !== false && fs.existsSync(FACEAWAY_BIN)) {
     // after an update FaceAway's code is newer than the program: rebuild it quietly first (your faces stay)
     if (faceAwayStale()) buildFaceAway().then((r) => {
-      if (!r.ok) { faLegacy = true; send('say', { text: `🛡️ FaceAway’s update didn’t build, so I’m running the older one for now. Send Claude what this Terminal command shows:\n tail -25 ~/FaceAway/build.log\n(${r.text.split('\n')[0].slice(0, 160)})`, error: true }); }
-      faStart();
+      if (!r.ok) { faLegacy = true; send('say', { text: `🛡️ FaceAway’s update didn’t build, so I’m running the older one for now. Send Claude what this Terminal command shows:\n cat ~/FaceAway/build-errors.txt\n(${r.text.split('\n')[0].slice(0, 160)})`, error: true }); }
+      // an older FaceAway may still be running from before: replace it with the new one
+      stopFaceAwayApp();
+      setTimeout(faStart, 800);
     });
-    else faStart(); // starts with the pet
+    else { stopFaceAwayApp(); setTimeout(faStart, 800); } // starts with the pet (fresh, so it gets today's settings)
   } else if (settings.faceAwayAuto !== false && !settings.faceAwayTried) {
     // first time: build FaceAway for you (needs Apple's command line tools)
     applySettings({ faceAwayTried: true });
@@ -843,8 +845,9 @@ async function faceAwayBuild() {
   send('say', { text: '🔨 Building FaceAway… (about a minute)' });
   const r = await buildFaceAway();
   if (!r.ok) return send('say', { text: `Build problem:\n${r.text}`, error: true });
-  stopFaceAwayApp(); faStart();
-  send('say', { text: '✅ FaceAway built and started with Glance’s face recognition built in. Re-add your face once (🛡️ FaceAway → 👤 Add a face…), because the new recognition needs new samples.' });
+  faLegacy = false;
+  stopFaceAwayApp(); setTimeout(faStart, 800);
+  send('say', { text: '✅ FaceAway rebuilt and restarted.' });
 }
 function onFaceAwayEvent(ev) {
   faceAwayState.seen = true;
