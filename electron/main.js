@@ -43,7 +43,8 @@ import * as tickets from './tickets.js';
 import { createHomeScreen, SAVERS, THEMES } from './homescreen.js';
 // If the graphics process ever crashes (heavy WebGL), let Chromium restart it instead of quitting the whole app.
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
-import { createSnow } from './snow.js';
+import { createSnow, deskInfo } from './snow.js';
+import { coverMap, FIRE } from './home/cabinScene.js';
 import { weatherData } from './skills.js';
 import http from 'node:http';
 import os from 'node:os';
@@ -890,6 +891,7 @@ function snowMenu() {
     fx('wind', 'Shake the mouse to clear it'),
     fx('plow', 'Snowplow comes by now and then'),
     { label: 'Battery saver (30 fps)', type: 'checkbox', checked: !!c.saver, click: (i) => snow.set({ saver: i.checked }) },
+    { label: '🧣 Bbokari gets cold (snow hat, warms up by the fire)', type: 'checkbox', checked: settings.winterPet !== false, click: (i) => applySettings({ winterPet: i.checked }) },
     { type: 'separator' },
     { label: 'Tip: hold ⌥ Option and drag along snow to roll a snowball. Stack 3 for a snowman!', enabled: false },
   ];
@@ -2891,6 +2893,17 @@ app.whenReady().then(() => {
   });
   setupHomeScreen();
   snow = createSnow({ getSettings: () => settings, applySettings: (p) => (applySettings(p), buildTray()), say: (text, error) => send('say', { text, error }) });
+  // ❄️ Winter Bbokari: while it snows he wears a snow hat and shivers; the Snowy cabin's campfire warms him up.
+  setInterval(() => {
+    const b = screen.getPrimaryDisplay().bounds;
+    const cold = !!snow && snow.config.mode !== 'off';
+    let fire = null;
+    if (cold && deskInfo(settings, b).scene === 'cabin') {
+      const [x, y] = coverMap(b.width, b.height).pt([FIRE.x, FIRE.y]);
+      fire = { x: b.x + x, y: b.y + y };
+    }
+    send('winter', { cold: cold && settings.winterPet !== false, fire });
+  }, 1000);
   buildTray();
   setInterval(checkClasses, 15_000);
   setInterval(checkWriting, 6000);

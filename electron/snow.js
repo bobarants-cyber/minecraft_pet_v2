@@ -17,7 +17,7 @@ export const SNOW_DEFAULTS = {
 };
 
 /** What's on the desktop that snow can land on: the Winter night scene and Bbokari's own widgets. */
-function deskInfo(settings, bounds) {
+export function deskInfo(settings, bounds) {
   const home = settings.home ?? {};
   const winter = (home.on && home.wallpaper?.value === 'winter') || (!home.on && home.desktopTheme === 'winterArt');
   const cabin = (home.on && home.wallpaper?.type === 'live' && home.wallpaper?.value === 'cabin') || (!home.on && home.desktopTheme === 'winter');

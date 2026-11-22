@@ -15,6 +15,7 @@ import { NotesBadge } from './interaction/NotesBadge.js';
 import { Voice } from './interaction/Voice.js';
 import { FocusBadge } from './interaction/FocusBadge.js';
 import { Wardrobe } from './character/Outfits.js';
+import { Winter } from './character/Winter.js';
 import { CustomizerPanel, applyCustom } from './character/Customizer.js';
 import { setCustomNames } from './mobs/names.js';
 import { KpopCloset, buildItem, catalogSize, DESIGNS, COLORS, FINISHES } from './character/KpopCloset.js';
@@ -57,6 +58,8 @@ const focusBadge = new FocusBadge({ character, host });
 const wardrobe = new Wardrobe();
 const closet = new KpopCloset();
 const toys = new Toys({ character, stage, wardrobe });
+const winter = new Winter({ character, chat, screen, stage });
+host?.onWinter?.((w) => winter.set({ ...w, enabled: settings.winterPet !== false }));
 /** Effects that skills ask for (confetti when your to-do list is done, sunglasses for sunny weather…). */
 function playEffect(effect) {
   if (!effect) return;
@@ -240,6 +243,8 @@ const loop = new Loop((dt, t) => {
   game.update(dt);
   applyHidden();
   character.update(dt, t);
+  winter.update(dt);
+  winter.applyShiver(t);
   if (!character.hidden) stage.render();
   chat.update();
   captions.update();
@@ -249,7 +254,7 @@ const loop = new Loop((dt, t) => {
   stack.update();
   toys.update(dt);
   const look = resolveMob().preset;
-  wardrobe.wear(character.mob, look ? look.outfit : settings.outfit);
+  wardrobe.wear(character.mob, winter.hat ?? (look ? look.outfit : settings.outfit));
   closet.wear(character.mob, look?.kpopHand || settings.kpopHand || '', look?.kpopHead || settings.kpopHead || '');
   if (!['typing', 'activity'].includes(character.stateName)) wardrobe.refresh();
   voice.update();

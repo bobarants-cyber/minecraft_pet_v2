@@ -7,6 +7,7 @@ const GLYPHS = {
   question: { char: '?', color: [0.35, 0.95, 1.0], intensity: 3.0, size: 0.4, life: 2.2 },
   note: { char: '♪', color: [0.45, 0.95, 1.0], intensity: 2.6, size: 0.32, life: 1.8 },
   sparkle: { char: '✦', color: [0.6, 1.0, 1.0], intensity: 3.0, size: 0.32, life: 1.4 },
+  cold: { char: '❄', color: [0.75, 0.92, 1.0], intensity: 2.4, size: 0.32, life: 2.0 },
 };
 
 const _anchor = new THREE.Vector3();

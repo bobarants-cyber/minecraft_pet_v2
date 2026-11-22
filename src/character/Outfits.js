@@ -71,6 +71,102 @@ const BUILDERS = {
     g.position.set(0, 0.48, -0.01);
     return g;
   },
+  /** ❄️ The snow hat: a red knitted hat with a white snowflake band, ear flaps with braids, a fluffy pom-pom and a
+   *  little snow sitting on top (worn automatically while it's snowing). */
+  snowhat() {
+    const g = new THREE.Group();
+    const knit = (base, band) => {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 128;
+      const x = c.getContext('2d');
+      x.fillStyle = base;
+      x.fillRect(0, 0, 256, 128);
+      // knitted rib: little V stitches
+      for (let row = 0; row < 16; row++) for (let col = 0; col < 32; col++) {
+        const px = col * 8, py = row * 8;
+        x.strokeStyle = 'rgba(0,0,0,0.16)';
+        x.lineWidth = 1.2;
+        x.beginPath(); x.moveTo(px, py); x.lineTo(px + 4, py + 7); x.lineTo(px + 8, py); x.stroke();
+        x.strokeStyle = 'rgba(255,255,255,0.10)';
+        x.beginPath(); x.moveTo(px + 1, py + 1); x.lineTo(px + 4, py + 5); x.stroke();
+      }
+      if (band) { // white band with snowflakes
+        x.fillStyle = '#f4f6fa';
+        x.fillRect(0, 70, 256, 26);
+        x.strokeStyle = band;
+        x.lineWidth = 2;
+        for (let i = 0; i < 8; i++) {
+          const cx = 16 + i * 32, cy = 83;
+          for (let k = 0; k < 3; k++) {
+            const a = (k / 3) * Math.PI;
+            x.beginPath(); x.moveTo(cx - Math.cos(a) * 8, cy - Math.sin(a) * 8); x.lineTo(cx + Math.cos(a) * 8, cy + Math.sin(a) * 8); x.stroke();
+          }
+        }
+        x.fillStyle = '#f4f6fa';
+        for (let i = 0; i < 32; i++) { x.fillRect(i * 8 + 2, 60, 4, 4); x.fillRect(i * 8 + 2, 102, 4, 4); }
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = THREE.RepeatWrapping;
+      return t;
+    };
+    const red = new THREE.MeshStandardMaterial({ map: knit('#c8202f', '#c8202f'), roughness: 1 });
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5), red);
+    cap.scale.set(1, 0.85, 1);
+    cap.castShadow = true;
+    // ribbed white cuff
+    const ribC = document.createElement('canvas');
+    ribC.width = 128; ribC.height = 16;
+    const rx = ribC.getContext('2d');
+    for (let i = 0; i < 32; i++) { rx.fillStyle = i % 2 ? '#e9edf3' : '#ffffff'; rx.fillRect(i * 4, 0, 4, 16); }
+    const ribT = new THREE.CanvasTexture(ribC);
+    ribT.colorSpace = THREE.SRGBColorSpace;
+    ribT.wrapS = THREE.RepeatWrapping;
+    ribT.repeat.set(3, 1);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.045, 10, 40), new THREE.MeshStandardMaterial({ map: ribT, roughness: 1 }));
+    cuff.rotation.x = Math.PI / 2;
+    cuff.position.y = 0.01;
+    cuff.castShadow = true;
+    // fluffy pom-pom: a lumpy ball
+    const pomGeo = new THREE.IcosahedronGeometry(0.085, 3);
+    const pos = pomGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+      v.multiplyScalar(1 + (Math.sin(v.x * 90) * Math.cos(v.y * 80) * Math.sin(v.z * 70)) * 0.12);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    pomGeo.computeVertexNormals();
+    const pom = new THREE.Mesh(pomGeo, mat(0xffffff, { roughness: 1 }));
+    pom.position.y = 0.33;
+    pom.castShadow = true;
+    // a little snow on the crown of the hat
+    const snowCap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.4), mat(0xf6f9ff, { roughness: 0.9 }));
+    snowCap.scale.set(1.15, 0.45, 1);
+    snowCap.position.set(0.04, 0.2, 0.02);
+    // ear flaps with braids
+    const flapMat = new THREE.MeshStandardMaterial({ map: knit('#c8202f'), roughness: 1 });
+    for (const sx of [-1, 1]) {
+      const flap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10), flapMat);
+      flap.scale.set(0.35, 1, 0.8);
+      flap.position.set(sx * 0.31, -0.06, 0.02);
+      flap.rotation.z = sx * 0.15;
+      const braid = new THREE.Group();
+      for (let k = 0; k < 4; k++) {
+        const b = ball(0.022, mat(0xffffff, { roughness: 1 }));
+        b.position.set(Math.sin(k * 1.7) * 0.006, -k * 0.035, 0);
+        braid.add(b);
+      }
+      const tassel = ball(0.032, mat(0xffffff, { roughness: 1 }));
+      tassel.position.y = -0.16;
+      braid.add(tassel);
+      braid.position.set(sx * 0.32, -0.15, 0.02);
+      g.add(flap, braid);
+    }
+    g.add(cap, cuff, pom, snowCap);
+    g.position.set(0, 0.42, -0.01);
+    return g;
+  },
   bow() {
     const g = new THREE.Group();
     const pink = mat(0xff5fa2, { roughness: 0.5 });
@@ -114,6 +210,7 @@ export const OUTFITS = {
   bow: '🎀 Bow',
   flower: '🌼 Flower',
   sunglasses: '😎 Sunglasses',
+  snowhat: '❄️ Snow hat',
 };
 
 /** Puts the chosen outfit on the pet (only pets with a head anchor, i.e. Bbokari, can dress up). */
