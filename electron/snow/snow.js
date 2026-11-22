@@ -388,7 +388,7 @@ function stepBall(b, dt) {
       if (!p || b.x < p.x || b.x > p.x + p.w || covered(b.x, p.y - 2, i)) continue;
       const top = pileTop(p, b.x);
       if (b.y + b.r * 0.8 >= top && b.y - b.vy * dt + b.r * 0.8 < top + 4) {
-        if (b.vy > 900 || b.thrown && Math.abs(b.vx) > 700) { splat(b.x, top, 8 + b.r); b.dead = true; return; }
+        if (b.thrown && Math.hypot(b.vx, b.vy) > 700) { splat(b.x, top, 8 + b.r); b.dead = true; return; }
         b.rest = true; b.on = p; b.vx = b.vy = 0; b.y = top - b.r * 0.8;
         return;
       }
@@ -399,14 +399,14 @@ function stepBall(b, dt) {
       if (!p.desk || b.x < p.x || b.x > p.x + p.w) continue;
       const top = pileTop(p, b.x);
       if (b.y + b.r * 0.8 >= top && b.y - b.vy * dt + b.r * 0.8 < top + 4) {
-        if (b.vy > 900 || (b.thrown && Math.abs(b.vx) > 700)) { splat(b.x, top, 8 + b.r); b.dead = true; return; }
+        if (b.thrown && Math.hypot(b.vx, b.vy) > 700) { splat(b.x, top, 8 + b.r); b.dead = true; return; }
         b.rest = true; b.on = p; b.vx = b.vy = 0; b.y = top - b.r * 0.8;
         return;
       }
     }
   }
   if (b.y + b.r * 0.8 >= groundTop(b.x)) {
-    if (b.vy > 900 || b.thrown) { splat(b.x, groundTop(b.x), 8 + b.r); b.dead = true; return; }
+    if (b.thrown && Math.hypot(b.vx, b.vy) > 500) { splat(b.x, groundTop(b.x), 8 + b.r); b.dead = true; return; }
     b.rest = true; b.on = null; b.vx = b.vy = 0; b.y = groundTop(b.x) - b.r * 0.8;
   }
   if (b.x < -100 || b.x > W + 100 || b.y > H + 100) b.dead = true;
@@ -416,17 +416,20 @@ function buildFromStack(top) {
   const mid = top.on, base = mid.on;
   const at = base.on && base.on.h ? base.on.id : null;
   for (const b of [top, mid, base]) b.dead = true;
-  const s = new Snowman(at, at ? base.x - piles.get(at).x : base.x, true);
+  const s = new Snowman(at, at ? base.x - piles.get(at).x : base.x, true, [base.r, mid.r, top.r]);
   snowmen.push(s);
 }
 
 // ---------------- snowmen ----------------
 class Snowman {
-  constructor(on, rx, instant = false) {
+  constructor(on, rx, instant = false, radii = null) {
     this.on = on; // window id, or null for the bottom of the screen
     this.rx = rx; // x relative to the window (or the screen)
     this.state = 'build'; this.t = instant ? 1.6 : 0;
     this.k = rand(1.25, 1.5); // size
+    // bottom, middle, head: from the snowballs you stacked (or the usual sizes)
+    this.radii = radii ?? [16 * this.k, 11 * this.k, 8 * this.k];
+    if (radii) this.k = clamp(radii[2] / 8, 0.6, 4); // the face, arms and hat fit the head you made
     this.hat = { on: false, x: 0, y: 0, vx: 0, vy: 0, rot: 0, dropAt: instant ? 0 : 2.2 };
     this.wobble = 0; this.wave = 0; this.cool = rand(4, 9);
     this.fall = null; this.dir = Math.random() < 0.5 ? -1 : 1;
@@ -436,7 +439,13 @@ class Snowman {
     if (this.on) { const p = piles.get(this.on); if (!p) return null; const x = p.x + this.rx; return { x, y: pileTop(p, x) + 4 }; }
     return { x: this.rx, y: groundTop(this.rx) + 3 };
   }
-  headPos() { const b = this.base() ?? { x: -999, y: -999 }; return { x: b.x, y: b.y - 55 * this.k }; }
+  /** Where each ball's centre is, from the ground up (they squash into each other a little). */
+  layout() {
+    const [r1, r2, r3] = this.radii;
+    const y1 = -r1, y2 = -r1 * 2 - r2 * 0.7, y3 = y2 - r2 - r3 * 0.7;
+    return { y1, y2, y3 };
+  }
+  headPos() { const b = this.base() ?? { x: -999, y: -999 }; return { x: b.x, y: b.y + this.layout().y3 }; }
   knock(vx, vy) { const b = this.base(); if (!b) return; this.fall = { x: b.x, y: b.y, vx, vy }; this.state = 'falling'; }
   loseHat(vx, vy) { if (!this.hat.on) return; const h = this.headPos(); this.hat = { on: false, x: h.x, y: h.y - 10 * this.k, vx, vy, rot: 0, spin: rand(-8, 8), dropAt: 0, back: performance.now() + 4500 }; }
   throwAt(tx, ty, angry = false) {
@@ -485,7 +494,8 @@ class Snowman {
     if (!b) return;
     const k = this.k;
     const grow = this.state === 'build' ? this.t : 9;
-    const r1 = 16 * k * clamp(grow / 0.5, 0, 1), r2 = 11 * k * clamp((grow - 0.5) / 0.5, 0, 1), r3 = 8 * k * clamp((grow - 1) / 0.5, 0, 1);
+    const [R1, R2, R3] = this.radii;
+    const r1 = R1 * clamp(grow / 0.5, 0, 1), r2 = R2 * clamp((grow - 0.5) / 0.5, 0, 1), r3 = R3 * clamp((grow - 1) / 0.5, 0, 1);
     const tilt = Math.sin(this.t * 18) * 0.12 * this.wobble + (this.fall ? this.t * 4 : 0);
     gc.save();
     gc.translate(b.x, b.y);
@@ -496,16 +506,17 @@ class Snowman {
       gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.7, '#eef3fb'); gr.addColorStop(1, '#c9d5e8');
       gc.fillStyle = gr; gc.beginPath(); gc.arc(0, y, r, 0, Math.PI * 2); gc.fill();
     };
-    const y1 = -r1, y2 = -r1 * 2 - r2 + 4 * k, y3 = y2 - r2 - r3 + 3 * k;
+    const { y1, y2, y3 } = this.layout();
     ball(y1, r1); ball(y2, r2);
     // arms (sticks): one waves
     if (grow > 1.2) {
-      gc.strokeStyle = '#6b4a2b'; gc.lineWidth = 2 * k; gc.lineCap = 'round';
+      gc.strokeStyle = '#6b4a2b'; gc.lineWidth = Math.max(2 * k, R2 / 7); gc.lineCap = 'round';
       const wave = this.wave > 0 ? Math.sin(this.t * 14) * 0.5 : 0;
       for (const side of [-1, 1]) {
         const up = side === this.dir ? -0.6 + wave - (this.angry ? 0.5 : 0) : 0.35;
         const sx = side * r2 * 0.8, sy = y2;
-        const ex = sx + side * 18 * k * Math.cos(up), ey = sy + 18 * k * Math.sin(up) - 4 * k;
+        const len = Math.max(18 * k, R2 * 1.5); // long enough for the body it's on
+        const ex = sx + side * len * Math.cos(up), ey = sy + len * Math.sin(up) - 4 * k;
         gc.beginPath(); gc.moveTo(sx, sy); gc.lineTo(ex, ey);
         gc.moveTo(sx + (ex - sx) * 0.7, sy + (ey - sy) * 0.7); gc.lineTo(ex + side * 3 * k, ey - 5 * k); gc.stroke();
       }
