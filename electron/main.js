@@ -1112,9 +1112,10 @@ function faceAwayMenu() {
     { type: 'separator' },
     { label: o.textMe ? `💬 Text me if it’s not me: ${o.textMe}` : '💬 Text me if it’s not me…', click: async () => {
       const v = await askForm('Text me if it’s not me', [{ label: 'Your phone number or Apple ID email (iMessage). Leave empty to turn off.' }]);
+      if (v) v[0] = phoneWithCountry(v[0]);
       if (v) { faSet({ textMe: v[0].trim() }); if (v[0].trim()) send('say', { text: '💬 Got it! If someone who isn’t you sits down or tries to unlock, you’ll get a text with their photo. (The first time, macOS asks if FaceAway may use Messages: click OK.)' }); }
     } },
-    { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => testText(o.textMe) },
+    { label: '📱 Send me a test text', enabled: !!o.textMe, click: () => { const n = phoneWithCountry(o.textMe); if (n !== o.textMe) faSet({ textMe: n }); testText(n); } },
     { label: `🤔 When it’s not me: ${o.askFirst === false ? 'lock right away' : 'text me “Lock computer?”'}`, submenu: [
       { label: 'Text me “Lock computer?” and I answer Y or N', type: 'radio', checked: o.askFirst !== false, click: () => { faSet({ askFirst: true }); if (!o.textMe) send('say', { text: 'First tell me where to text you: 🛡️ FaceAway → 💬 Text me if it’s not me…' }); } },
       { label: 'Lock right away (and text me)', type: 'radio', checked: o.askFirst === false, click: () => faSet({ askFirst: false }) },
@@ -1149,6 +1150,17 @@ function faceAwayMenu() {
       { label: 'Start FaceAway with Bbokari', type: 'checkbox', checked: settings.faceAwayAuto !== false, click: (i) => applySettings({ faceAwayAuto: i.checked }) },
     ] },
   ];
+}
+/** iMessage needs the country code: a Spanish mobile (9 digits starting with 6 or 7) gets +34; other numbers without
+ *  a + are left alone but we warn. Emails pass through. */
+function phoneWithCountry(raw) {
+  const t = String(raw ?? '').trim();
+  if (!t || t.includes('@') || t.startsWith('+')) return t;
+  const d = t.replace(/\D/g, '');
+  if (d.startsWith('00')) return '+' + d.slice(2);
+  if (d.length === 9 && /^[67]/.test(d)) return '+34' + d;
+  if (d.length >= 7) setTimeout(() => send('say', { text: '📱 Add your country code in front of the number (like +34 for Spain), or the texts won’t arrive.', error: true }), 500);
+  return t;
 }
 /** Sends a test iMessage to your phone through the Messages app (the same way FaceAway does). */
 function testText(to) {
