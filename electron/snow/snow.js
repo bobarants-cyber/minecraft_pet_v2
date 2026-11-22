@@ -93,8 +93,84 @@ function burst(x, y, n, vx = 0, vy = -120, spread = 160) {
 // ---------------- the desktop: things snow can land on behind your windows ----------------
 let desk = { scene: null, widgets: [], radius: 28 };
 const DAY = { hi: '#ffffff', mid: '#f3f7fd', lo: '#dbe5f3', shade: '#a9bbd8', deep: '#7d8fb5', shadow: 'rgba(40,60,100,0.22)' };
-// the photo's blue night snow (measured: its brightest snow is about rgb(71,89,114)); fresh snow a touch brighter
-const NIGHT = { hi: '#9db1cc', mid: '#7891b3', lo: '#55709a', shade: '#46608a', deep: '#26395a', shadow: 'rgba(4,10,30,0.5)' };
+// The cabin photo's own snow, colour-picked (its snow pixels sorted by brightness): highlight, light, normal, shadow,
+// deep. Every bit of snow uses these, and on the photo each snowball, snowman and drift is lit by the photo's light
+// right where it is (warm by the fire and the porch, darker in the shade). Re-measured from the photo when it loads.
+const NIGHT = { hi: '#4b5c74', mid: '#3b526e', lo: '#1b4466', shade: '#123553', deep: '#0e2940', shadow: 'rgba(3,8,22,0.55)' };
+let photoPx = null; // the photo's pixels (1280×720), for "is there snow here?"
+let lightPx = null; // a soft, small version of the photo: the light at each spot
+const LW = 96, LH = 54;
+const hex = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+const rgbOf = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lum = (c) => (c[0] + c[1] + c[2]) / 3;
+function loadPhoto(src) {
+  if (!src) return;
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = 1280; c.height = 720;
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0, 1280, 720);
+    photoPx = x.getImageData(0, 0, 1280, 720).data;
+    const l = document.createElement('canvas'); l.width = LW; l.height = LH;
+    const lx = l.getContext('2d'); lx.filter = 'blur(2px)'; lx.drawImage(img, 0, 0, LW, LH);
+    lightPx = lx.getImageData(0, 0, LW, LH).data;
+    // colour-pick the snow: bluish pixels on the ground, sorted by brightness
+    const snow = [];
+    for (let y = 470; y < 720; y += 2) for (let xx = 0; xx < 1280; xx += 2) {
+      const i = (y * 1280 + xx) * 4, r = photoPx[i], gg = photoPx[i + 1], b = photoPx[i + 2];
+      if (b > r + 15 && (r + gg + b) / 3 > 35) snow.push([r, gg, b, (r + gg + b) / 3]);
+    }
+    if (snow.length > 500) {
+      snow.sort((a, b) => a[3] - b[3]);
+      const band = (lo, hi) => { const part = snow.slice(Math.floor(snow.length * lo), Math.max(Math.floor(snow.length * lo) + 1, Math.floor(snow.length * hi))); return hex([0, 1, 2].map((k) => part.reduce((s, p) => s + p[k], 0) / part.length)); };
+      Object.assign(NIGHT, { hi: band(0.97, 0.995), mid: band(0.85, 0.93), lo: band(0.45, 0.6), shade: band(0.08, 0.2), deep: band(0.01, 0.04) });
+    }
+  };
+  img.src = src.startsWith('/') ? 'file://' + encodeURI(src) : src;
+}
+/** Is there snow in the photo at this screen point? (bluish snow, or snow lit warm by the lamps) */
+function photoSnowAt(x, y) {
+  if (!photoPx || desk.scene !== 'cabin') return false;
+  const [px, py] = cover.inv(x, y);
+  if (px < 0 || py < 0 || px >= 1280 || py >= 720) return false;
+  let hits = 0;
+  for (const [dx, dy] of [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4], [5, 5], [-5, 5], [5, -5], [-5, -5]]) {
+    const i = ((Math.round(py) + dy) * 1280 + Math.round(px) + dx) * 4;
+    const r = photoPx[i], gg = photoPx[i + 1], b = photoPx[i + 2], L = (r + gg + b) / 3;
+    if ((b > r + 12 && L > 40) || (L > 125 && b > r - 40)) hits++;
+  }
+  return hits >= 2;
+}
+/** The average colour of the photo's own snow right around this photo point (null if there's no snow there). */
+function ownSnow(px, py) {
+  if (!photoPx) return null;
+  let n = 0; const sum = [0, 0, 0];
+  for (let dy = -6; dy <= 8; dy += 2) for (let dx = -6; dx <= 6; dx += 2) {
+    const x = Math.round(px + dx), y = Math.round(py + dy);
+    if (x < 0 || y < 0 || x >= 1280 || y >= 720) continue;
+    const i = (y * 1280 + x) * 4, r = photoPx[i], gg = photoPx[i + 1], b = photoPx[i + 2];
+    if ((b > r + 12 && (r + gg + b) / 3 > 38) || (r + gg + b) / 3 > 120) { sum[0] += r; sum[1] += gg; sum[2] += b; n++; }
+  }
+  return n >= 6 ? sum.map((v) => v / n) : null;
+}
+/** Snow colours lit by the photo's light at this screen point (the ground's light under it). */
+function palAt(x, y) {
+  if (desk.scene !== 'cabin' || !lightPx) return desk.scene === 'cabin' ? NIGHT : DAY;
+  const [px, py] = cover.inv(x, y);
+  // the photo's own snow right here (roof, rail, ground…); otherwise the light on the snowy ground below this spot
+  let base = ownSnow(px, py);
+  if (!base) {
+    const sx = Math.max(0, Math.min(LW - 1, Math.round((px / 1280) * LW)));
+    const sy = Math.max(0, Math.min(LH - 1, Math.round((Math.max(py, CABIN_HORIZON + 25) / 720) * LH)));
+    const i = (sy * LW + sx) * 4;
+    base = [lightPx[i], lightPx[i + 1], lightPx[i + 2]];
+    const lo = rgbOf(NIGHT.lo), shade = rgbOf(NIGHT.shade);
+    if (lum(base) < lum(shade)) base = shade; // keep it snow, never darker than the photo's shadow snow
+    base = base.map((v, k) => v * 0.7 + lo[k] * 0.3);
+  }
+  const k = (f, add = 0) => hex(base.map((v) => v * f + add));
+  // the same snow, shaded: its own colour in the middle, a bit lighter where light hits, darker in the shade
+  return { hi: k(1.3, 8), mid: k(1.02), lo: k(0.82), shade: k(0.62), deep: k(0.42), shadow: NIGHT.shadow };
+}
 const pal = () => (desk.scene === 'cabin' ? NIGHT : DAY);
 let cover = coverMap(1, 1);
 const FIELD = { id: 'field', field: true }; // the photo's snowy ground: snowballs rest wherever they're put
@@ -149,7 +225,7 @@ function rebuildDesk() {
     piles.set(sf.id, { ...sf, h: new Float32Array(n), lump: makeLumps(n), capK: rand(0.8, 1.05), shake: 0, desk: true });
   }
 }
-host.onDesk?.((d) => { desk = d; rebuildDesk(); });
+host.onDesk?.((d) => { const newPhoto = d.photo && d.photo !== desk.photo; desk = d; rebuildDesk(); if (newPhoto) loadPhoto(d.photo); });
 
 // ---------------- windows from the helper ----------------
 host.onWins(({ w, f, d, g: apple }) => {
@@ -255,7 +331,8 @@ function grabbable(x, y) {
   // the cabin photo's snowy ground: snow everywhere
   if (desk.scene === 'cabin' && cfg.mode === 'on' && !insideAnyWindow(x, y)) {
     const [px, py] = cover.inv(x, y);
-    if (onSnowyGround(px, py)) return { field: true };
+    if (onSnowyGround(px, py)) return { field: true, ground: false, onGround: true };
+    if (photoSnowAt(x, y)) return { field: true }; // the roof, railings, branches… anywhere with snow in the photo
   }
   // the snow along the bottom is drawn over everything (even full-screen apps), so it can always be grabbed
   const gi = clamp(Math.round(x / COL), 0, ground.length - 1);
@@ -284,9 +361,12 @@ addEventListener('mouseup', () => {
   held.vx = clamp(vx, -2600, 2600); held.vy = clamp(vy, -2600, 2600);
   held.thrown = Math.hypot(vx, vy) > 250;
   held.byYou = true;
-  if (!held.thrown && grabbable(cursor.x, cursor.y + held.r * 0.5)?.field) {
-    const under = balls.find((o) => o !== held && o.rest && Math.abs(o.x - held.x) < o.r && o.y > held.y && o.y - held.y < 260);
-    if (!under) { held.rest = true; held.on = FIELD; held.vx = held.vy = 0; held.y = cursor.y; }
+  const spot = grabbable(cursor.x, cursor.y + held.r * 0.5);
+  const under = balls.find((o) => o !== held && o.rest && Math.abs(o.x - held.x) < o.r && o.y > held.y && o.y - held.y < 260);
+  if (!held.thrown && !under && spot?.onGround) { held.rest = true; held.on = FIELD; held.vx = held.vy = 0; held.y = cursor.y; }
+  else if (!under && desk.scene === 'cabin') {
+    // it falls to the snowy ground below where you let go, and stays there
+    for (let yy = cursor.y; yy < H; yy += 6) { const [px, py] = cover.inv(cursor.x, yy); if (onSnowyGround(px, py) && !insideAnyWindow(cursor.x, yy)) { held.landY = yy + rand(0, 20); break; } }
   }
   held = null;
   document.body.classList.remove('holding');
@@ -361,10 +441,11 @@ function stepBall(b, dt) {
       // rolling along the photo's ground (not carrying it through the air): it grows and leaves a track
       const lastPt = trails.at(-1)?.ball === b ? trails.at(-1).pts.at(-1) : null;
       const rollingOnGround = hit?.field && moved > 0.5 && moved < 40 && (!lastPt || Math.abs(cursor.y - lastPt[3]) < 14);
+      if (hit?.field && !hit.onGround && moved > 0.5 && moved < 40) b.r = Math.min(34, Math.sqrt(b.r * b.r + moved * 1.6)); // scooping snow off a branch or the roof
       if (rollingOnGround) {
-        b.r = Math.min(34, Math.sqrt(b.r * b.r + moved * 1.6));
-        if (!lastPt || Math.hypot(b.x - lastPt[0], cursor.y - lastPt[3]) > 40) trails.push({ ball: b, pts: [], t: performance.now() });
-        trails.at(-1).pts.push([b.x, cursor.y + b.r * 0.15, b.r, cursor.y]);
+        if (hit.onGround) b.r = Math.min(34, Math.sqrt(b.r * b.r + moved * 1.6));
+        if (!hit.onGround) { /* only the ground keeps a track */ } else if (!lastPt || Math.hypot(b.x - lastPt[0], cursor.y - lastPt[3]) > 40) trails.push({ ball: b, pts: [], t: performance.now() });
+        if (hit.onGround) trails.at(-1)?.pts.push([b.x, cursor.y + b.r * 0.15, b.r, cursor.y]);
         if (trails.length > 30) trails.shift();
       }
       const arr = hit?.pile ? hit.pile.h : hit?.ground ? ground : null;
@@ -385,6 +466,10 @@ function stepBall(b, dt) {
     return;
   }
   b.vy += G * dt; b.x += b.vx * dt; b.y += b.vy * dt;
+  if (b.landY && b.vy > 0 && b.y >= b.landY) { // landed on the photo's snowy ground
+    if (b.thrown && Math.hypot(b.vx, b.vy) > 900) { splat(b.x, b.y, 10 + b.r); b.dead = true; return; }
+    b.rest = true; b.on = FIELD; b.vx = b.vy = 0; b.y = b.landY; b.landY = null; return;
+  }
   if (b.blown && b.x > W + 60) { b.dead = true; return; }
   if (b.atCursor && Math.hypot(b.x - cursor.x, b.y - cursor.y) < 18) { splat(cursor.x, cursor.y, 22); b.dead = true; return; } // got you!
   // hit a window (front first): it bursts, the window's snow shakes
@@ -546,7 +631,8 @@ class Snowman {
     gc.translate(b.x, b.y);
     gc.rotate(tilt);
     const { y1, y2, y3 } = this.layout();
-    snowSphere(gc, 0, y1, r1, seed, r2 * 0.9);
+    const SP = palAt(b.x, b.y);
+    snowSphere(gc, 0, y1, r1, seed, r2 * 0.9, SP);
     // twig arms behind/at the middle: tapered, with little side twigs and a forked end; one waves
     if (grow > 1.2) {
       const wave = this.wave > 0 ? Math.sin(this.t * 14) * 0.5 : 0;
@@ -556,11 +642,11 @@ class Snowman {
         twig(gc, side * r2 * 0.75, y2 - r2 * 0.1, up, side, len, Math.max(1.6 * k, R2 / 8), seed + side);
       }
     }
-    snowSphere(gc, 0, y2, r2, seed + 3, r3 * 0.9);
+    snowSphere(gc, 0, y2, r2, seed + 3, r3 * 0.9, SP);
     if (grow > 1.2) { // coal buttons
       for (const [i, yy] of [y2 - r2 * 0.35, y2 + r2 * 0.25, y1 - r1 * 0.45].entries()) coal(gc, Math.sin(seed + i) * r2 * 0.05, yy, Math.max(1.4 * k, r2 * 0.12), seed + i * 7);
     }
-    snowSphere(gc, 0, y3, r3, seed + 6);
+    snowSphere(gc, 0, y3, r3, seed + 6, 0, SP);
     if (grow > 1.5) {
       // coal eyes that look at your pointer
       const a = Math.atan2(cursor.y - (b.y + y3), cursor.x - b.x);
@@ -900,7 +986,8 @@ function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null) {
     const t = corner - Math.max(0, e);
     return y0 + corner - Math.sqrt(Math.max(0, corner * corner - t * t));
   };
-  const P = baseFn && desk.scene === 'cabin' ? NIGHT : DAY;
+  const P0 = desk.scene === 'cabin' ? NIGHT : DAY;
+  let P = P0;
   const shade = (yb) => {
     const gr = g.createLinearGradient(0, yb - MAXH, 0, yb);
     gr.addColorStop(0, P.hi); gr.addColorStop(0.7, P.mid); gr.addColorStop(1, P.lo);
@@ -927,6 +1014,7 @@ function drawDrift(x0, y0, arr, shake = 0, corner = 0, baseFn = null) {
     // back along the window's edge
     for (let k = end; k >= start; k -= 2) g.lineTo(x0 + k * COL + jx, base(k * COL) + 0.5);
     g.closePath();
+    P = baseFn && desk.scene === 'cabin' ? palAt(x0 + ((start + end) / 2) * COL, base(((start + end) / 2) * COL)) : P0; // lit where it lies
     g.fillStyle = shade(Math.max(base(start * COL), base(end * COL)));
     g.shadowColor = P.shadow; g.shadowBlur = 5; g.shadowOffsetY = 1;
     g.fill();
@@ -1031,12 +1119,11 @@ function frame(now) {
 }
 function drawBall(b) {
   if (b.rest) softShadow(g, b.x + b.r * 0.2, b.y + b.r * 0.85, b.r * 1.25, b.r * 0.3);
-  snowSphere(g, b.x, b.y, b.r, b.seed ??= Math.random() * 10);
+  snowSphere(g, b.x, b.y, b.r, b.seed ??= Math.random() * 10, 0, palAt(b.x, b.y)); // lit by the light where it is
 }
 /** A packed-snow ball: lumpy outline, lit from the upper left, bluish in the shade, with grain. */
-function snowSphere(gc, x, y, r, seed = 1, aoFrom = 0) {
+function snowSphere(gc, x, y, r, seed = 1, aoFrom = 0, P = pal()) {
   if (r <= 0.5) return;
-  const P = pal();
   gc.save();
   gc.beginPath();
   for (let i = 0; i <= 20; i++) {
@@ -1048,7 +1135,7 @@ function snowSphere(gc, x, y, r, seed = 1, aoFrom = 0) {
   gr.addColorStop(0, P.hi); gr.addColorStop(0.45, P.mid); gr.addColorStop(0.82, P.shade); gr.addColorStop(1, P.deep);
   gc.fillStyle = gr; gc.fill();
   gc.clip();
-  gc.globalAlpha = 0.5; gc.fillStyle = grain; gc.fillRect(x - r, y - r, r * 2, r * 2);
+  gc.globalAlpha = desk.scene === 'cabin' ? 0.22 : 0.4; gc.fillStyle = grain; gc.fillRect(x - r, y - r, r * 2, r * 2);
   if (aoFrom > 0) { // the ball sitting on top shades this one
     const ao = gc.createRadialGradient(x, y - r, 0, x, y - r, aoFrom * 1.25);
     ao.addColorStop(0, 'rgba(30,45,80,0.55)'); ao.addColorStop(1, 'rgba(30,45,80,0)');
@@ -1086,8 +1173,7 @@ function warmLight(now) {
   g.save(); g.globalCompositeOperation = 'source-atop';
   const glow = (x, y, R, a) => { const gr = g.createRadialGradient(x, y, 0, x, y, R); gr.addColorStop(0, `rgba(255,170,80,${a})`); gr.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2); };
   const [fx, fy] = cover.pt([CABIN_FIRE.x, CABIN_FIRE.y - 20]);
-  glow(fx, fy, 260 * cover.s, 0.45 * (0.85 + 0.15 * Math.sin(t * 11.3) * Math.sin(t * 7.1)));
-  for (const L of CABIN_LIGHTS) { const [x, y] = cover.pt([L.x, L.y]); glow(x, y, L.r * 1.8 * cover.s, L.a * 0.7); }
+  glow(fx, fy, 230 * cover.s, 0.16 * (0.75 + 0.25 * Math.sin(t * 11.3) * Math.sin(t * 7.1))); // the fire's flicker on the snow
   g.restore();
 }
 requestAnimationFrame(frame);

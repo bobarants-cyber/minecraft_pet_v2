@@ -26,7 +26,7 @@ function deskInfo(settings, bounds) {
     const ww = Math.min(w.w, W - 16), hh = Math.min(w.h, H - 16);
     return { id: w.id, x: Math.max(8, Math.min(W - ww - 8, w.x * W)), y: Math.max(8, Math.min(H - hh - 8, w.y * H)), w: ww, h: hh };
   }) : [];
-  return { scene: cabin ? 'cabin' : winter ? 'winter' : null, widgets, radius: home.glass?.radius ?? 28 };
+  return { scene: cabin ? 'cabin' : winter ? 'winter' : null, widgets, radius: home.glass?.radius ?? 28, photo: cabin ? home.wallpaper?.src ?? null : null };
 }
 
 export function createSnow({ getSettings, applySettings, say }) {
