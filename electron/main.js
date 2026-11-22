@@ -755,6 +755,7 @@ function faArgs() {
   const a = ['--guard', '--no-status-item'];
   if (o.guard !== false) a.push('--watch');
   if (o.lockAfter === undefined) a.push('--lock-after', '120'); // looking at your phone or notes for a bit doesn't lock it
+  for (const n of o.known ?? []) a.push('--known', n); // Mom, Dad…: named, but not allowed to unlock
   if (o.textMe) a.push('--text-via-bridge'); // Bbokari sends the texts and reads your Y / N
   if (o.textMe && o.askFirst !== false) a.push('--ask-first', '--ask-timeout', String(o.askTimeout ?? 120));
   for (const [k, flag] of FA_FLAGS) if (o[k]) a.push(flag);
@@ -772,7 +773,7 @@ function legacyArgs(args) {
   const out = [];
   for (let i = 0; i < args.length; i++) {
     if (NEW_FLAGS.has(args[i])) continue;
-    if (args[i] === '--ask-timeout') { i++; continue; }
+    if (args[i] === '--ask-timeout' || args[i] === '--known') { i++; continue; }
     out.push(args[i]);
   }
   return out;
@@ -844,6 +845,25 @@ async function faceAwayAddFace(name) {
   const r = await runFaceAway(['--add', name]);
   send('say', { text: r.ok ? `✅ Added ${name}! FaceAway will recognize them now.` : `Couldn’t add ${name}: ${r.text.split('\n').slice(-2).join(' ')}`, error: !r.ok });
   if (was || settings.faceAwayAuto !== false) faStart();
+}
+/** Mom, Dad, a friend…: FaceAway learns their face and says who it is, but they can't unlock the Mac,
+ *  and you still get the photo and "Lock computer?". */
+async function faceAwayAddKnown() {
+  const v = await askForm('Add family or someone else', [{ label: 'Their name, as it should appear in the text (e.g. Mom, Dad, Lucía)' }]);
+  const name = v?.[0]?.trim();
+  if (!name) return;
+  const known = [...new Set([...(faOpts().known ?? []), name])];
+  applySettings({ faceAwayOpts: { ...faOpts(), known } }); // saved first, so FaceAway restarts with it after the face scan
+  send('say', { text: `👪 ${name} should sit in front of the Mac now.` });
+  await faceAwayAddFace(name);
+  send('say', { text: `✅ Now when ${name} is at your Mac, you’ll get “${name} is at your Mac. Lock computer?” with a photo. ${name} can’t unlock it.` });
+}
+async function faceAwayForgetKnown(name) {
+  const r = await dialog.showMessageBox({ type: 'question', buttons: ['Forget their face', 'Let them unlock the Mac', 'Cancel'], cancelId: 2, message: `${name}`, detail: `Forget ${name}’s face completely, or let ${name} unlock the Mac like you?` });
+  if (r.response === 2) return;
+  faSet({ known: (faOpts().known ?? []).filter((n) => n !== name) });
+  if (r.response === 0) { const x = await runFaceAway(['--remove', name]); send('say', { text: x.ok ? `🗑️ Forgot ${name}.` : x.text, error: !x.ok }); }
+  else send('say', { text: `🔓 ${name} can unlock the Mac now.` });
 }
 async function faceAwayPassword() {
   const v = await askForm('Panic screen password (not your Mac password)', [{ label: 'New password (4+ characters)', password: true }, { label: 'Type it again', password: true }]);
@@ -1163,7 +1183,10 @@ function faceAwayMenu() {
     ] },
     { type: 'separator' },
     { label: '👤 Faces', submenu: [
-      { label: '👤 Add a face…', click: () => faceAwayAddFace() },
+      { label: '🙋 Add me (can unlock)…', click: () => faceAwayAddFace() },
+      { label: '👪 Add family or someone else (named, can’t unlock)…', click: () => faceAwayAddKnown() },
+      ...((o.known ?? []).length ? [{ type: 'separator' }, { label: 'Named but can’t unlock (click to forget):', enabled: false },
+        ...(o.known ?? []).map((n) => ({ label: `   👤 ${n}`, click: () => faceAwayForgetKnown(n) })), { type: 'separator' }] : []),
       { label: '👥 Who can use my Mac', click: faceAwayPeople },
       { label: '🗑️ Remove someone…', click: faceAwayRemove },
       { label: '🔍 Live face test (opens Terminal)', click: () => execFile('osascript', ['-e', 'tell application "Terminal"\n activate\n do script "clear; echo Look at the camera. Press Control+C to stop.; ~/FaceAway/faceaway --check"\nend tell']) },

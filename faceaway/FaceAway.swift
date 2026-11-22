@@ -578,11 +578,17 @@ final class StaticFaceFilter {
 }
 
 /// One face's recognition result. `sure` is false when the view was too poor to judge.
+/// People FaceAway knows by name but who may NOT use the Mac (Mom, Dad, …): it says who it is, but treats
+/// them like a stranger (photo, "Lock computer?", no unlocking). Set with --known NAME.
+var knownOnly: Set<String> = []
+
 struct Seen {
     let match: Match?
     let sure: Bool
-    var isTrusted: Bool { sure && match?.name != nil }
-    var isStranger: Bool { sure && match != nil && match?.name == nil }
+    var isTrusted: Bool { sure && match?.name != nil && !knownOnly.contains(match!.name!.lowercased()) }
+    var isStranger: Bool { sure && match != nil && !isTrusted }
+    /// The name of a known-but-not-allowed person (nil for a real stranger).
+    var knownName: String? { isStranger ? match?.name : nil }
 }
 
 struct Match {
@@ -2747,6 +2753,7 @@ struct Options {
     var askFirst = false       // --ask-first: text "Lock computer?" and wait for YES / NO instead of locking at once
     var askTimeout: Double = 120 // --ask-timeout: no answer in this many seconds → lock (0 = never)
     var textViaBridge = false  // --text-via-bridge: Bbokari sends the texts and reads your Y / N
+    var known: [String] = []   // --known NAME: recognized by name but not allowed to use the Mac
 }
 
 let usage = """
@@ -2912,6 +2919,7 @@ func parseOptions() -> Options {
         case "--ask-first": o.askFirst = true
         case "--ask-timeout": o.askTimeout = number(a)
         case "--text-via-bridge": o.textViaBridge = true
+        case "--known": o.known.append(value(a))
         case "--home": o.home = true
         case "--home-only": o.mode = .homeOnly; o.home = true
         case "--panic-button": o.panicButton = true
@@ -3124,6 +3132,9 @@ final class Controller {
     private let softLock = SoftLock()
     private var softLocked = false
     private var softStrangerStreak = 0
+    private var intruderName: String?   // Mom, Dad… (nil = someone FaceAway doesn't know)
+    /// "Mom is" / "Someone who isn't you is"
+    private var intruderText: String { intruderName.map { "\($0) is" } ?? "Someone who isn't you is" }
     private var softLockReadyAt = Date.distantPast
     private var softTrust = 0
     private var strangerSince: Date?           // a stranger has been trying to unlock since
@@ -3413,6 +3424,7 @@ final class Controller {
                 // One bad look is probably you at an angle or in bad light: only ~2 s of clearly "not you" counts.
                 softStrangerStreak += 1
                 guard softStrangerStreak >= 10 else { return }
+                intruderName = primary.knownName
                 softTrust = 0
                 if strangerSince == nil {
                     strangerSince = Date()
@@ -3434,6 +3446,7 @@ final class Controller {
             return
         }
         unknownStreak += 1
+        intruderName = primary.knownName
         // A stranger sitting down: 3 clear checks (~0.6 s). But if you were recognized and
         // never left, it takes 12 clear checks (~2.5 s): it's far more likely just you at an angle.
         let needed = presentSinceTrusted ? 12 : 3
@@ -3495,7 +3508,7 @@ final class Controller {
         }
 
         if let to = options.textTo {
-            let msg = "🚨 FaceAway: someone who isn't trusted sat down at your Mac at "
+            let msg = "🚨 FaceAway: \(intruderName ?? "someone who isn't you") sat down at your Mac at "
                 + "\(clock.string(from: Date())). It's locked."
             DispatchQueue.main.async { textMe(to, message: msg, photo: photoURL) }
         }
@@ -3549,7 +3562,7 @@ final class Controller {
         asking = true
         askStarted = Date()
         askRow = textViaBridge ? 0 : (Replies.lastRow() ?? -1)
-        var msg = "🚨 FaceAway: someone who isn't you is at your Mac (\(clock.string(from: Date()))). Lock computer? Reply Y or N."
+        var msg = "🚨 FaceAway: \(intruderText) at your Mac (\(clock.string(from: Date()))). Lock computer? Reply Y or N."
         if options.askTimeout > 0 { msg += " If you don't answer in \(formatDuration(Int(options.askTimeout))), I'll lock it." }
         textMe(to, message: msg, photo: photo)
         say("Asked you by text whether to lock.", .alert)
@@ -3695,7 +3708,7 @@ final class Controller {
         EventLog.add("Stranger tried to unlock with Face ID")
         Bridge.emit(["type": "stranger"])
         if let to = options.textTo {
-            let msg = "🚨 FaceAway: someone who isn't you tried to unlock your Mac at \(clock.string(from: Date())). It stayed locked."
+            let msg = "🚨 FaceAway: \(intruderName ?? "someone who isn't you") tried to unlock your Mac at \(clock.string(from: Date())). It stayed locked."
             textMe(to, message: msg, photo: photoURL)
         }
     }
@@ -3712,6 +3725,7 @@ final class Controller {
 
     private func softUnlock(_ name: String) {
         strangerSince = nil
+        intruderName = nil
         softLock.dismiss()
         softLocked = false
         softTrust = 0
@@ -4118,6 +4132,7 @@ case .app:
         if needle.isEmpty && appOptions.decoy == nil { appOptions.decoy = "school" }
     }
     textViaBridge = options.textViaBridge   // before start(): Bbokari does the texting
+    knownOnly = Set(options.known.map { $0.lowercased() })
     controller = Controller(options: appOptions, browser: browser, needle: needle, openURL: options.openURL,
                             people: people, watching: options.startWatching)
     withCamera {

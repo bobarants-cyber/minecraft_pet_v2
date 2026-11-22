@@ -57,19 +57,26 @@ function sqlite(sql, db = DB) {
 
 /** First words of the new messages from `to` after row `after` (not the ones this Mac sent). */
 export async function newWords(to, after, db = DB) {
-  const r = await sqlite(`SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),''), IFNULL(c.chat_identifier,''), m.is_from_me FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID LEFT JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = j.chat_id WHERE m.ROWID > ${Number(after) || 0} ORDER BY m.ROWID;`, db);
+  const r = await sqlite(`SELECT m.ROWID, IFNULL(h.id,''), REPLACE(IFNULL(m.text,''), char(10), ' '), IFNULL(hex(m.attributedBody),''), IFNULL(c.chat_identifier,''), m.is_from_me, IFNULL(m.date,0) FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID LEFT JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = j.chat_id WHERE m.ROWID > ${Number(after) || 0} ORDER BY m.ROWID;`, db);
   if (!r.ok) return { ok: false, err: r.err, last: after, words: [] };
-  let last = after;
-  const words = [];
+  let last = after, hold = null;
+  const words = [], items = [];
   for (const line of r.out.split('\n')) {
     const f = line.split('\x1f');
     if (f.length < 6 || !/^\d+$/.test(f[0])) continue;
-    last = Math.max(last, Number(f[0]));
+    const id = Number(f[0]);
+    last = Math.max(last, id);
     if (f[5] === '1') continue;
     if (!samePerson(f[1], to) && !(f[4] && samePerson(f[4], to))) continue;
-    words.push(firstWord(f[2] || textFromBody(f[3])));
+    const word = firstWord(f[2] || textFromBody(f[3]));
+    // Messages sometimes saves a new text a moment before its words: look at it again next time (up to 30 s)
+    const ageS = Date.now() / 1000 - (Number(f[6] ?? 0) / 1e9 + 978307200);
+    if (!word && ageS < 30) { hold ??= id; continue; }
+    words.push(word);
+    items.push({ id, word });
   }
-  return { ok: true, last, words };
+  if (hold !== null) last = Math.min(last, hold - 1);
+  return { ok: true, last, words, items };
 }
 
 export async function lastRow(db = DB) {
@@ -84,6 +91,7 @@ export async function lastRow(db = DB) {
  */
 export function createTexting({ getTo, onAnswer, onLock, onStatus, onFaceTest, onNoAccess, db = DB, every = 4000 }) {
   let row = null, waiting = null, told = false, busy = false;
+  const handled = new Set();
   const tick = async () => {
     const to = getTo();
     if (!to || busy) return;
@@ -93,7 +101,10 @@ export function createTexting({ getTo, onAnswer, onLock, onStatus, onFaceTest, o
       const r = await newWords(to, row, db);
       if (!r.ok) { if (!told) { told = true; onNoAccess?.(); } return; }
       row = r.last;
-      for (const w of r.words) {
+      for (const { id, word: w } of r.items) {
+        if (handled.has(id)) continue; // already acted on (rows after a held-back one are read again)
+        handled.add(id);
+        if (handled.size > 500) handled.delete(handled.values().next().value);
         if (waiting && (YES.has(w) || NO.has(w))) { const wt = waiting; waiting = null; onAnswer?.(YES.has(w), wt); continue; }
         if (LOCK.has(w)) onLock?.();
         else if (STATUS.has(w)) onStatus?.();
