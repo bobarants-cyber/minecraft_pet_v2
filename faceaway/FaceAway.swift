@@ -3275,7 +3275,8 @@ final class Controller {
             } else if bodyPresent(pixels) {
                 who = "Someone, but I can't see their face"
             }
-            DispatchQueue.main.async { self.finishSnapshot(photo, who: who) }
+            let whoText = who   // a constant: the main-thread block can't capture a var
+            DispatchQueue.main.async { self.finishSnapshot(photo, who: whoText) }
         }
         // No face: check whether you're still sitting there (looking down or away).
         if faces.isEmpty && !options.strict {
